@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, degrees, BlendMode } from 'pdf-lib';
-import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize, visualToRawPdfCoords, visualToRawSize, getRawPlacement } from './commitHelpers';
+import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize, visualToRawPdfCoords, visualToRawSize, getRawPlacement, safeNum } from './commitHelpers';
 
 /**
  * commitEngine.js — Serializes Fabric.js canvas objects into pdf-lib operations.
@@ -18,7 +18,7 @@ import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize, vis
  * @returns {Promise<Uint8Array>} - Modified PDF bytes
  */
 export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = null, pageHighlights = null) {
-    const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true, throwOnInvalidObject: false });
     const pages = doc.getPages();
 
     // ── Commit highlights per page (drawn first so text stays on top) ──
@@ -110,7 +110,7 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
         }
     }
 
-    return await doc.save();
+    return await doc.save({ useObjectStreams: false });
 }
 
 /**
@@ -363,9 +363,9 @@ async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
                 }
             }
             
-            const font = await getFont(doc, obj.fontFamily, obj.fontWeight, obj.fontStyle);
-            const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, effH);
-            const boxWidthPdf = toPdf(objW, cW, effW);
+            const font = await getFont(doc, obj.fontFamily, obj.fontWeight, obj.fontStyle, obj.text);
+            const size = safeNum(toPdf((obj.fontSize || 14) * scaleObjY, cH, effH), 12);
+            const boxWidthPdf = safeNum(toPdf(objW, cW, effW), 0);
 
             const lines = [];
             if (obj.textLines && Array.isArray(obj.textLines) && obj.textLines.length > 0) {
@@ -396,12 +396,15 @@ async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
                 } catch {
                     textWidthPdf = lineText.length * size * 0.6;
                 }
+                textWidthPdf = safeNum(textWidthPdf, 0);
 
                 let alignOffsetPdf = 0;
                 if (obj.textAlign === 'center') {
-                    alignOffsetPdf = (boxWidthPdf - textWidthPdf) / 2;
+                    alignOffsetPdf = boxWidthPdf > 0 ? (boxWidthPdf - textWidthPdf) / 2 : -textWidthPdf / 2;
                 } else if (obj.textAlign === 'right') {
-                    alignOffsetPdf = boxWidthPdf - textWidthPdf;
+                    alignOffsetPdf = boxWidthPdf > 0 ? (boxWidthPdf - textWidthPdf) : -textWidthPdf;
+                } else if (obj.originX === 'center' && boxWidthPdf <= 0) {
+                    alignOffsetPdf = -textWidthPdf / 2;
                 }
 
                 const lineBaseY = topEdge + ((obj.fontSize || 14) * scaleObjY) + (i * ((obj.fontSize || 14) * scaleObjY * lineSpacingMult));
@@ -414,25 +417,28 @@ async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
                 const finalVisY = yPdf - alignOffsetPdf * Math.sin(rad);
                 const rawTextPt = visualToRawPdfCoords(finalVisX, finalVisY, effW, effH, rotation);
 
+                const finalX = safeNum(rawTextPt.rawX, 0);
+                const finalY = safeNum(rawTextPt.rawY, 0);
+
                 if (lineText) {
                     try {
                         page.drawText(lineText, {
-                            x: rawTextPt.rawX, 
-                            y: rawTextPt.rawY,
+                            x: finalX, 
+                            y: finalY,
                             size, font,
                             color: hexToRgb(obj.fill) || rgb(0, 0, 0),
-                            opacity: obj.opacity ?? 1,
+                            opacity: safeNum(obj.opacity, 1),
                             rotate: degrees(rotation - (obj.angle || 0)),
                         });
                     } catch (fontErr) {
                         // eslint-disable-next-line no-control-regex
                         const sanitized = lineText.replace(/[^\x00-\x7F]/g, '?');
                         page.drawText(sanitized, {
-                            x: rawTextPt.rawX, 
-                            y: rawTextPt.rawY,
+                            x: finalX, 
+                            y: finalY,
                             size, font,
                             color: hexToRgb(obj.fill) || rgb(0, 0, 0),
-                            opacity: obj.opacity ?? 1,
+                            opacity: safeNum(obj.opacity, 1),
                             rotate: degrees(rotation - (obj.angle || 0)),
                         });
                     }

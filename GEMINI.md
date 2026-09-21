@@ -5,7 +5,31 @@
 
 ## Current Project Status
 - **Last Update:** 2026-09-21
-- **Active Goal:** New Product Engineering: Centralized Document Register & Auto-Numbering System (DMS) deployed, data migrated, verified with transaction concurrency locking.
+- **Active Goal:** PDF Hub Watermark Engine & Auto-Save Draft Resumption Stability Full Resolution; DMS auto-numbering system deployed.
+
+- **PDF Hub: Watermark Engine & Auto-Save Draft Resumption Stability (2026-09-21):**
+  - **1. Watermark Failure & Font Loading Optimization (`commitHelpers.js`, `commitEngine.js`):**
+    - **Document Font Caching:** Implemented `doc._fontCache = doc._fontCache || new Map()` ensuring fonts are embedded once per document rather than 600+ times during tiled repeat mode, eliminating memory exhaustion, fontkit subset crashes, and cdn.jsdelivr.net network timeouts.
+    - **Instant Standard Font Embedding:** Updated `getFont(doc, family, weight, style, sampleText)` to check for non-ASCII characters. Pure ASCII text embeds standard PDF fonts (Helvetica, Times, Courier) in 0ms with zero network requests. Unicode/Thai falls back to local `/fonts/sarabun/tahoma.ttf`.
+    - **NaN Coordinate & Dimension Sanitizer:** Introduced `safeNum(val, fallback)` preventing `NaN` and `undefined` values from polluting PDF operator streams (`NaN Tf`, `NaN NaN Td`), which caused PDF corruption ("Failed to load PDF document").
+    - **Defensive Hex Color Parsing:** Upgraded `hexToRgb` to safely extract hex values from Ant Design ColorPicker objects without throwing `.startsWith is not a function`.
+    - **Object Streams Compatibility:** Added `useObjectStreams: false` on `doc.save()` for universal PDF reader compatibility, and `throwOnInvalidObject: false` on `PDFDocument.load()` to open non-standard/malformed PDFs.
+  - **2. Page Font Size Discrepancy & Scaling Synchronization (`WatermarkManagerModal.jsx`, `PdfEditorTool.jsx`):**
+    - **Root Cause:** Active page canvas had `fc.width = baseW * zoom`. Watermark was added with `fontSize = wm.font_size`, which `commitEngine` divided by `zoom` (shrinking Page 1 in PDF). Unrendered pages had no canvas, falling back to unzoomed A4 (`595.28 x 841.89`), committing at full size. On screen, navigating to page 2 multiplied it by `zoom` again, creating wild discrepancies.
+    - **Resolution:**
+      - Preserved base font size `fontSize: wm.font_size` (e.g. 48) so Shape Properties and Watermark Manager display the exact same number, carrying visual canvas zoom via `scaleX: currentZoom` and `scaleY: currentZoom`.
+      - On unrendered pages, set unzoomed dimensions and explicit `width: approxTextWidth` and `height: approxTextHeight`.
+      - Added "Clear Watermarks" button with `<Popconfirm>` allowing 1-click removal of watermark objects across selected pages.
+      - In `ShapesPanel.jsx`, bound Font Size input to `store.selectedObjectProps?.fontSize ?? currentSettings.fontSize` with `max={200}`.
+  - **3. Auto-Save Draft Page 1 Shrinking & Coordinate Shift (`usePdfDocument.js`, `PdfEditorTool.jsx`, `EditorCanvas.jsx`):**
+    - **Root Cause:** `handleFileUpload` called `setZoom(1.0)` and `usePdfDocument.js` wrapped `setZoom(fitZoom)` in `requestAnimationFrame`. When resuming a draft, Page 1 mounted at `zoom = 1.0` while `pageAnnotations[1]._canvasWidth` was saved at `fitZoom` (e.g. 840px). Fabric's `loadFromJSON` scaled Page 1 annotations down by `595 / 840 = 0.70`, shifting them towards (0,0) before `requestAnimationFrame` could update the zoom.
+    - **Resolution:**
+      - Removed `setZoom(1.0)` wipe from `handleFileUpload` in `PdfEditorTool.jsx`.
+      - In `usePdfDocument.js` (`loadPdf` and `loadPdfFromBytes`), computed `fitZoom` immediately and called `setZoom(fitZoom)` synchronously before resolving.
+      - In `EditorCanvas.jsx`, added `!isLoadingJsonRef.current` guard in `initCanvasSizeAndRender` to prevent scaling objects during rehydration, and synchronized `_canvasWidth` and `_canvasHeight` to `canvasSize` upon completion.
+  - **4. Unit Tests & Production Build Verification:**
+    - Expanded `PdfCommitEngine.test.js` with 10 comprehensive tests covering tiled watermark stress (120 objects in <50ms), NaN coordinate resilience, and multi-page portrait/landscape watermarks. 100% PASS.
+    - Verified clean production build (`npm run build`) with exit code 0.
 
 - **New Product Engineering: Centralized Document Control & Auto-Numbering System (2026-09-21):**
   - **1. Database Schema & Concurrency Lock (`dms_document_types`, `dms_documents`):**

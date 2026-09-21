@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Modal, Form, Input, Button, List, Spin, Space, Popconfirm, Select, Slider, message, ColorPicker, Row, Col, Badge, Tooltip, InputNumber, Switch, Segmented, Tag, Radio } from 'antd';
-import { DeleteOutlined, ShareAltOutlined, PlusOutlined, FormatPainterOutlined, EditOutlined, BoldOutlined, ItalicOutlined, BorderOuterOutlined, VerticalAlignTopOutlined, VerticalAlignBottomOutlined, VerticalAlignMiddleOutlined, ColumnHeightOutlined } from '@ant-design/icons';
+import { DeleteOutlined, ShareAltOutlined, PlusOutlined, FormatPainterOutlined, EditOutlined, BoldOutlined, ItalicOutlined, BorderOuterOutlined, VerticalAlignTopOutlined, VerticalAlignBottomOutlined, VerticalAlignMiddleOutlined, ColumnHeightOutlined, ClearOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import * as fabric from 'fabric';
 import { server } from '../../../../../../constance/constance';
@@ -188,7 +188,7 @@ const WatermarkPreview = ({ formValues }) => {
 
 
 // ── Main Component ──
-const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pushHistory, pdfFile, currentPage, pdfDoc, pageAnnotations, setPageAnnotations, logPdfUsage }) => {
+const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pushHistory, pdfFile, currentPage, pdfDoc, pageAnnotations, setPageAnnotations, logPdfUsage, zoom = 1.0 }) => {
     const empNo = useAuthStore(state => state.empNo);
     const userName = useAuthStore(state => state.userName);
     const [watermarks, setWatermarks] = useState([]);
@@ -373,7 +373,50 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
         }
     };
 
-    const applyWatermark = (wm) => {
+    const handleClearWatermarks = () => {
+        const targetPages = getTargetPages();
+        if (targetPages.length === 0) {
+            message.warning('No pages matched the selected range');
+            return;
+        }
+        pushHistory?.();
+
+        // 1. Remove from active fabric canvases
+        targetPages.forEach(pageNum => {
+            const fc = fabricCanvasRefs?.current?.[pageNum];
+            if (fc) {
+                const wmObjs = fc.getObjects().filter(o => o.customData?.type === 'watermark');
+                wmObjs.forEach(o => fc.remove(o));
+                fc.renderAll();
+            }
+        });
+
+        // 2. Remove from pageAnnotations
+        if (setPageAnnotations) {
+            setPageAnnotations(prev => {
+                const next = { ...prev };
+                targetPages.forEach(pageNum => {
+                    const fc = fabricCanvasRefs?.current?.[pageNum];
+                    if (fc) {
+                        const snap = fc.toObject ? fc.toObject(['id', 'customData', 'textLines']) : fc.toJSON(['id', 'customData', 'textLines']);
+                        snap._canvasWidth = fc.width;
+                        snap._canvasHeight = fc.height;
+                        next[pageNum] = snap;
+                    } else if (next[pageNum]?.objects) {
+                        next[pageNum] = {
+                            ...next[pageNum],
+                            objects: next[pageNum].objects.filter(o => o.customData?.type !== 'watermark')
+                        };
+                    }
+                });
+                return next;
+            });
+        }
+
+        message.success(`Watermarks cleared from ${targetPages.length} page(s)`);
+    };
+
+    const applyWatermark = async (wm) => {
         const targetPages = getTargetPages();
         if (targetPages.length === 0) {
             message.warning('No pages matched the selected range');
@@ -382,17 +425,23 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
 
         const resolvedText = resolvePlaceholders(wm.text, userName, pdfFile?.name);
         const isRepeat = wm.repeat_mode;
+        const currentZoom = zoom || 1.0;
 
-        const buildWatermarkObjects = (width, height) => {
+        const buildWatermarkObjects = (width, height, isCanvas = false) => {
             const objs = [];
             const angleRad = -(wm.angle || 0);
+            const targetFontSize = wm.font_size || 48;
+            const scale = isCanvas ? currentZoom : 1;
+
+            const charWidth = targetFontSize * 0.6;
+            const approxTextWidth = resolvedText.length * charWidth;
+            const approxTextHeight = targetFontSize * 1.2;
 
             if (isRepeat) {
-                const gap = wm.repeat_gap || 100;
+                const gap = (wm.repeat_gap || 100) * scale;
                 const rStyle = wm.repeat_style || 'full';
-                const charWidth = (wm.font_size || 48) * 0.6;
-                const textW = (resolvedText.length * charWidth) + gap;
-                const textH = (wm.font_size || 48) + gap;
+                const textW = (approxTextWidth * scale) + gap;
+                const textH = (targetFontSize * scale) + gap;
                 const diagonal = Math.sqrt(width * width + height * height);
 
                 if (rStyle === 'line') {
@@ -407,11 +456,15 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                         objs.push({
                             type: 'text',
                             text: resolvedText,
+                            width: approxTextWidth,
+                            height: approxTextHeight,
                             left: x,
                             top: y,
                             fill: wm.color,
                             opacity: wm.opacity,
-                            fontSize: wm.font_size,
+                            fontSize: targetFontSize,
+                            scaleX: scale,
+                            scaleY: scale,
                             fontFamily: wm.font_family || 'Helvetica',
                             fontWeight: wm.font_weight || 'normal',
                             fontStyle: wm.font_style || 'normal',
@@ -437,11 +490,15 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                             objs.push({
                                 type: 'text',
                                 text: resolvedText,
+                                width: approxTextWidth,
+                                height: approxTextHeight,
                                 left: x,
                                 top: y,
                                 fill: wm.color,
                                 opacity: wm.opacity,
-                                fontSize: wm.font_size,
+                                fontSize: targetFontSize,
+                                scaleX: scale,
+                                scaleY: scale,
                                 fontFamily: wm.font_family || 'Helvetica',
                                 fontWeight: wm.font_weight || 'normal',
                                 fontStyle: wm.font_style || 'normal',
@@ -463,9 +520,9 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                 let angle = -(wm.angle || 0);
 
                 if (preset === 'header') {
-                    top = wm.font_size + 20;
+                    top = (targetFontSize + 20) * scale;
                 } else if (preset === 'footer') {
-                    top = height - wm.font_size - 20;
+                    top = height - ((targetFontSize + 20) * scale);
                 } else if (preset === 'diagonal') {
                     angle = -45;
                 }
@@ -473,11 +530,15 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                 objs.push({
                     type: 'text',
                     text: resolvedText,
+                    width: approxTextWidth,
+                    height: approxTextHeight,
                     left,
                     top,
                     fill: wm.color,
                     opacity: wm.opacity,
-                    fontSize: wm.font_size,
+                    fontSize: targetFontSize,
+                    scaleX: scale,
+                    scaleY: scale,
                     fontFamily: wm.font_family || 'Helvetica',
                     fontWeight: wm.font_weight || 'normal',
                     fontStyle: wm.font_style || 'normal',
@@ -494,11 +555,15 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
 
         const addTextToCanvas = (fc, pageNum) => {
             if (!fc) return;
-            const objs = buildWatermarkObjects(fc.width, fc.height);
+            const objs = buildWatermarkObjects(fc.width, fc.height, true);
             objs.forEach(objData => {
                 const textObj = new fabric.Text(objData.text, {
                     left: objData.left,
                     top: objData.top,
+                    width: objData.width,
+                    height: objData.height,
+                    scaleX: objData.scaleX,
+                    scaleY: objData.scaleY,
                     fill: objData.fill,
                     opacity: objData.opacity,
                     fontSize: objData.fontSize,
@@ -517,6 +582,29 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
             });
             fc.renderAll();
         };
+
+        // Pre-query true page dimensions for unrendered pages to prevent hardcoded A4 distortion
+        const unrenderedPageDims = {};
+        for (const pageNum of targetPages) {
+            const fc = fabricCanvasRefs?.current?.[pageNum];
+            if (!fc) {
+                let pW = 595.28;
+                let pH = 841.89;
+                if (pdfDoc) {
+                    try {
+                        const p = await pdfDoc.getPage(pageNum);
+                        const vp = p.getViewport({ scale: 1.0 });
+                        pW = vp.width;
+                        pH = vp.height;
+                    } catch (e) {
+                        const existing = pageAnnotations?.[pageNum];
+                        pW = existing?._canvasWidth || 595.28;
+                        pH = existing?._canvasHeight || 841.89;
+                    }
+                }
+                unrenderedPageDims[pageNum] = { width: pW, height: pH };
+            }
+        }
 
         pushHistory?.();
 
@@ -539,9 +627,10 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                         next[pageNum] = snap;
                     } else {
                         const existingPage = next[pageNum] || {};
-                        const pW = existingPage._canvasWidth || 595.28;
-                        const pH = existingPage._canvasHeight || 841.89;
-                        const wmObjects = buildWatermarkObjects(pW, pH);
+                        const dims = unrenderedPageDims[pageNum] || { width: 595.28, height: 841.89 };
+                        const pW = dims.width;
+                        const pH = dims.height;
+                        const wmObjects = buildWatermarkObjects(pW, pH, false);
                         const existingObjects = existingPage.objects ? [...existingPage.objects] : [];
                         next[pageNum] = {
                             ...existingPage,
@@ -579,14 +668,26 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                 <div style={{ display: !isCreate ? 'block' : 'none' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                         <span style={{ color: '#666' }}>Select a watermark to apply, or create a new one.</span>
-                        <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-                            setIsCreate(true);
-                            setEditingId(null);
-                            form.resetFields();
-                            updatePreview();
-                        }}>
-                            Create New
-                        </Button>
+                        <Space>
+                            <Popconfirm
+                                title="Clear all watermarks from selected pages?"
+                                onConfirm={handleClearWatermarks}
+                                okText="Clear"
+                                cancelText="Cancel"
+                            >
+                                <Button danger icon={<ClearOutlined />}>
+                                    Clear Watermarks
+                                </Button>
+                            </Popconfirm>
+                            <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+                                setIsCreate(true);
+                                setEditingId(null);
+                                form.resetFields();
+                                updatePreview();
+                            }}>
+                                Create New
+                            </Button>
+                        </Space>
                     </div>
 
                     {/* ── Page Range Selector (Feature F) ── */}

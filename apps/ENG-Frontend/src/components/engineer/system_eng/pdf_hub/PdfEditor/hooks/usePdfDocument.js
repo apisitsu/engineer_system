@@ -110,13 +110,21 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                 const vp = page.getViewport({ scale: 1.0 });
                 setPageSize({ width: vp.width, height: vp.height });
 
-                requestAnimationFrame(() => {
-                    if (canvasWrapperRef.current && setZoom) {
+                const applyFitZoom = () => {
+                    if (canvasWrapperRef.current && setZoom && vp.width > 0) {
                         const wrapperW = canvasWrapperRef.current.clientWidth - 60;
-                        const fitZoom = Math.min(wrapperW / vp.width, 1.5);
-                        setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                        if (wrapperW > 100) {
+                            const fitZoom = Math.min(wrapperW / vp.width, 1.5);
+                            setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                            return true;
+                        }
                     }
-                });
+                    return false;
+                };
+
+                if (!applyFitZoom()) {
+                    requestAnimationFrame(applyFitZoom);
+                }
                 message.success(`Loaded: ${file.name} (${doc.numPages} pages)`);
             }
         } catch (err) {
@@ -154,13 +162,21 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
             const vp = page.getViewport({ scale: 1.0 });
             setPageSize({ width: vp.width, height: vp.height });
 
-            requestAnimationFrame(() => {
-                if (canvasWrapperRef.current && setZoom) {
+            const applyFitZoom = () => {
+                if (canvasWrapperRef.current && setZoom && vp.width > 0) {
                     const wrapperW = canvasWrapperRef.current.clientWidth - 60;
-                    const fitZoom = Math.min(wrapperW / vp.width, 1.5);
-                    setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                    if (wrapperW > 100) {
+                        const fitZoom = Math.min(wrapperW / vp.width, 1.5);
+                        setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                        return true;
+                    }
                 }
-            });
+                return false;
+            };
+
+            if (!applyFitZoom()) {
+                requestAnimationFrame(applyFitZoom);
+            }
             message.success(`Loaded: ${filename} (${doc.numPages} pages)`);
         } catch (err) {
             console.error('Failed to load bytes:', err);

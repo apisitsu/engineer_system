@@ -234,7 +234,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage, pushHistory
                                 </PropRow>
                                 <PropRow label="Font Size">
                                     <InputNumber
-                                        min={8} max={120} value={currentSettings.fontSize}
+                                        min={8} max={200} value={isTextSelected ? (store.selectedObjectProps?.fontSize ?? currentSettings.fontSize) : currentSettings.fontSize}
                                         onChange={handleSetFontSize}
                                         size="small" style={{ width: 60 }}
                                     />

@@ -329,7 +329,6 @@ const PdfEditorTool = () => {
         // ── Reset all states (like a full reload) ──
         store.setActiveMode('view');
         store.setViewMode('continuous');
-        setZoom(1.0);
         store.clearSelection();
         store.setOverlayEnabled(false);
         setOverlayPdfDoc(null);
@@ -1383,6 +1382,7 @@ const PdfEditorTool = () => {
                 logPdfUsage={logPdfUsage}
                 pageAnnotations={pageAnnotations}
                 setPageAnnotations={setPageAnnotations}
+                zoom={zoom}
             />
         </div>
     );
