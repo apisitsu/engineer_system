@@ -6,7 +6,8 @@ import {
   BarChartOutlined,
   ToolOutlined,
   ArrowRightOutlined,
-  FilePdfOutlined
+  FilePdfOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { MenuTemplate } from '../../menu_sidebar/menu_template';
@@ -109,6 +110,16 @@ const HomeNewProd = () => {
       category: 'Utilities',
       status: 'Active',
       tags: ['PDF', 'Compare', 'Diff']
+    },
+    {
+      id: 'document-management',
+      title: 'Document Control & Auto-Numbering',
+      description: 'Centralized document register and auto-running number generator (PID, PDR, PFD, PFMEA, Control Plan) with concurrency lock and link management.',
+      icon: <FileTextOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/newprod_eng/documents',
+      category: 'Engineering',
+      status: 'Active',
+      tags: ['Document', 'Numbering', 'APQP', 'Links']
     },
     {
       id: 'template-tool',

@@ -122,7 +122,7 @@ const { verifyToken, optionalVerifyToken } = require('./middleware/auth');
 app.use('/api', (req, res, next) => {
   if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/logout-user' || req.path === '/proxy/job_check' || req.path.startsWith('/public')
       || req.path === '/activity/session/end' || req.path === '/ecnt/user-candidates'
-      || (req.method === 'GET' && req.path.startsWith('/ecnt/'))) {
+      || (req.method === 'GET' && (req.path.startsWith('/ecnt/') || req.path.startsWith('/engineer/new_prod/dms')))) {
     return optionalVerifyToken(req, res, next);
   }
 
@@ -176,6 +176,10 @@ app.post('/api/engineer/new_prod/stamps', verifyToken, templateTool.upsertStamp)
 
 // Calculator Usage Log
 app.post('/api/engineer/new_prod/calc/log', verifyToken, templateTool.logCalcUsage);
+
+//--------------------Document Management System (DMS)---------------------//
+const dmsRoutes = require('./api/engineer/new_prod/document/documentRoutes');
+app.use('/api/engineer/new_prod/dms', dmsRoutes);
 
 
 //--------------------User----------------------//

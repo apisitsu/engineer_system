@@ -4,8 +4,56 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-18
-- **Active Goal:** ECNT V2 Enterprise Platform: Production readiness, multi-persona real-world testing, and live deployment verification.
+- **Last Update:** 2026-09-21
+- **Active Goal:** New Product Engineering: Centralized Document Register & Auto-Numbering System (DMS) deployed, data migrated, verified with transaction concurrency locking.
+
+- **New Product Engineering: Centralized Document Control & Auto-Numbering System (2026-09-21):**
+  - **1. Database Schema & Concurrency Lock (`dms_document_types`, `dms_documents`):**
+    - Created relational tables in PostgreSQL (`engPool` on port 6543) with row-level transaction locking (`SELECT ... FOR UPDATE`) in `documentService.js` guaranteeing zero race conditions or duplicate document numbers during parallel requests.
+    - Added indexes: `idx_dms_docs_no`, `idx_dms_docs_type`, `idx_dms_docs_prefix`, `idx_dms_docs_category`, `idx_dms_docs_part`, `idx_dms_docs_title`, `idx_dms_docs_deleted`.
+    - Added user audit tracking: `created_by`, `created_at`, `updated_by`, `updated_at`, `deleted_by`, `deleted_at`.
+  - **2. Full Excel Migration (86 Documents) & Admin Munk Attribution:**
+    - Built and executed `apps/ENG-Backend/db_migrations/20260921_create_dms_tables_and_migrate.js` importing all 86 historical documents from `DOCUMENTS.xlsx` across 5 sheets:
+      - `PID`: 2 documents (`PID-000001` - `PID-000002`, max #2)
+      - `PDR`: 10 documents (`PDR-000001` - `PDR-000010`, max #10)
+      - `PFD`: 25 documents (`PFD-00001` - `PFD-00025`, max #25)
+      - `PFMEA`: 25 documents (`PFMEA-00001` - `PFMEA-00025`, max #25)
+      - `CP` (Control Plan): 24 documents (`CP-00001` - `CP-00024`, max #24)
+    - Updated `created_by` for all 86 existing migrated documents to Admin Munk's employee code (`admin`).
+    - Captured and preserved Aras Innovator PLM URLs (`Link_Innovator`) and Sequence Numbers (`Seq No.`).
+  - **3. User-Specified Numbering Scheme (6-Digit `000000-999999` then `A00000-ZZZZZZ`):**
+    - Implemented formatting and reverse parsing algorithm:
+      - Numbers 0 to 999,999: formatted as zero-padded 6-digit decimal (e.g. `CP-000025`).
+      - Numbers >= 1,000,000: seamlessly transitions to alphanumeric base-36 `A00000` through `ZZZZZZ` (supporting up to 1.57+ billion documents per prefix).
+  - **4. Backend Architecture & Routing (`apps/ENG-Backend`):**
+    - `documentConstants.js`, `documentService.js`, `documentController.js`, and `documentRoutes.js`.
+    - Registered at `/api/engineer/new_prod/dms` in `server.js`.
+    - Whitelisted GET endpoints under `/engineer/new_prod/dms` with `optionalVerifyToken` for public company-wide read access while protecting mutations (`POST`, `PUT`, `DELETE`) with `verifyToken`.
+  - **5. Frontend React UI Dashboard (`DocumentManagementDashboard.jsx`):**
+    - High-density Ant Design v5 layout matching corporate aesthetics.
+    - KPI stat cards for Total Documents, PID, PDR, PFD, PFMEA, and CP with interactive filtering on click.
+    - Multi-criteria filter bar: search input (Doc No, Title, Note, Seq No), Type dropdown, Part dropdown (`Comp.`, `Assy.`, `Finish`), and File Link filter (`Has Link`, `No Link`).
+    - One-click copy for Document Numbers, direct links to Google Drive/Sheets and Aras Innovator PLM.
+    - "Issue Document Number" modal with live auto-running preview banner (`หมายเลขเอกสารถัดไปที่จะออกให้: CP-000025`).
+    - "Document Types Configuration" modal allowing dynamic addition of custom prefixes (e.g. `MEMO`, `WI`, `SOP`) without code changes.
+    - Client-side Excel export using `xlsx`.
+  - **6. Navigation & Portal Integration:**
+    - Added route `/eng/newprod_eng/documents` in `App.jsx`.
+    - Added "Document Management" menu entry in `menu_sidebar.jsx`.
+    - Added "Document Control & Auto-Numbering" tool card to New Product Engineering Portal (`home_newprod.jsx`).
+    - Updated constants in both `constance.js` and `constance_prod.js`.
+  - **8. DMS UI/UX Enhancements & Workflow Refinements (2026-09-21):**
+    - **Pagination Padding Fix:** Resolved pagination sticking/hugging to the card container corners. Added `.dms-table-card .ant-table-pagination { margin: 20px 24px 18px 24px !important; }` and bottom card padding, creating balanced 24px margins.
+    - **Executive Document Details Modal:** Redesigned into an executive inspection view featuring prefix-themed hero headers, 26px monospace document number display, 1-click clipboard copy, registration/update audit chips with avatars, and direct links to Google Drive and Aras Innovator.
+    - **Double-Click Row Action:** Added `onRow={(record) => ({ onDoubleClick: () => openDocumentDetails(record, false) })}` on `<Table>` with interactive hover state (`cursor: pointer`).
+    - **Auto-Popup Upon Issue:** `handleIssueSubmit` now automatically triggers `openDocumentDetails(issuedDoc, true)` with a green congratulatory banner, immediately showing the user the newly issued document number (e.g. `CP-000025`).
+  - **9. Complete 6-Digit Document Number Standardization (2026-09-21):**
+    - Scanned database and identified 74 historical records across `PFD` (25), `PFMEA` (25), and `CP` (24) that originally used 5-digit notation in `DOCUMENTS.xlsx` (e.g. `PFD-00001` - `PFD-00025`, `CP-00001` - `CP-00024`).
+    - Created and executed migration `apps/ENG-Backend/db_migrations/20260921_standardize_dms_doc_numbers_to_6_digits.js` converting all 74 records to 6-digit zero-padded numbers (`PFD-000001` - `PFD-000025`, `PFMEA-000001` - `PFMEA-000025`, `CP-000001` - `CP-000024`).
+    - Audit tracked update: marked with `updated_by = 'System Standardization (6-Digit)'`.
+    - Verified 100% of all 87 records across all 5 types (PID, PDR, PFD, PFMEA, CP) in database are strictly 6 digits (0 records with 5 digits remaining).
+    - Verified live rendering via browser subagent across all category filters.
+
 
 - **ECNT V2 10-Point UI/UX & Workflow Platform Perfection (2026-09-18):**
   - **1. Dashboard Controlled Pagination Fix (`EcntDashboardView.jsx`):**

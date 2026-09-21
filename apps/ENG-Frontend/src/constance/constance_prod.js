@@ -63,8 +63,13 @@ export const server = {
   HTML_TO_PDF_DOWNLOAD_PDF: `${apiUrl}api/engineer/new_prod/html-to-pdf/download/`,
   HTML_TO_PDF_DOWNLOAD_HTML: `${apiUrl}api/engineer/new_prod/html-to-pdf/download-html/`,
   HTML_TO_PDF_DELETE_JOB: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/`,
-  HTML_TO_PDF_DELETE_ALL: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/all`,
   HTML_TO_PDF_REWORK: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/`,
+
+  // DMS (Document Management System - New Prod)
+  DMS_DOCUMENTS: `${apiUrl}api/engineer/new_prod/dms/documents`,
+  DMS_DOCUMENT_TYPES: `${apiUrl}api/engineer/new_prod/dms/document-types`,
+  DMS_ISSUE: `${apiUrl}api/engineer/new_prod/dms/documents/issue`,
+  DMS_STATS: `${apiUrl}api/engineer/new_prod/dms/documents/stats`,
   // PDF Hub (Sign & Stamp)
   PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
   PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
