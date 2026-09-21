@@ -3,15 +3,18 @@ import { useRef, useState, useCallback } from 'react';
 /**
  * useHistory — Simple Undo/Redo stack for JSON state.
  */
+import { FABRIC_SERIALIZE_PROPS } from '../engine/commitHelpers';
+
 export default function useHistory(setPageAnnotations, setPageHighlights) {
     const historyRef = useRef({ past: [], future: [] });
     const [historyVersion, setHistoryVersion] = useState(0);
 
-    const pushHistory = useCallback((newState) => {
-        historyRef.current.past.push(newState);
-        historyRef.current.future = [];
-        // Cap history size to prevent memory leaks with large PDFs
-        if (historyRef.current.past.length > 30) {
+    const pushHistory = useCallback((snapshot) => {
+        if (!snapshot) return;
+        historyRef.current.past.push(snapshot);
+        historyRef.current.future = []; // Clear redo stack on new action
+        // Limit history to 50 states to prevent memory leaks
+        if (historyRef.current.past.length > 50) {
             historyRef.current.past.shift();
         }
         setHistoryVersion(v => v + 1);
@@ -19,7 +22,16 @@ export default function useHistory(setPageAnnotations, setPageHighlights) {
 
     const saveCurrentPageState = useCallback((pageNum, canvas, highlightsState) => {
         if (!canvas) return;
-        const json = canvas.toObject ? canvas.toObject(['id', 'customData', 'textLines']) : canvas.toJSON(['id', 'customData', 'textLines']);
+        const json = canvas.toObject ? canvas.toObject(FABRIC_SERIALIZE_PROPS) : canvas.toJSON(FABRIC_SERIALIZE_PROPS);
+        if (json && Array.isArray(json.objects)) {
+            json.objects.forEach(obj => {
+                if (obj && (obj.type === 'FabricText' || obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
+                    if (obj.text === undefined || obj.text === null) {
+                        obj.text = '';
+                    }
+                }
+            });
+        }
         json._canvasWidth = canvas.width;
         json._canvasHeight = canvas.height;
 

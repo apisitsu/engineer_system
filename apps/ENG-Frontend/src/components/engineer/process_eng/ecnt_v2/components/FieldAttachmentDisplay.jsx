@@ -1,9 +1,9 @@
 import React from 'react';
-import { Image, Tag, Typography, Space } from 'antd';
+import { Image, Tag, Typography } from 'antd';
 import { FileOutlined, DownloadOutlined } from '@ant-design/icons';
 import { server } from '../../../../../constance/constance';
 
-const { Link, Text } = Typography;
+const { Link } = Typography;
 
 const isImageFile = (file) => {
     if (!file) return false;
@@ -27,7 +27,7 @@ export default function FieldAttachmentDisplay({ attachments = [], fieldName }) 
     return (
         <div style={{ marginTop: 8, padding: '8px 10px', background: '#fafafa', borderRadius: 6, border: '1px solid #f0f0f0' }}>
             <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 6, fontWeight: 500 }}>
-                📎 แนบไฟล์/รูปภาพสำหรับรายการนี้ ({filtered.length}):
+                📎 Attached Files / Images ({filtered.length}):
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 <Image.PreviewGroup>

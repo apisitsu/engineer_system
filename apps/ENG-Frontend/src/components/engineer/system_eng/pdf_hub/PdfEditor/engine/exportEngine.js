@@ -21,6 +21,10 @@ export async function exportPageToImage(pdfDoc, pageNum, fabricData, highlights 
     canvas.height = viewport.height;
     const ctx = canvas.getContext('2d');
 
+    // Fill white background (ensures clean rendering and prevents black backgrounds on JPEG export)
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     // Render PDF
     await page.render({ canvasContext: ctx, viewport }).promise;
 

@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Checkbox, Row, Col, Collapse, Radio, DatePicker, Button, Typography, Tag, Space, Alert } from 'antd';
+import { Modal, Form, Input, Checkbox, Row, Col, Collapse, Radio, DatePicker, Typography, Space, Alert } from 'antd';
 import { App } from 'antd';
 import axios from 'axios';
-import moment from 'moment';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import AttachableField from './components/AttachableField';
+import { dispatchStageWorkflowEmail } from '../../../../services/ecntEmailService';
 
 const { TextArea } = Input;
 const { Text } = Typography;
 
-export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) {
+export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onClose, onSuccess }) {
     const { message: antdMessage } = App.useApp();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
@@ -61,10 +61,34 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                 request_by: linkedEcr.request_by,
                 department: linkedEcr.department
             };
-
-            await axios.post(`${server.URL}/api/ecnt/ecn`, payload, { withCredentials: true });
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const token = localStorage.getItem("token");
+            const res = await axios.post(`${baseUrl}/api/ecnt/ecn`, payload, { 
+                withCredentials: true,
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
             
             antdMessage.success("ECN Created Successfully (Block 5 Complete -> Pending Eng Mgr ECN)");
+
+            // Fire-and-forget email notification to Eng Mgr
+            try {
+                const ecnId = res.data?.id || res.data?.data?.id;
+                dispatchStageWorkflowEmail({
+                    stageCode: 'STAGE_3',
+                    docData: {
+                        id: ecnId,
+                        ecn_no: values.ecn_no,
+                        title_of_change: linkedEcr.title_of_change,
+                        customer_name: linkedEcr.customer_name,
+                        department: linkedEcr.department,
+                        request_by_name: linkedEcr.request_by_name
+                    },
+                    documentType: 'ECN',
+                    actionTaken: 'FORMULATE_ECN',
+                    systemConfig
+                }).catch(e => console.warn("[CreateECNModal] Email dispatch background error:", e));
+            } catch(e) {}
+
             form.resetFields();
             if (onSuccess) onSuccess();
         } catch (error) {
@@ -135,7 +159,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                         <AttachableField
                             name="reason_of_change"
                             label="Reason of Change"
-                            placeholder="ระบุเหตุผลการเปลี่ยนแปลง (กด Ctrl+V เพื่อวางรูปภาพ หรือแนบไฟล์)..."
+                            placeholder="Describe reason for change (Press Ctrl+V to paste screenshot or use upload button)..."
                             rules={[{ required: true }]}
                             rows={2}
                             attachments={fieldAttachments['reason_of_change'] || []}
@@ -144,7 +168,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                         />
                     </Col>
                     <Col span={24}>
-                        <Form.Item name="scope_of_implementation" label="Scope of Implementation (ขอบเขตการดำเนินการ)">
+                        <Form.Item name="scope_of_implementation" label="Scope of Implementation">
                             <TextArea rows={2} placeholder="Specify scope of application/implementation..." />
                         </Form.Item>
                     </Col>
@@ -152,7 +176,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                         <AttachableField
                             name="before_change"
                             label="Before Change Description"
-                            placeholder="Technical state before change (กด Ctrl+V เพื่อวางรูปภาพ หรือแนบไฟล์)..."
+                            placeholder="Technical state before change (Press Ctrl+V to paste screenshot or use upload button)..."
                             rows={3}
                             attachments={fieldAttachments['before_change'] || []}
                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, before_change: atts }))}
@@ -163,7 +187,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                         <AttachableField
                             name="after_change"
                             label="After Change Description"
-                            placeholder="Technical state after change (กด Ctrl+V เพื่อวางรูปภาพ หรือแนบไฟล์)..."
+                            placeholder="Technical state after change (Press Ctrl+V to paste screenshot or use upload button)..."
                             rows={3}
                             attachments={fieldAttachments['after_change'] || []}
                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, after_change: atts }))}
@@ -174,7 +198,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
 
                 {/* Impact Assessment Section */}
                 <h4 style={{ marginTop: 16, marginBottom: 8, color: '#1677ff', borderBottom: '1px solid #e8e8e8', paddingBottom: 6 }}>
-                    Impact Assessment (การประเมินผลกระทบ)
+                    Impact Assessment
                 </h4>
 
                 <Collapse defaultActiveKey={['customer_section', 'affected_areas']} style={{ marginBottom: 16 }}>
@@ -183,7 +207,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                         {/* Customer Impact */}
                         <div style={{ marginBottom: 12, padding: 12, background: '#fafafa', borderRadius: 6 }}>
                             <Form.Item name={['impact', 'has_customer_impact']} valuePropName="checked" noStyle>
-                                <Checkbox style={{ fontWeight: 600 }}>Customer Impact (มีผลกระทบต่อ Customer)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>Customer Impact</Checkbox>
                             </Form.Item>
                             {hasCustomerImpact && (
                                 <Row gutter={12} style={{ marginTop: 12 }}>
@@ -219,7 +243,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                         {/* KZW/FJSW Impact */}
                         <div style={{ marginBottom: 12, padding: 12, background: '#fafafa', borderRadius: 6 }}>
                             <Form.Item name={['impact', 'has_kzw_fjsw_impact']} valuePropName="checked" noStyle>
-                                <Checkbox style={{ fontWeight: 600 }}>KZW, FJSW Impact (มีผลกระทบต่อ KZW / FJSW)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>KZW, FJSW Impact</Checkbox>
                             </Form.Item>
                             {hasKzwImpact && (
                                 <Row gutter={12} style={{ marginTop: 12 }}>
@@ -253,7 +277,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                         {/* Sale Drawing Impact */}
                         <div style={{ padding: 12, background: '#fafafa', borderRadius: 6 }}>
                             <Form.Item name={['impact', 'has_sale_drawing_impact']} valuePropName="checked" noStyle>
-                                <Checkbox style={{ fontWeight: 600 }}>Sale Drawing Impact (มีผลกระทบต่อ Sale Drawing)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>Sale Drawing Impact</Checkbox>
                             </Form.Item>
                             {hasSaleDwgImpact && (
                                 <Row gutter={12} style={{ marginTop: 12 }}>
@@ -273,7 +297,7 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                     </Collapse.Panel>
 
                     {/* 8 Affected Areas Checklist */}
-                    <Collapse.Panel header="2. 8 Affected Areas Checklist (พื้นที่ที่ได้รับผลกระทบ)" key="affected_areas">
+                    <Collapse.Panel header="2. 8 Affected Areas Checklist" key="affected_areas">
                         {/* 1. Traceability */}
                         <div style={{ marginBottom: 10, padding: 8, background: '#fcfcfc', border: '1px solid #f0f0f0', borderRadius: 4 }}>
                             <Form.Item name={['impact', 'has_traceability']} valuePropName="checked" noStyle>

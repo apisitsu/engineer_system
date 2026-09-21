@@ -64,3 +64,9 @@ apps/ENG-Backend/api/engineer/mtc/doc/tooling_calc_blocks/**/*.pdf
 apps/ENG-Backend/api/engineer/mtc/doc/tooling_calc_blocks/**/*.xlsx
 apps/ENG-Backend/api/engineer/mtc/doc/tooling_calc_blocks/**/*.tsv
 update_progress_live.log
+
+
+
+apps/ENG-Backend/public/generated/pdf_to_image
+apps/ENG-Backend/files/pdf_temp_drafts
+apps/ENG-Backend/public/kanban_attachments

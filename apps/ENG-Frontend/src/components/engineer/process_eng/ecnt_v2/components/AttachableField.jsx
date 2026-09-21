@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Form, Input, Upload, Button, Image, Space, Typography, Tooltip, Tag, Spin } from 'antd';
-import { PaperClipOutlined, DeleteOutlined, DownloadOutlined, FileOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Form, Input, Upload, Button, Image, Space, Typography, Tag, Spin } from 'antd';
+import { PaperClipOutlined, FileOutlined, LoadingOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 
@@ -91,7 +91,7 @@ export default function AttachableField({
             <Form.Item name={name} label={label} rules={rules} style={{ marginBottom: 6 }}>
                 <TextArea 
                     rows={rows} 
-                    placeholder={placeholder || 'ระบุรายละเอียด (สามารถกด Ctrl+V เพื่อวางรูปภาพที่แคปไว้ได้ทันที)...'} 
+                    placeholder={placeholder || 'Enter details (Press Ctrl+V to paste captured screenshots directly)...'} 
                     onPaste={handlePaste}
                 />
             </Form.Item>
@@ -110,11 +110,11 @@ export default function AttachableField({
                             disabled={uploading}
                             style={{ fontSize: 12, borderRadius: 4 }}
                         >
-                            แนบรูป / ไฟล์
+                            Attach File / Image
                         </Button>
                     </Upload>
                     <Text type="secondary" style={{ fontSize: 11 }}>
-                        (หรือกด Ctrl+V ในช่องข้อความเพื่อวางรูป)
+                        (or press Ctrl+V in text box to paste image)
                     </Text>
                 </Space>
                 {uploading && <Spin size="small" />}
@@ -138,7 +138,7 @@ export default function AttachableField({
                                 return (
                                     <div key={idx} style={{ position: 'relative', width: 68, height: 68 }}>
                                         <Image
-                                            src={getFullUrl(item.file_url)}
+                                             src={getFullUrl(item.file_url)}
                                             alt={item.file_name}
                                             width={68}
                                             height={68}
@@ -163,7 +163,7 @@ export default function AttachableField({
                                                 boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
                                                 zIndex: 10
                                             }}
-                                            title="ลบรูปนี้"
+                                            title="Delete image"
                                         >
                                             ✕
                                         </div>

@@ -5,13 +5,23 @@ import { useTheme } from '../../../../../../../theme';
 import { usePdfEditorStore } from '../../../../../../../stores/usePdfEditorStore';
 import { SectionTitle, PropRow, COLOR_PRESETS } from './SharedProperties';
 
-export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
+export default function ShapesPanel({ fabricCanvasRefs, currentPage, pushHistory }) {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
     const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
 
-    const isTextSelected = store.selectedObjectProps?.type === 'i-text' || store.selectedObjectProps?.type === 'textbox' || store.selectedObjectProps?.type === 'text';
+    const isTextSelected = store.selectedObjectProps?.type === 'i-text' || store.selectedObjectProps?.type === 'textbox' || store.selectedObjectProps?.type === 'text' || store.selectedObjectProps?.type === 'FabricText';
     const isTextMode = store.activeTool === 'addText' || isTextSelected;
+
+    const isArrowSelected = store.selectedObjectProps?.customData?.type === 'arrow';
+    const isArrowMode = store.activeTool === 'arrow' || isArrowSelected;
+
+    const isStampSelected = Boolean(store.selectedObjectProps?.customData?.type?.startsWith('stamp'));
+    const isStampMode = store.activeTool.startsWith('stamp') || isStampSelected;
+
+    const currentArrowHeadSize = (isArrowSelected ? store.selectedObjectProps?.arrowHeadSize : null) 
+        || currentSettings.arrowHeadSize 
+        || 16;
 
     const [textContent, setTextContent] = useState('');
 
@@ -21,65 +31,124 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
         }
     }, [isTextSelected, store.selectedObjectProps?.text, store.selectedObjectId]);
 
+    const handleTextFocus = () => {
+        if (pushHistory) pushHistory(currentPage);
+    };
+
     const handleTextChange = (e) => {
         const val = e.target.value;
         setTextContent(val);
-        store.updateSelectedTextContent(val, fabricCanvasRefs, currentPage);
+        if (typeof store.updateSelectedTextContent === 'function') {
+            store.updateSelectedTextContent(val, fabricCanvasRefs, currentPage);
+        } else if (typeof store.updateSelectedObjectProperty === 'function') {
+            store.updateSelectedObjectProperty('text', val, fabricCanvasRefs, currentPage);
+        }
+    };
+
+    const handleSetArrowHeadSize = (s) => {
+        const val = Math.max(6, Math.min(60, Number(s) || 16));
+        store.setArrowHeadSize(val);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('arrowHeadSize', val, fabricCanvasRefs, currentPage);
+        }
+    };
+
+    const handleApplyRolePreset = (roleName, color) => {
+        store.setDwgRoleColor(roleName, color);
+        store.setStrokeColor(color);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('strokeColor', color, fabricCanvasRefs, currentPage);
+            if (isTextSelected) {
+                store.updateSelectedObjectProperty('fillColor', color, fabricCanvasRefs, currentPage);
+            }
+        }
     };
 
     const handleSetStrokeColor = (color) => {
-        const hex = color ? color.toHexString() : 'transparent';
+        const hex = color ? (typeof color === 'string' ? color : color.toHexString()) : 'transparent';
         store.setStrokeColor(hex);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('strokeColor', hex, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('strokeColor', hex, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetFillColor = (color) => {
         const hex = color ? color.toHexString() : 'transparent';
         store.setFillColor(hex);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('fillColor', hex, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('fillColor', hex, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetStrokeWidth = (w) => {
         store.setStrokeWidth(w);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('strokeWidth', w, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('strokeWidth', w, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetFontSize = (s) => {
         store.setFontSize(s);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('fontSize', s, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('fontSize', s, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetFontFamily = (f) => {
         store.setFontFamily(f);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('fontFamily', f, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('fontFamily', f, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetFontWeight = (w) => {
         const newWeight = w === currentSettings.fontWeight ? 'normal' : w;
         store.setFontWeight(newWeight);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('fontWeight', newWeight, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('fontWeight', newWeight, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetFontStyle = (s) => {
         const newStyle = s === currentSettings.fontStyle ? 'normal' : s;
         store.setFontStyle(newStyle);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('fontStyle', newStyle, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('fontStyle', newStyle, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetUnderline = () => {
         const newUnderline = !currentSettings.underline;
         store.setUnderline(newUnderline);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('underline', newUnderline, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('underline', newUnderline, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetTextAlign = (a) => {
         store.setTextAlign(a);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('textAlign', a, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('textAlign', a, fabricCanvasRefs, currentPage);
+        }
     };
 
     const handleSetOpacity = (o) => {
         store.setOpacity(o);
-        if (store.selectedObjectId) store.updateSelectedObjectProperty('opacity', o, fabricCanvasRefs, currentPage);
+        if (store.selectedObjectId) {
+            if (pushHistory) pushHistory(currentPage);
+            store.updateSelectedObjectProperty('opacity', o, fabricCanvasRefs, currentPage);
+        }
     };
 
     return (
@@ -104,7 +173,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     color: store.currentDwgRole === 'drawer' ? '#fff' : '#3498db',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setDwgRoleColor('drawer', '#3498db'); handleSetFillColor(null); }}
+                                onClick={() => handleApplyRolePreset('drawer', '#3498db')}
                             >
                                 Drawer
                             </button>
@@ -115,7 +184,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     color: store.currentDwgRole === 'checker' ? '#fff' : '#e74c3c',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setDwgRoleColor('checker', '#e74c3c'); handleSetFillColor(null); }}
+                                onClick={() => handleApplyRolePreset('checker', '#e74c3c')}
                             >
                                 Checker
                             </button>
@@ -126,7 +195,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     color: store.currentDwgRole === 'approver' ? '#fff' : '#000000',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setDwgRoleColor('approver', '#000000'); handleSetFillColor(null); }}
+                                onClick={() => handleApplyRolePreset('approver', '#000000')}
                             >
                                 Approver
                             </button>
@@ -149,6 +218,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                         <Input.TextArea 
                                             value={textContent}
                                             onChange={handleTextChange}
+                                            onFocus={handleTextFocus}
                                             autoSize={{ minRows: 2, maxRows: 6 }}
                                         />
                                     </div>
@@ -221,6 +291,41 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     </Space.Compact>
                                 </PropRow>
                             </div>
+                        ) : isArrowMode ? (
+                            <>
+                                <div className="pdf-ws-prop-section">
+                                    <SectionTitle>Arrow Style</SectionTitle>
+                                    <PropRow label="Color">
+                                        <ColorPicker
+                                            value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
+                                            onChangeComplete={handleSetStrokeColor}
+                                            size="small"
+                                            allowClear
+                                            presets={COLOR_PRESETS}
+                                        />
+                                    </PropRow>
+                                    <PropRow label="Line Width">
+                                        <InputNumber
+                                            min={1} max={20} value={currentSettings.strokeWidth}
+                                            onChange={handleSetStrokeWidth}
+                                            size="small" style={{ width: 60 }}
+                                        />
+                                    </PropRow>
+                                </div>
+
+                                <div className="pdf-ws-prop-section">
+                                    <SectionTitle>Arrowhead Size</SectionTitle>
+                                    <PropRow label="Head Size">
+                                        <InputNumber
+                                            min={4} max={60} step={1}
+                                            value={currentArrowHeadSize}
+                                            onChange={handleSetArrowHeadSize}
+                                            size="small" style={{ width: 90 }}
+                                            addonAfter="px"
+                                        />
+                                    </PropRow>
+                                </div>
+                            </>
                         ) : (
                             <>
                                 <div className="pdf-ws-prop-section">
@@ -241,27 +346,31 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                             size="small" style={{ width: 60 }}
                                         />
                                     </PropRow>
-                                    <PropRow label="Symbol Size">
-                                        <InputNumber
-                                            min={8} max={72} value={currentSettings.fontSize}
-                                            onChange={handleSetFontSize}
-                                            size="small" style={{ width: 60 }}
-                                        />
-                                    </PropRow>
+                                    {isStampMode && (
+                                        <PropRow label="Symbol Size">
+                                            <InputNumber
+                                                min={8} max={72} value={currentSettings.fontSize}
+                                                onChange={handleSetFontSize}
+                                                size="small" style={{ width: 60 }}
+                                            />
+                                        </PropRow>
+                                    )}
                                 </div>
 
-                                <div className="pdf-ws-prop-section">
-                                    <SectionTitle>Fill</SectionTitle>
-                                    <PropRow label="Color">
-                                        <ColorPicker
-                                            value={currentSettings.fillColor === 'transparent' ? null : currentSettings.fillColor}
-                                            onChangeComplete={handleSetFillColor}
-                                            size="small"
-                                            allowClear
-                                            presets={COLOR_PRESETS}
-                                        />
-                                    </PropRow>
-                                </div>
+                                {!['line', 'freehand'].includes(store.activeTool) && store.selectedObjectProps?.type !== 'line' && store.selectedObjectProps?.type !== 'path' && (
+                                    <div className="pdf-ws-prop-section">
+                                        <SectionTitle>Fill</SectionTitle>
+                                        <PropRow label="Color">
+                                            <ColorPicker
+                                                value={currentSettings.fillColor === 'transparent' ? null : currentSettings.fillColor}
+                                                onChangeComplete={handleSetFillColor}
+                                                size="small"
+                                                allowClear
+                                                presets={COLOR_PRESETS}
+                                            />
+                                        </PropRow>
+                                    </div>
+                                )}
                             </>
                         )}
 

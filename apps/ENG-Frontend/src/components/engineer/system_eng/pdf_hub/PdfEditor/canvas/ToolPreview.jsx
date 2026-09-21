@@ -54,12 +54,16 @@ const ToolPreview = forwardRef(({ tool, color, size, strokeWidth, stampData }, r
             }
             case 'stamp':
                 if (stampData?.stamp_image) {
-                    content = <img src={`data:image/png;base64,${stampData.stamp_image}`} alt="stamp" style={{ transform: 'scale(0.5)', opacity: 0.8 }} />;
+                    const str = String(stampData.stamp_image);
+                    const src = str.startsWith('data:') ? str : `data:image/png;base64,${str}`;
+                    content = <img src={src} alt="stamp" style={{ transform: 'scale(0.5)', opacity: 0.8 }} />;
                 }
                 break;
             case 'signature':
                 if (stampData?.signature_image) {
-                    content = <img src={`data:image/png;base64,${stampData.signature_image}`} alt="signature" style={{ transform: 'scale(0.5)', opacity: 0.8 }} />;
+                    const str = String(stampData.signature_image);
+                    const src = str.startsWith('data:') ? str : `data:image/png;base64,${str}`;
+                    content = <img src={src} alt="signature" style={{ transform: 'scale(0.5)', opacity: 0.8 }} />;
                 }
                 break;
             default:

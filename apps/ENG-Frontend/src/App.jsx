@@ -338,8 +338,9 @@ const AppContent = () => {
                   {/* ------ Process Engineer ------ */}
                   <Route path="/eng/process_eng" element={<HomeProcessEng />} />
                   <Route path="/eng/process_eng/tumble" element={<TumbleSystem />} />
+                  <Route path="/eng/process_eng/ecnt_v2" element={<EcntV2Dashboard />} />
 
-                  {/* Restrict ECNT (V1) & ECNT V2 to AD only */}
+                  {/* Restrict legacy ECNT (V1) to AD only */}
                   <Route element={<ProtectedRoute allowedRoles={['AD']} />}>
                     <Route path="/eng/process_eng/ecnt" element={<EcntLayout />}>
                       <Route index element={<Navigate to="dashboard" replace />} />
@@ -349,7 +350,6 @@ const AppContent = () => {
                       <Route path="history" element={<EcntHistory />} />
                       <Route path="close/:id" element={<EcntClose />} />
                     </Route>
-                    <Route path="/eng/process_eng/ecnt_v2" element={<EcntV2Dashboard />} />
                   </Route>
 
                   {/* ------ Materials Engineer ------ */}

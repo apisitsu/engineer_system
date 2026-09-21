@@ -31,34 +31,33 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
             let libDoc = null;
             let finalBytes = bytes;
 
-            // ── Try backend repair ──
-            try {
-                const formData = new FormData();
-                formData.append('pdf', new Blob([bytes], { type: 'application/pdf' }), file.name || 'document.pdf');
-                
-                const token = localStorage.getItem('token');
-                const res = await axios.post(server.PDF_REPAIR, formData, {
-                    headers: { Authorization: `Bearer ${token}` },
-                    responseType: 'arraybuffer'
-                });
-                
-                finalBytes = new Uint8Array(res.data);
-                console.log('PDF repaired and rebuilt via backend successfully!');
-            } catch (repairErr) {
-                console.warn('Backend repair failed, falling back to original bytes:', repairErr);
-                finalBytes = bytes;
-            }
-
-            try {
-                libDoc = await PDFDocument.load(finalBytes.slice(0), { ignoreEncryption: true });
-            } catch (e) {
-                console.warn('pdf-lib failed to load doc during init:', e);
-            }
-
+            // ── Fast Direct Parse with PDF.js Worker (0ms main thread blocking) ──
             try {
                 doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
-            } catch (renderErr) {
-                console.warn('PDF.js rendering failed, attempting backend unlock...', renderErr);
+            } catch (pdfJsErr) {
+                console.warn('Direct PDF.js parse failed, attempting backend repair...', pdfJsErr);
+                // ── Fallback 1: Try backend repair only if direct parse failed ──
+                try {
+                    const formData = new FormData();
+                    formData.append('pdf', new Blob([bytes], { type: 'application/pdf' }), file.name || 'document.pdf');
+                    
+                    const token = localStorage.getItem('token');
+                    const res = await axios.post(server.PDF_REPAIR, formData, {
+                        headers: { Authorization: `Bearer ${token}` },
+                        responseType: 'arraybuffer'
+                    });
+                    
+                    finalBytes = new Uint8Array(res.data);
+                    doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
+                    console.log('PDF repaired and rebuilt via backend successfully!');
+                } catch (repairErr) {
+                    console.warn('Backend repair failed, falling back to original bytes:', repairErr);
+                }
+            }
+
+            // ── Fallback 2: Backend Unlock if still locked/protected ──
+            if (!doc) {
+                console.warn('PDF.js rendering failed, attempting backend unlock...');
                 try {
                     const formData = new FormData();
                     formData.append('pdf', new Blob([finalBytes], { type: 'application/pdf' }), file.name || 'document.pdf');
@@ -70,12 +69,19 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                     });
                     
                     finalBytes = new Uint8Array(res.data);
-                    
                     doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
-                    libDoc = await PDFDocument.load(finalBytes, { ignoreEncryption: true }); 
                     message.success('PDF unlocked successfully via backend!');
                 } catch (unlockErr) {
                     console.error('Failed to unlock PDF:', unlockErr);
+                }
+            }
+
+            // ── Fallback 3: Try pdf-lib for non-renderable/protected documents ──
+            if (!doc) {
+                try {
+                    libDoc = await PDFDocument.load(finalBytes, { ignoreEncryption: true });
+                } catch (libErr) {
+                    console.warn('pdf-lib fallback failed:', libErr);
                 }
             }
 
@@ -121,17 +127,18 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
         }
     }, [canvasWrapperRef, setZoom, message]);
 
-    const loadPdfFromBytes = useCallback(async (bytes, filename = 'merged.pdf', callbacks = {}) => {
+    const loadPdfFromBytes = useCallback(async (bytes, filename = 'document.pdf', callbacks = {}) => {
         setPdfLoading(true);
         try {
             const uint8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
             setPdfBytes(uint8);
 
+            // Fast PDF.js parse via Web Worker
             const doc = await pdfjsLib.getDocument({ data: uint8.slice(0) }).promise;
-            setPdfDoc(doc);
+            if (!doc) throw new Error('Failed to parse PDF pages with PDF.js');
 
-            const libDoc = await PDFDocument.load(uint8.slice(0), { ignoreEncryption: true });
-            setPdfLibDoc(libDoc);
+            setPdfDoc(doc);
+            setPdfLibDoc(null);
 
             setTotalPages(doc.numPages);
             setCurrentPage(1);
@@ -154,7 +161,7 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                     setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
                 }
             });
-            message.success(`Loaded merged PDF (${doc.numPages} pages)`);
+            message.success(`Loaded: ${filename} (${doc.numPages} pages)`);
         } catch (err) {
             console.error('Failed to load bytes:', err);
             message.error('Failed to render PDF from bytes.');

@@ -116,13 +116,14 @@ app.get('/api/health', (req, res) => {
 });
 
 // --- Verify Token Middleware Setup ---
-const { verifyToken } = require('./middleware/auth');
+const { verifyToken, optionalVerifyToken } = require('./middleware/auth');
 
-// Allow public access to login and refresh token, protect everything else under /api
+// Allow public access to login, refresh token, public endpoints, and read-only ECNT viewer endpoints
 app.use('/api', (req, res, next) => {
   if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/logout-user' || req.path === '/proxy/job_check' || req.path.startsWith('/public')
-      || req.path === '/activity/session/end') {  // sendBeacon can't set Auth headers
-    return next();
+      || req.path === '/activity/session/end' || req.path === '/ecnt/user-candidates'
+      || (req.method === 'GET' && req.path.startsWith('/ecnt/'))) {
+    return optionalVerifyToken(req, res, next);
   }
 
   return verifyToken(req, res, next);
@@ -183,7 +184,7 @@ const userController = require('./api/user/userModel');
 // Rate limiting for login to prevent brute force attacks
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per window
+  max: 1000, // Limit each IP to 1000 requests per window in development/testing
   message: { result: 'false', message: 'คุณพยายามเข้าสู่ระบบผิดพลาดหลายครั้งเกินไป โปรดลองใหม่ในอีก 15 นาที (Too many attempts)' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -216,24 +217,46 @@ app.put('/api/ecr/tasks/:taskId/ack', verifyToken, engProcess.ecrAckTask);
 const engEcntV2 = require('./api/engineer/process/eng_ecnt_v2');
 
 // ECR (Blocks 1-4)
-app.route('/api/ecnt/ecr').get(verifyToken, engEcntV2.getEcrList).post(verifyToken, engEcntV2.createEcr);
-app.route('/api/ecnt/ecr/:id').get(verifyToken, engEcntV2.getEcrById);
+app.route('/api/ecnt/ecr').get(optionalVerifyToken, engEcntV2.getEcrList).post(verifyToken, engEcntV2.createEcr);
+app.route('/api/ecnt/ecr/:id').get(optionalVerifyToken, engEcntV2.getEcrById);
 app.route('/api/ecnt/ecr/:id/action').put(verifyToken, engEcntV2.actionEcr);
 app.route('/api/ecnt/ecr/:id/resubmit').put(verifyToken, engEcntV2.resubmitEcr);
 
 // ECN (Blocks 5-11)
-app.route('/api/ecnt/ecn').get(verifyToken, engEcntV2.getEcnList).post(verifyToken, engEcntV2.createEcn);
-app.route('/api/ecnt/ecn/:id').get(verifyToken, engEcntV2.getEcnById);
+app.route('/api/ecnt/ecn').get(optionalVerifyToken, engEcntV2.getEcnList).post(verifyToken, engEcntV2.createEcn);
+app.route('/api/ecnt/ecn/:id').get(optionalVerifyToken, engEcntV2.getEcnById);
 app.route('/api/ecnt/ecn/:id/action').put(verifyToken, engEcntV2.actionEcn);
 
 // Master PIC & Task Queues
-app.route('/api/ecnt/master-pic').get(verifyToken, engEcntV2.getMasterPic);
-app.route('/api/ecnt/my-tasks').get(verifyToken, engEcntV2.getMyTasks);
+app.route('/api/ecnt/master-pic').get(optionalVerifyToken, engEcntV2.getMasterPic);
+app.route('/api/ecnt/my-tasks').get(optionalVerifyToken, engEcntV2.getMyTasks);
 
 // Attachments
 app.route('/api/ecnt/attachment').post(verifyToken, engEcntV2.saveAttachment);
-app.route('/api/ecnt/attachment/:type/:id').get(verifyToken, engEcntV2.getAttachments);
+app.route('/api/ecnt/attachment/:type/:id').get(optionalVerifyToken, engEcntV2.getAttachments);
 app.route('/api/ecnt/attachment/:id').delete(verifyToken, engEcntV2.deleteAttachment);
+
+// Discussions & Problem Investigation
+app.route('/api/ecnt/discussions/:docType/:docId').get(optionalVerifyToken, engEcntV2.getDiscussions);
+app.route('/api/ecnt/discussions').post(verifyToken, engEcntV2.postDiscussion);
+
+// Stage History & Gantt Summary
+app.route('/api/ecnt/stage-history/:docType/:docId').get(optionalVerifyToken, engEcntV2.getStageHistory);
+app.route('/api/ecnt/gantt-summary').get(optionalVerifyToken, engEcntV2.getGanttSummary);
+
+// Field-Level Audit Trail
+app.route('/api/ecnt/audit-trail/:docType/:docId').get(optionalVerifyToken, engEcntV2.getAuditTrail);
+
+// Dynamic System Configuration & Settings
+app.route('/api/ecnt/config')
+  .get(optionalVerifyToken, engEcntV2.getEcntConfig)
+  .post(verifyToken, engEcntV2.updateEcntConfig);
+
+// User candidates for Stage PIC & Manager assignment (excludes nickname 'Admin')
+app.route('/api/ecnt/user-candidates').get(engEcntV2.getUserCandidates);
+
+// Dynamic Stage Flow Assignee Management
+app.route('/api/ecnt/stage-flow/:docType/:docId').put(verifyToken, engEcntV2.updateStageFlow);
 
 // --------- Tumble System API ---------
 // Tumble Model
@@ -552,4 +575,12 @@ cron.schedule('0 2 * * *', async () => {
     console.error('[cron] Activity cleanup failed:', err.message);
   }
 }, { timezone: 'Asia/Bangkok' });
+
+// Global Error Resilience (prevent crash on transient database disconnect / ECONNRESET)
+process.on('uncaughtException', (err) => {
+  console.error('[SERVER UNCAUGHT EXCEPTION]:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SERVER UNHANDLED REJECTION]:', reason);
+});
 

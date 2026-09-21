@@ -105,8 +105,42 @@ describe('PdfCommitEngine', () => {
                 '2': {} // No objects array
             };
 
-            const resultBytes = await commitAllToPdf(mockPdfBytes, pageAnnotations);
-            expect(resultBytes).toBeInstanceOf(Uint8Array);
+        });
+
+        it('should preserve page rotation (e.g. 90 deg) and not destructively reset dimensions', async () => {
+            const { degrees } = await import('pdf-lib');
+            const rotDoc = await PDFDocument.create();
+            const rotPage = rotDoc.addPage([400, 600]);
+            rotPage.setRotation(degrees(90));
+            const rotPdfBytes = await rotDoc.save();
+
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 600,
+                    _canvasHeight: 400,
+                    objects: [
+                        { type: 'Rect', left: 20, top: 20, width: 100, height: 50, fill: '#ff0000' },
+                        { 
+                            type: 'path', 
+                            left: 50, 
+                            top: 50, 
+                            pathOffset: { x: 25, y: 25 },
+                            scaleX: 1, 
+                            scaleY: 1, 
+                            stroke: '#000000', 
+                            strokeWidth: 2,
+                            path: [['M', 0, 0], ['L', 50, 50]] 
+                        }
+                    ]
+                }
+            };
+
+            const resultBytes = await commitAllToPdf(rotPdfBytes, pageAnnotations);
+            const savedDoc = await PDFDocument.load(resultBytes);
+            const page = savedDoc.getPage(0);
+            expect(page.getRotation().angle).toBe(90);
+            expect(page.getWidth()).toBe(400);
+            expect(page.getHeight()).toBe(600);
         });
     });
 

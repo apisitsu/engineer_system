@@ -82,6 +82,12 @@ const ThumbnailPanel = ({
     const thumbRefs = useRef({});
     const observerRef = useRef(null);
     const panelRef = useRef(null);
+    const thumbnailsRef = useRef(thumbnails);
+    const inFlightThumbnailsRef = useRef(new Set());
+
+    useEffect(() => {
+        thumbnailsRef.current = thumbnails;
+    }, [thumbnails]);
 
     // Merge file previews (first page thumbnail of each file)
     const [mergePreviews, setMergePreviews] = useState({});
@@ -93,8 +99,9 @@ const ThumbnailPanel = ({
     // Thumbnail Rendering (lazy via IntersectionObserver)
     // ══════════════════════════════════════════════════════════════════
     const renderThumbnail = useCallback(async (pageNum) => {
-        if (!pdfDoc || thumbnails[pageNum]) return;
+        if (!pdfDoc || thumbnailsRef.current[pageNum] || inFlightThumbnailsRef.current.has(pageNum)) return;
 
+        inFlightThumbnailsRef.current.add(pageNum);
         try {
             const page = await pdfDoc.getPage(pageNum);
             // Calculate scale to fit panel width
@@ -114,8 +121,10 @@ const ThumbnailPanel = ({
             setThumbnails(prev => ({ ...prev, [pageNum]: dataUrl }));
         } catch (err) {
             console.error(`Thumbnail render error (page ${pageNum}):`, err);
+        } finally {
+            inFlightThumbnailsRef.current.delete(pageNum);
         }
-    }, [pdfDoc, thumbnails, setThumbnails]);
+    }, [pdfDoc, setThumbnails]);
 
     // Setup IntersectionObserver for lazy loading
     useEffect(() => {

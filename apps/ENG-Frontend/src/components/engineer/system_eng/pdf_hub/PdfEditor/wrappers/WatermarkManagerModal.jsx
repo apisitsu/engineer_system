@@ -188,7 +188,7 @@ const WatermarkPreview = ({ formValues }) => {
 
 
 // ── Main Component ──
-const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pushHistory, pdfFile, currentPage }) => {
+const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pushHistory, pdfFile, currentPage, pdfDoc, pageAnnotations, setPageAnnotations, logPdfUsage }) => {
     const empNo = useAuthStore(state => state.empNo);
     const userName = useAuthStore(state => state.userName);
     const [watermarks, setWatermarks] = useState([]);
@@ -247,55 +247,51 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
             }
         } catch (err) {
             message.error('Failed to load watermarks');
+            console.error(err);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCreate = async (values) => {
+    const handleSave = async (values) => {
+        setLoading(true);
         try {
             const token = localStorage.getItem('token');
             const payload = {
-                owner_empno: empNo,
-                name: values.name,
-                text: values.text,
-                color: typeof values.color === 'string' ? values.color : (values.color?.toHexString ? values.color.toHexString() : '#000000'),
-                opacity: values.opacity,
-                font_size: values.font_size,
-                angle: values.angle,
-                repeat_mode: values.repeat_mode || false,
-                repeat_style: values.repeat_style || 'full',
-                repeat_gap: values.repeat_gap || 100,
+                ...values,
+                empno: empNo,
+                color: typeof values.color === 'string' ? values.color : values.color.toHexString(),
+                // Defaults
                 font_family: values.font_family || 'Helvetica',
                 font_weight: values.font_weight || 'normal',
                 font_style: values.font_style || 'normal',
                 position_preset: values.position_preset || 'center',
+                repeat_mode: values.repeat_mode || false,
+                repeat_style: values.repeat_style || 'full',
+                repeat_gap: values.repeat_gap || 100,
             };
 
             if (editingId) {
-                const res = await axios.put(`${server.PDF_WATERMARKS}/${editingId}`, payload, {
+                await axios.put(`${server.PDF_WATERMARKS}/${editingId}`, payload, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                if (res.data?.result === 'true') {
-                    message.success('Watermark updated');
-                    setIsCreate(false);
-                    setEditingId(null);
-                    form.resetFields();
-                    fetchWatermarks();
-                }
+                message.success('Watermark updated');
             } else {
-                const res = await axios.post(server.PDF_WATERMARKS, payload, {
+                await axios.post(server.PDF_WATERMARKS, payload, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                if (res.data?.result === 'true') {
-                    message.success('Watermark created');
-                    setIsCreate(false);
-                    form.resetFields();
-                    fetchWatermarks();
-                }
+                message.success('Watermark created');
             }
+
+            setIsCreate(false);
+            setEditingId(null);
+            form.resetFields();
+            fetchWatermarks();
         } catch (err) {
-            message.error(editingId ? 'Failed to update watermark' : 'Failed to create watermark');
+            message.error('Failed to save watermark');
+            console.error(err);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -309,6 +305,7 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
             fetchWatermarks();
         } catch (err) {
             message.error('Failed to delete watermark');
+            console.error(err);
         }
     };
 
@@ -327,6 +324,30 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
         }
     };
 
+    const handleEdit = (wm) => {
+        setEditingId(wm.id);
+        setIsCreate(true);
+        form.resetFields();
+        setTimeout(() => {
+            form.setFieldsValue({
+                name: wm.name,
+                text: wm.text,
+                color: wm.color,
+                opacity: wm.opacity,
+                font_size: wm.font_size,
+                angle: wm.angle,
+                repeat_mode: wm.repeat_mode,
+                repeat_style: wm.repeat_style || 'full',
+                repeat_gap: wm.repeat_gap,
+                font_family: wm.font_family || 'Helvetica',
+                font_weight: wm.font_weight || 'normal',
+                font_style: wm.font_style || 'normal',
+                position_preset: wm.position_preset || 'center',
+            });
+            updatePreview();
+        }, 0);
+    };
+
     /** Insert placeholder tag into the text field */
     const insertPlaceholder = (placeholder) => {
         const current = form.getFieldValue('text') || '';
@@ -334,18 +355,16 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
         updatePreview();
     };
 
-    /** Calculate target pages based on page range mode */
+    // ── Apply Watermark ──
     const getTargetPages = () => {
-        const allPageNums = Object.keys(fabricCanvasRefs?.current || {}).map(Number).sort((a, b) => a - b);
-        if (allPageNums.length === 0) return [];
-
+        const allPageNums = Array.from({ length: totalPages }, (_, i) => i + 1);
         switch (pageRangeMode) {
             case 'current':
-                return currentPage ? [currentPage] : [allPageNums[0]];
+                return [currentPage];
             case 'custom':
-                return [...parsePageRange(customPageRange, totalPages)].filter(p => allPageNums.includes(p));
+                return Array.from(parsePageRange(customPageRange, totalPages));
             case 'odd':
-                return allPageNums.filter(p => p % 2 === 1);
+                return allPageNums.filter(p => p % 2 !== 0);
             case 'even':
                 return allPageNums.filter(p => p % 2 === 0);
             case 'all':
@@ -355,11 +374,6 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
     };
 
     const applyWatermark = (wm) => {
-        if (!fabricCanvasRefs || !fabricCanvasRefs.current) {
-            message.error('No PDF loaded');
-            return;
-        }
-
         const targetPages = getTargetPages();
         if (targetPages.length === 0) {
             message.warning('No pages matched the selected range');
@@ -369,32 +383,30 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
         const resolvedText = resolvePlaceholders(wm.text, userName, pdfFile?.name);
         const isRepeat = wm.repeat_mode;
 
-        const addTextToCanvas = (fc, pageNum) => {
-            if (!fc) return;
+        const buildWatermarkObjects = (width, height) => {
+            const objs = [];
+            const angleRad = -(wm.angle || 0);
 
             if (isRepeat) {
-                // ── Tile Mode: fill entire canvas with repeated text ──
                 const gap = wm.repeat_gap || 100;
                 const rStyle = wm.repeat_style || 'full';
-                const tempText = new fabric.Text(resolvedText, { fontSize: wm.font_size, fontFamily: wm.font_family || 'Helvetica' });
-                const textW = tempText.width + gap;
-                const textH = wm.font_size + gap;
-                const angleRad = -(wm.angle || 0);
-
-                const diagonal = Math.sqrt(fc.width * fc.width + fc.height * fc.height);
+                const charWidth = (wm.font_size || 48) * 0.6;
+                const textW = (resolvedText.length * charWidth) + gap;
+                const textH = (wm.font_size || 48) + gap;
+                const diagonal = Math.sqrt(width * width + height * height);
 
                 if (rStyle === 'line') {
                     const cols = Math.ceil(diagonal / textW) * 2 + 2;
-                    const startX = fc.width / 2;
-                    const startY = fc.height / 2;
-
+                    const startX = width / 2;
+                    const startY = height / 2;
                     for (let col = -cols / 2; col < cols / 2; col++) {
                         const rad = angleRad * Math.PI / 180;
                         const dist = col * textW;
                         const x = startX + dist * Math.cos(rad);
                         const y = startY + dist * Math.sin(rad);
-
-                        const textObj = new fabric.Text(resolvedText, {
+                        objs.push({
+                            type: 'text',
+                            text: resolvedText,
                             left: x,
                             top: y,
                             fill: wm.color,
@@ -408,23 +420,23 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                             originY: 'center',
                             selectable: false,
                             evented: false,
-                            customData: { type: 'watermark', tiled: true }
+                            customData: { type: 'watermark', tiled: true },
+                            id: `wm_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
                         });
-                        fc.add(textObj);
                     }
                 } else {
                     const cols = Math.ceil(diagonal / textW) + 2;
                     const rows = Math.ceil(diagonal / textH) + 2;
-                    const startX = -(diagonal - fc.width) / 2;
-                    const startY = -(diagonal - fc.height) / 2;
-
+                    const startX = -(diagonal - width) / 2;
+                    const startY = -(diagonal - height) / 2;
                     for (let row = 0; row < rows; row++) {
                         for (let col = 0; col < cols; col++) {
                             const offsetX = (row % 2 === 0) ? 0 : textW / 2;
                             const x = startX + col * textW + offsetX;
                             const y = startY + row * textH;
-
-                            const textObj = new fabric.Text(resolvedText, {
+                            objs.push({
+                                type: 'text',
+                                text: resolvedText,
                                 left: x,
                                 top: y,
                                 fill: wm.color,
@@ -438,28 +450,29 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                                 originY: 'center',
                                 selectable: false,
                                 evented: false,
-                                customData: { type: 'watermark', tiled: true }
+                                customData: { type: 'watermark', tiled: true },
+                                id: `wm_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
                             });
-                            fc.add(textObj);
                         }
                     }
                 }
             } else {
-                // ── Single Stamp Mode ──
                 const preset = wm.position_preset || 'center';
-                let left = fc.width / 2;
-                let top = fc.height / 2;
+                let left = width / 2;
+                let top = height / 2;
                 let angle = -(wm.angle || 0);
 
                 if (preset === 'header') {
                     top = wm.font_size + 20;
                 } else if (preset === 'footer') {
-                    top = fc.height - wm.font_size - 20;
+                    top = height - wm.font_size - 20;
                 } else if (preset === 'diagonal') {
                     angle = -45;
                 }
 
-                const textObj = new fabric.Text(resolvedText, {
+                objs.push({
+                    type: 'text',
+                    text: resolvedText,
                     left,
                     top,
                     fill: wm.color,
@@ -472,21 +485,75 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                     originX: 'center',
                     originY: 'center',
                     selectable: true,
-                    customData: { type: 'watermark' }
+                    customData: { type: 'watermark' },
+                    id: `wm_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+                });
+            }
+            return objs;
+        };
+
+        const addTextToCanvas = (fc, pageNum) => {
+            if (!fc) return;
+            const objs = buildWatermarkObjects(fc.width, fc.height);
+            objs.forEach(objData => {
+                const textObj = new fabric.Text(objData.text, {
+                    left: objData.left,
+                    top: objData.top,
+                    fill: objData.fill,
+                    opacity: objData.opacity,
+                    fontSize: objData.fontSize,
+                    fontFamily: objData.fontFamily,
+                    fontWeight: objData.fontWeight,
+                    fontStyle: objData.fontStyle,
+                    angle: objData.angle,
+                    originX: objData.originX,
+                    originY: objData.originY,
+                    selectable: objData.selectable,
+                    evented: objData.evented,
+                    customData: objData.customData,
+                    id: objData.id,
                 });
                 fc.add(textObj);
-                fc.setActiveObject(textObj);
-            }
+            });
             fc.renderAll();
         };
 
+        pushHistory?.();
+
         targetPages.forEach(pageNum => {
-            const fc = fabricCanvasRefs.current[pageNum];
+            const fc = fabricCanvasRefs?.current?.[pageNum];
             if (fc) {
-                pushHistory(pageNum);
                 addTextToCanvas(fc, pageNum);
             }
         });
+
+        if (setPageAnnotations) {
+            setPageAnnotations(prev => {
+                const next = { ...prev };
+                targetPages.forEach(pageNum => {
+                    const fc = fabricCanvasRefs?.current?.[pageNum];
+                    if (fc) {
+                        const snap = fc.toObject ? fc.toObject(['id', 'customData', 'textLines']) : fc.toJSON(['id', 'customData', 'textLines']);
+                        snap._canvasWidth = fc.width;
+                        snap._canvasHeight = fc.height;
+                        next[pageNum] = snap;
+                    } else {
+                        const existingPage = next[pageNum] || {};
+                        const pW = existingPage._canvasWidth || 595.28;
+                        const pH = existingPage._canvasHeight || 841.89;
+                        const wmObjects = buildWatermarkObjects(pW, pH);
+                        const existingObjects = existingPage.objects ? [...existingPage.objects] : [];
+                        next[pageNum] = {
+                            ...existingPage,
+                            _canvasWidth: pW,
+                            _canvasHeight: pH,
+                            objects: [...existingObjects, ...wmObjects],
+                        };
+                    }
+                });
+                return next;
+            });
+        }
 
         const rangeLabel = pageRangeMode === 'all' ? 'all pages'
             : pageRangeMode === 'current' ? `page ${currentPage}`
@@ -550,29 +617,7 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                                 actions={[
                                     wm.owner_empno === empNo && (
                                         <Tooltip title="Edit" key="edit">
-                                            <Button type="text" icon={<EditOutlined />} onClick={() => {
-                                                setEditingId(wm.id);
-                                                setIsCreate(true);
-                                                form.resetFields();
-                                                setTimeout(() => {
-                                                    form.setFieldsValue({
-                                                        name: wm.name,
-                                                        text: wm.text,
-                                                        color: wm.color,
-                                                        opacity: wm.opacity,
-                                                        font_size: wm.font_size,
-                                                        angle: wm.angle,
-                                                        repeat_mode: wm.repeat_mode,
-                                                        repeat_style: wm.repeat_style || 'full',
-                                                        repeat_gap: wm.repeat_gap,
-                                                        font_family: wm.font_family || 'Helvetica',
-                                                        font_weight: wm.font_weight || 'normal',
-                                                        font_style: wm.font_style || 'normal',
-                                                        position_preset: wm.position_preset || 'center',
-                                                    });
-                                                    updatePreview();
-                                                }, 0);
-                                            }} />
+                                            <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(wm)} />
                                         </Tooltip>
                                     ),
                                     wm.owner_empno === empNo && (
@@ -617,7 +662,7 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                     <Form
                         form={form}
                         layout="vertical"
-                        onFinish={handleCreate}
+                        onFinish={handleSave}
                         onValuesChange={() => updatePreview()}
                         initialValues={{
                             opacity: 0.3, font_size: 48, angle: 45, color: '#000000',

@@ -39,6 +39,7 @@ const PropertiesPanel = ({
     onClearOverlay,
     fabricCanvasRefs,
     currentPage,
+    pushHistory,
 }) => {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
@@ -68,11 +69,11 @@ const PropertiesPanel = ({
 
         const imageTypes = ['addImage'];
         if (imageTypes.includes(customType)) {
-            return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
+            return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} pushHistory={pushHistory} />;
         }
         
         // Default for rect, circle, arrow, line, freehand, ruler
-        return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
+        return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} pushHistory={pushHistory} />;
     }
 
     // Otherwise, fall back to current activeMode
@@ -94,7 +95,7 @@ const PropertiesPanel = ({
     }
 
     if (store.activeMode === 'shapes' || store.activeMode === 'dwgCheck') {
-        return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
+        return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} pushHistory={pushHistory} />;
     }
 
     if (store.activeMode === 'sign') {

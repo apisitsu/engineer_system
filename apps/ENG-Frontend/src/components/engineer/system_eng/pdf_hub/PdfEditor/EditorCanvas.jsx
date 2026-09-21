@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as fabric from 'fabric';
+import './engine/fabricSafeguard';
 import * as pdfjsLib from 'pdfjs-dist';
 import '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -63,6 +64,8 @@ const EditorCanvas = ({
 
     // Render task ref for proper cancellation
     const renderTaskRef = useRef(null);
+    const hasRenderedOnceRef = useRef(false);
+    const isLoadingJsonRef = useRef(false);
 
     const store = usePdfEditorStore();
     const { userName } = useAuthStore();
@@ -96,8 +99,12 @@ const EditorCanvas = ({
         const handleSelection = (e) => {
             const obj = e.selected?.[0];
             if (obj) {
-                if (!obj.id) obj.id = `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-                
+                let arrowHeadSize = 10;
+                if (obj.customData?.type === 'arrow') {
+                    const headChild = obj.getObjects?.().find(c => c.type?.toLowerCase() === 'triangle' || c.customData?.type === 'arrowhead');
+                    arrowHeadSize = headChild ? Math.round(headChild.width * (headChild.scaleX || 1)) : (obj.customData?.arrowHeadSize || 10);
+                }
+
                 store.setSelectedObject(obj.id, {
                     type: obj.type,
                     fill: obj.fill,
@@ -105,6 +112,7 @@ const EditorCanvas = ({
                     strokeWidth: obj.strokeWidth,
                     opacity: obj.opacity,
                     fontSize: obj.fontSize,
+                    arrowHeadSize: obj.customData?.type === 'arrow' ? arrowHeadSize : undefined,
                     fontFamily: obj.fontFamily,
                     text: obj.text,
                     customData: obj.customData,
@@ -114,7 +122,7 @@ const EditorCanvas = ({
                 // Target the object's OWN tool type so we don't pollute 'select'/'pan' settings
                 // which would cause stale colors to be force-applied on re-selection.
                 const objToolType = obj.customData?.type || obj.type;
-                const isText = obj.type === 'i-text' || obj.type === 'textbox' || obj.type === 'text';
+                const isText = obj.type === 'i-text' || obj.type === 'textbox' || obj.type === 'text' || obj.type === 'FabricText';
                 const isStamp = obj.customData?.type && obj.customData.type.startsWith('stamp');
 
                 // Determine the target tool to update settings for
@@ -158,6 +166,23 @@ const EditorCanvas = ({
                             store.setToolSetting('select', 'strokeColor', obj.fill);
                         }
                     }
+                } else if (obj.customData?.type === 'arrow') {
+                    let arrowColor = '#e74c3c';
+                    let arrowWidth = 2;
+                    obj.getObjects?.().forEach(child => {
+                        if (child.stroke) {
+                            arrowColor = child.stroke;
+                            arrowWidth = child.strokeWidth || arrowWidth;
+                        } else if (child.fill && child.fill !== 'transparent') {
+                            arrowColor = child.fill;
+                        }
+                    });
+                    store.setToolSetting(targetTool, 'strokeColor', arrowColor);
+                    store.setToolSetting('select', 'strokeColor', arrowColor);
+                    store.setToolSetting(targetTool, 'strokeWidth', arrowWidth);
+                    store.setToolSetting('select', 'strokeWidth', arrowWidth);
+                    store.setToolSetting(targetTool, 'arrowHeadSize', arrowHeadSize);
+                    store.setToolSetting('select', 'arrowHeadSize', arrowHeadSize);
                 } else {
                     if (obj.stroke) {
                         store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
@@ -202,7 +227,12 @@ const EditorCanvas = ({
         });
 
         const updateObjectCount = () => {
-            store.setCanvasObjectCount(pageNum, canvas.getObjects().length);
+            if (isLoadingJsonRef.current) return;
+            const count = canvas.getObjects().length;
+            const prev = usePdfEditorStore.getState().canvasObjectCounts[pageNum];
+            if (prev !== count) {
+                usePdfEditorStore.getState().setCanvasObjectCount(pageNum, count);
+            }
         };
         canvas.on('object:added', updateObjectCount);
         canvas.on('object:removed', updateObjectCount);
@@ -282,8 +312,9 @@ const EditorCanvas = ({
                     });
                 }
 
-                // ── 2. Debounced High-Res PDF Rendering ──
+                // ── 2. PDF Rendering (Immediate on initial load, debounced on zoom) ──
                 clearTimeout(renderTimeoutId);
+                const delay = hasRenderedOnceRef.current ? 150 : 0;
                 renderTimeoutId = setTimeout(async () => {
                     if (cancelled) return;
 
@@ -292,9 +323,15 @@ const EditorCanvas = ({
                         canvas.width = viewport.width;
                         canvas.height = viewport.height;
 
+                        if (renderTaskRef.current) {
+                            try { renderTaskRef.current.cancel(); } catch (e) {}
+                            renderTaskRef.current = null;
+                        }
+
                         const renderTask = page.render({ canvasContext: ctx, viewport });
                         renderTaskRef.current = renderTask;
                         await renderTask.promise;
+                        hasRenderedOnceRef.current = true;
 
                         if (cancelled) return;
 
@@ -315,9 +352,11 @@ const EditorCanvas = ({
                             });
                         }
                     } catch (renderErr) {
-                        if (!cancelled) console.error('Render error:', renderErr);
+                        if (!cancelled && renderErr?.name !== 'RenderingCancelledException') {
+                            console.error('Render error:', renderErr);
+                        }
                     }
-                }, 250); // 250ms debounce for smooth zooming
+                }, delay);
 
             } catch (err) {
                 if (!cancelled) console.error('Page init error:', err);
@@ -340,32 +379,46 @@ const EditorCanvas = ({
     // ══════════════════════════════════════════════════════════════════
     // Re-hydrate Annotations (Layer 2) when data arrives
     // ══════════════════════════════════════════════════════════════════
+    const lastLoadedAnnotRef = useRef(null);
     useEffect(() => {
         const fc = fabricCanvasRefs.current[pageNum];
         if (!fc || !pageAnnotations[pageNum] || !pageAnnotations[pageNum].objects?.length) return;
+        if (canvasSize.width <= 0) return;
 
-        // Only load if canvas is currently empty (initial load)
-        if (fc.getObjects().length === 0 && canvasSize.width > 0) {
-            let isMounted = true;
-            fc.loadFromJSON(pageAnnotations[pageNum]).then(() => {
-                if (!isMounted) return;
-                const savedW = pageAnnotations[pageNum]._canvasWidth || canvasSize.width;
-                const savedH = pageAnnotations[pageNum]._canvasHeight || canvasSize.height;
-                const initScaleX = canvasSize.width / savedW;
-                const initScaleY = canvasSize.height / savedH;
-                if (Math.abs(initScaleX - 1) > 0.01 || Math.abs(initScaleY - 1) > 0.01) {
-                    fc.getObjects().forEach(obj => {
-                        obj.set({
-                            left: obj.left * initScaleX, top: obj.top * initScaleY,
-                            scaleX: (obj.scaleX || 1) * initScaleX, scaleY: (obj.scaleY || 1) * initScaleY,
-                        });
-                        obj.setCoords();
-                    });
-                }
-                fc.renderAll();
-            }).catch(e => console.error("loadFromJSON Error:", e));
-            return () => { isMounted = false; };
+        // Skip if this exact annotation payload was already loaded into this canvas
+        if (lastLoadedAnnotRef.current === pageAnnotations[pageNum]) {
+            return;
         }
+
+        // Set synchronously to prevent re-entrant loops
+        lastLoadedAnnotRef.current = pageAnnotations[pageNum];
+        isLoadingJsonRef.current = true;
+
+        let isMounted = true;
+        fc.loadFromJSON(pageAnnotations[pageNum]).then(() => {
+            isLoadingJsonRef.current = false;
+            if (!isMounted) return;
+
+            const savedW = pageAnnotations[pageNum]._canvasWidth || canvasSize.width;
+            const savedH = pageAnnotations[pageNum]._canvasHeight || canvasSize.height;
+            const initScaleX = canvasSize.width / savedW;
+            const initScaleY = canvasSize.height / savedH;
+            if (Math.abs(initScaleX - 1) > 0.01 || Math.abs(initScaleY - 1) > 0.01) {
+                fc.getObjects().forEach(obj => {
+                    obj.set({
+                        left: obj.left * initScaleX, top: obj.top * initScaleY,
+                        scaleX: (obj.scaleX || 1) * initScaleX, scaleY: (obj.scaleY || 1) * initScaleY,
+                    });
+                    obj.setCoords();
+                });
+            }
+            fc.renderAll();
+            usePdfEditorStore.getState().setCanvasObjectCount(pageNum, fc.getObjects().length);
+        }).catch(e => {
+            isLoadingJsonRef.current = false;
+            console.error("loadFromJSON Error:", e);
+        });
+        return () => { isMounted = false; };
     }, [pageAnnotations, pageNum, canvasSize, fabricCanvasRefs]);
 
     // ══════════════════════════════════════════════════════════════════
@@ -490,6 +543,9 @@ const EditorCanvas = ({
         userName,
         stampData,
         fabricCanvasRefs,
+        pageHighlights,
+        setPageHighlights,
+        canvasSize,
     });
 
 
@@ -578,7 +634,7 @@ const EditorCanvas = ({
     });
 
     // Determine if a text-selection drag tool is active
-    const isDragTool = ['highlight', 'underline', 'strikethrough', 'eraser'].includes(store.activeTool);
+    const isDragTool = ['highlight', 'underline', 'strikethrough'].includes(store.activeTool);
 
     // ── Mouse tracking for tool preview ──
     const handleContainerMouseMove = useCallback((e) => {

@@ -41,14 +41,18 @@ const SignaturePad = ({ open, onClose, onComplete }) => {
     // ── Load Google Font for typing mode ──
     useEffect(() => {
         if (mode === 'type' && signatureFont) {
-            const link = document.createElement('link');
-            link.href = `https://fonts.googleapis.com/css2?family=${signatureFont.replace(/ /g, '+')}&display=swap`;
-            link.rel = 'stylesheet';
-            document.head.appendChild(link);
+            const fontId = `sig-font-${signatureFont.replace(/\s+/g, '-').toLowerCase()}`;
+            if (!document.getElementById(fontId)) {
+                const link = document.createElement('link');
+                link.id = fontId;
+                link.href = `https://fonts.googleapis.com/css2?family=${signatureFont.replace(/ /g, '+')}&display=swap`;
+                link.rel = 'stylesheet';
+                document.head.appendChild(link);
+            }
         }
     }, [mode, signatureFont]);
 
-    // ── Canvas Initialization ──
+    // ── Canvas Sizing & Context Setup (Only runs on open/mode switch) ──
     useEffect(() => {
         if (!open || mode !== 'draw') return;
 
@@ -69,7 +73,16 @@ const SignaturePad = ({ open, onClose, onComplete }) => {
         ctx.lineWidth = penWidth;
 
         ctxRef.current = ctx;
-    }, [open, mode, penColor, penWidth]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, mode]);
+
+    // ── Update Stroke Style without resetting canvas pixels ──
+    useEffect(() => {
+        const ctx = ctxRef.current;
+        if (!ctx) return;
+        ctx.strokeStyle = penColor;
+        ctx.lineWidth = penWidth;
+    }, [penColor, penWidth]);
 
     // ── Drawing handlers ──
     const getPos = (e) => {

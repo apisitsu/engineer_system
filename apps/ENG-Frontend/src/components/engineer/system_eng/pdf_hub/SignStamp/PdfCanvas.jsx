@@ -175,13 +175,10 @@ const PdfCanvas = ({
     // ── Get the image source for a placement ──
     const getImageSrc = (type) => {
         if (!stampData) return null;
-        if (type === 'stamp' && stampData.stamp_image) {
-            return `data:image/png;base64,${stampData.stamp_image}`;
-        }
-        if (type === 'signature' && stampData.signature_image) {
-            return `data:image/png;base64,${stampData.signature_image}`;
-        }
-        return null;
+        const img = type === 'stamp' ? stampData.stamp_image : stampData.signature_image;
+        if (!img) return null;
+        const str = String(img);
+        return str.startsWith('data:') ? str : `data:image/png;base64,${str}`;
     };
 
     // ── Filter placements for the current page ──

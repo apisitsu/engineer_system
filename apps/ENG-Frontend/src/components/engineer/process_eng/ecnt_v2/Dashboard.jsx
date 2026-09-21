@@ -1,421 +1,444 @@
-import React, { useState, useEffect } from "react";
-import { Layout, Spin, Table, Button, Tooltip, Tabs, Segmented, Card, Tag, Badge, Row, Col, Typography, Space, Result } from 'antd';
-import { EyeOutlined, PlusOutlined, AppstoreOutlined, TableOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
-import axios from "axios";
-import moment from "moment";
-import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Layout, Spin, Button, Typography, Space, Tag, Segmented, Tooltip, Empty, Card } from 'antd';
+import { 
+    AppstoreOutlined, CalendarOutlined, PlusCircleOutlined, 
+    FileTextOutlined, MessageOutlined, SyncOutlined, SettingOutlined 
+} from '@ant-design/icons';
+import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
-import ScrollbarStyle from '../../../common/scrollbar';
-import StatusBadge from './components/StatusBadge';
-import CreateECRModal from './CreateECRModal';
-import CreateECNModal from './CreateECNModal';
-import ECNDetailModal from './ECNDetailModal';
 import { useAuthStore } from '../../../../stores/authStore';
+import ScrollbarStyle from '../../../common/scrollbar';
+import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import EcntSettingsModal from './components/EcntSettingsModal';
+
+// 4 Dedicated Core Views
+import EcntDashboardView from './views/EcntDashboardView';
+import EcntGanttChartView from './views/EcntGanttChartView';
+import EcrRequireView from './views/EcrRequireView';
+import EcntWorkspaceView from './views/EcntWorkspaceView';
+import EcntInvestigationHub from './views/EcntInvestigationHub';
 
 const { Content } = Layout;
-const { Text, Title } = Typography;
-
-const KANBAN_STAGES = [
-    { key: 'draft_rmd', title: '1. Draft / Re-work', color: '#faad14' },
-    { key: 'dept_mgr', title: '2. Dept Mgr Review', color: '#1890ff' },
-    { key: 'eng_mgr_ecr', title: '3. Eng Mgr ECR', color: '#722ed1' },
-    { key: 'ecn_review', title: '4. ECN In Progress', color: '#13c2c2' },
-    { key: 'qc_eval', title: '5. QC MSA & FAI', color: '#eb2f96' },
-    { key: 'concern_ack', title: '6. Concern Ack', color: '#fa8c16' },
-    { key: 'effective', title: '7. Effective / Closed', color: '#52c41a' },
-];
+const { Title, Text } = Typography;
 
 export default function Dashboard() {
     const { theme } = useTheme();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { userRole, userDepartment, empNo, position } = useAuthStore();
+
     const [loading, setLoading] = useState(false);
     const [ecrData, setEcrData] = useState([]);
     const [ecnData, setEcnData] = useState([]);
     const [myTasks, setMyTasks] = useState({ ecrTasks: [], ecnTasks: [] });
-    
-    const [viewMode, setViewMode] = useState('kanban'); // 'kanban' | 'table'
+    const [systemConfig, setSystemConfig] = useState({});
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-    const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [isCreateEcnOpen, setIsCreateEcnOpen] = useState(false);
-    const [selectedEcrForEcn, setSelectedEcrForEcn] = useState(null);
+    // Active View Mode: 'dashboard' | 'gantt' | 'require' | 'workspace' | 'investigation'
+    const [currentView, setCurrentView] = useState('dashboard');
     
-    const [isDetailOpen, setIsDetailOpen] = useState(false);
-    const [selectedDocId, setSelectedDocId] = useState(null);
-    const [selectedDocType, setSelectedDocType] = useState('ECR');
+    // Active Document Context
+    const [activeDocId, setActiveDocId] = useState(null);
+    const [activeDocType, setActiveDocType] = useState('ECR');
+    const [activeDocData, setActiveDocData] = useState(null);
+    const [editEcrData, setEditEcrData] = useState(null);
 
-    const { userName, userRole, userDepartment } = useAuthStore();
-    const isAdmin = userRole === 'AD' || userDepartment === 'AD';
+    const getAuthConfig = () => {
+        const token = localStorage.getItem("token");
+        return {
+            withCredentials: true,
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        };
+    };
 
     const fetchData = async () => {
         setLoading(true);
         try {
+            const authConfig = getAuthConfig();
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
             const [resEcr, resEcn, resMyTasks] = await Promise.all([
-                axios.get(`${server.URL}/api/ecnt/ecr`, { withCredentials: true }),
-                axios.get(`${server.URL}/api/ecnt/ecn`, { withCredentials: true }),
-                axios.get(`${server.URL}/api/ecnt/my-tasks`, { withCredentials: true })
+                axios.get(`${baseUrl}/api/ecnt/ecr`, authConfig),
+                axios.get(`${baseUrl}/api/ecnt/ecn`, authConfig),
+                axios.get(`${baseUrl}/api/ecnt/my-tasks`, authConfig)
             ]);
             setEcrData(resEcr.data.data || []);
             setEcnData(resEcn.data.data || []);
             setMyTasks(resMyTasks.data || { ecrTasks: [], ecnTasks: [] });
         } catch (error) {
-            console.error("Fetch Error:", error);
+            console.error("Fetch ECNT Data Error:", error);
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        if (isAdmin) {
-            fetchData();
+    const fetchConfig = async () => {
+        try {
+            const authConfig = getAuthConfig();
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const res = await axios.get(`${baseUrl}/api/ecnt/config`, authConfig);
+            if (res.data?.data) {
+                setSystemConfig(res.data.data);
+            }
+        } catch (err) {
+            console.error("Fetch Config Error:", err);
         }
-    }, [isAdmin]);
-
-    if (!isAdmin) {
-        return (
-            <div style={{ padding: 40, textAlign: 'center' }}>
-                <Result
-                    status="403"
-                    title="403 - Access Denied"
-                    subTitle="ระบบ ECNT V2 (11-Block) เปิดให้เข้าถึงได้เฉพาะผู้ดูแลระบบ (AD) เท่านั้นในขณะนี้"
-                    extra={<Button type="primary" onClick={() => window.location.href = '/eng/home'}>กลับสู่หน้าหลัก</Button>}
-                />
-            </div>
-        );
-    }
-
-    const openDetail = (id, type) => {
-        setSelectedDocId(id);
-        setSelectedDocType(type);
-        setIsDetailOpen(true);
     };
 
-    const openCreateEcn = (ecr) => {
-        setSelectedEcrForEcn(ecr);
-        setIsCreateEcnOpen(true);
+    useEffect(() => {
+        fetchData();
+        fetchConfig();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // URL Deep Linking: Read params from URL and navigate automatically
+    useEffect(() => {
+        const urlDocType = searchParams.get('docType');
+        const urlId = searchParams.get('id');
+        const urlView = searchParams.get('view');
+
+        if (urlId) {
+            const numId = Number(urlId);
+            setActiveDocId(numId);
+            const type = urlDocType || 'ECR';
+            setActiveDocType(type);
+            const list = type === 'ECR' ? ecrData : ecnData;
+            const found = list.find(d => d.id === numId);
+            if (found) setActiveDocData(found);
+            if (urlView) {
+                setCurrentView(urlView);
+            } else {
+                setCurrentView('workspace');
+            }
+        }
+    }, [searchParams, ecrData, ecnData]);
+
+    const updateUrl = (type, id, view) => {
+        const p = new URLSearchParams();
+        if (type && id) {
+            p.set('docType', type);
+            p.set('id', String(id));
+        }
+        if (view && view !== 'dashboard') {
+            p.set('view', view);
+        }
+        setSearchParams(p, { replace: true });
     };
 
-    // Classify document into a Kanban stage
-    const getDocStage = (doc, type) => {
-        const st = (doc.process_status || '').toLowerCase();
-        const blk = doc.current_block || 1;
-
-        if (st.includes('effective') || st.includes('closed') || st === 'denied') return 'effective';
-        if (st === 'require more detail' || st === 'draft') return 'draft_rmd';
-        if (type === 'ECR' && blk === 3) return 'dept_mgr';
-        if (type === 'ECR' && (blk === 4 || st === 'issued ecn')) return 'eng_mgr_ecr';
-        if (type === 'ECN' && (blk === 5 || blk === 6)) return 'ecn_review';
-        if (type === 'ECN' && (blk === 7 || blk === 8)) return 'qc_eval';
-        if (type === 'ECN' && (blk === 9 || blk === 10 || blk === 11)) return 'concern_ack';
-        return 'draft_rmd';
+    const handleOpenDoc = (id, type) => {
+        setActiveDocId(id);
+        setActiveDocType(type);
+        const list = type === 'ECR' ? ecrData : ecnData;
+        const found = list.find(d => d.id === id);
+        setActiveDocData(found || null);
+        setCurrentView('workspace');
+        updateUrl(type, id, 'workspace');
     };
 
-    const combinedDocs = [
-        ...ecrData.map(d => ({ ...d, doc_type: 'ECR' })),
-        ...ecnData.map(d => ({ ...d, doc_type: 'ECN' }))
-    ];
+    const handleOpenInvestigation = (doc) => {
+        if (doc) {
+            setActiveDocId(doc.id);
+            const type = doc.doc_type || activeDocType;
+            setActiveDocType(type);
+            setActiveDocData(doc);
+            setCurrentView('investigation');
+            updateUrl(type, doc.id, 'investigation');
+        } else {
+            setCurrentView('investigation');
+            updateUrl(activeDocType, activeDocId, 'investigation');
+        }
+    };
 
-    const ecrColumns = [
-        {
-            title: 'ECR No.',
-            dataIndex: 'ecr_no',
-            key: 'ecr_no',
-            render: text => <strong>{text || '-'}</strong>
-        },
-        {
-            title: 'Title',
-            dataIndex: 'title_of_change',
-            key: 'title',
-            ellipsis: true
-        },
-        {
-            title: 'Customer / Project',
-            key: 'cust',
-            render: (_, r) => (
-                <span>{r.customer_name || '-'}{r.project_code ? ` / ${r.project_code}` : ''}</span>
-            )
-        },
-        {
-            title: 'Objective',
-            dataIndex: 'objective',
-            key: 'objective',
-            render: text => <Tag>{text}</Tag>
-        },
-        {
-            title: 'Status',
-            dataIndex: 'process_status',
-            key: 'status',
-            render: text => <StatusBadge status={text} />
-        },
-        {
-            title: 'Requester',
-            dataIndex: 'request_by_name',
-            key: 'request_by',
-            render: (text, r) => `${text || r.request_by} (${r.department || ''})`
-        },
-        {
-            title: 'Date',
-            dataIndex: 'created_at',
-            key: 'date',
-            render: text => moment(text).format('DD-MMM-YYYY')
-        },
-        {
-            title: 'Action',
-            key: 'action',
-            align: 'center',
-            render: (_, record) => (
-                <Space>
-                    <Tooltip title="View & Act">
-                        <Button type="primary" shape="circle" icon={<EyeOutlined />} onClick={() => openDetail(record.id, 'ECR')} />
-                    </Tooltip>
-                    {record.process_status === 'Issued ECN' && !record.linked_ecn_id && (
-                        <Tooltip title="Create ECN">
-                            <Button size="small" type="primary" style={{ background: '#52c41a' }} onClick={() => openCreateEcn(record)}>
-                                + ECN
-                            </Button>
-                        </Tooltip>
-                    )}
-                </Space>
-            ),
-        },
-    ];
-    
-    const ecnColumns = [
-        {
-            title: 'ECN No.',
-            dataIndex: 'ecn_no',
-            key: 'ecn_no',
-            render: text => <strong>{text || '-'}</strong>
-        },
-        {
-            title: 'Linked ECR',
-            dataIndex: 'ecr_no',
-            key: 'ecr_no',
-            render: (text, r) => text || `ECR #${r.ecr_id}`
-        },
-        {
-            title: 'Title of Change',
-            dataIndex: 'title_of_change',
-            key: 'title',
-            ellipsis: true
-        },
-        {
-            title: 'Eng. Assigned',
-            dataIndex: 'engineer_assigned',
-            key: 'eng',
-            render: text => <Tag color="purple">{text}</Tag>
-        },
-        {
-            title: 'Status',
-            dataIndex: 'process_status',
-            key: 'status',
-            render: text => <StatusBadge status={text} />
-        },
-        {
-            title: 'Date',
-            dataIndex: 'created_at',
-            key: 'date',
-            render: text => moment(text).format('DD-MMM-YYYY')
-        },
-        {
-            title: 'Action',
-            key: 'action',
-            align: 'center',
-            render: (_, record) => (
-                <Tooltip title="View & Act">
-                    <Button type="primary" shape="circle" icon={<EyeOutlined />} onClick={() => openDetail(record.id, 'ECN')} />
-                </Tooltip>
-            ),
-        },
-    ];
+    const handleOpenGantt = (doc) => {
+        if (doc) {
+            setActiveDocId(doc.id);
+            const type = doc.doc_type || doc.type || activeDocType;
+            setActiveDocType(type);
+            updateUrl(type, doc.id, 'gantt');
+        } else {
+            updateUrl(null, null, 'gantt');
+        }
+        setCurrentView('gantt');
+    };
 
-    const totalMyTasks = (myTasks.ecrTasks?.length || 0) + (myTasks.ecnTasks?.length || 0);
+    const handleRequireNew = () => {
+        setEditEcrData(null);
+        setCurrentView('require');
+        updateUrl(null, null, 'require');
+    };
+
+    const handleEditEcr = (doc) => {
+        setEditEcrData(doc);
+        setCurrentView('require');
+        updateUrl('ECR', doc.id, 'require');
+    };
+
+    const handleBackToDashboard = () => {
+        setEditEcrData(null);
+        setCurrentView('dashboard');
+        updateUrl(null, null, 'dashboard');
+    };
+
+    // RBAC check for System Settings button
+    const isSettingsAuthorized = 
+        userRole === 'AD' || 
+        userDepartment === 'AD' || 
+        (userDepartment === 'ENG' && (userRole === 'MGR' || (position && position.toLowerCase().includes('coord')))) ||
+        (systemConfig.system_admins && Array.isArray(systemConfig.system_admins) && systemConfig.system_admins.map(String).map(s => s.toLowerCase()).includes((empNo || '').toLowerCase()));
 
     return (
-        <Spin tip="Loading ECNT V2 Data..." size="large" spinning={loading}>
-            <ScrollbarStyle primary={theme.colors.primary} />
-            <Content className="kb-vscroll" style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', padding: '20px' }}>
-                <div style={{ background: theme.colors.surface, borderRadius: '8px', padding: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                    
-                    {/* Top Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                            <AssessmentRoundedIcon sx={{ color: theme.colors.primary, fontSize: 38 }} />
-                            <div>
-                                <h1 style={{ margin: 0, color: theme.colors.text, fontSize: '22px' }}>
-                                    Engineering Change System V2 (11-Block Approval)
-                                </h1>
-                                <span style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
-                                    Welcome, {userName || 'Engineer'} | Track and process ECRs & ECNs across all 11 workflow stages
-                                </span>
-                            </div>
-                        </div>
+        <Layout hasSider style={{ display: 'flex', flexDirection: 'row', height: '100%', overflow: 'hidden' }}>
+            <MenuTemplate type="Process" selectedKeys={["ecnt_v2"]} defaultSelectedKeys={["ecnt_v2"]} />
+            <Layout style={{
+                backgroundColor: theme?.colors?.background || '#f5f7fa',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                overflow: 'hidden'
+            }}>
+                <ScrollbarStyle primary={theme?.colors?.primary || '#1890ff'} />
+                <Content 
+                    className="kb-vscroll"
+                    style={{
+                        padding: '20px 24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        flex: 1,
+                        overflowY: 'auto'
+                    }}
+                >
 
-                        <Space size="middle">
-                            <Segmented
-                                options={[
-                                    { label: 'Kanban Board', value: 'kanban', icon: <AppstoreOutlined /> },
-                                    { label: 'Table Overview', value: 'table', icon: <TableOutlined /> }
-                                ]}
-                                value={viewMode}
-                                onChange={setViewMode}
-                            />
-                            <Button 
-                                type="primary" 
-                                size="large" 
-                                icon={<PlusOutlined />} 
-                                onClick={() => setIsCreateOpen(true)} 
-                                style={{ borderRadius: '6px' }}
-                            >
-                                Create New ECR (Block 1)
-                            </Button>
-                        </Space>
+            {/* Master Header & View Navigation */}
+            <div style={{ 
+                background: '#ffffff', 
+                borderRadius: 14, 
+                padding: '16px 24px', 
+                border: '1px solid #e8e8e8',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+                marginBottom: 20,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 16
+            }}>
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Title level={3} style={{ margin: 0, color: '#1677ff' }}>
+                            ECNT V2
+                        </Title>
+                        <Tag color="blue" style={{ borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+                            11-BLOCK WORKFLOW
+                        </Tag>
                     </div>
-
-                    {/* View Mode: Kanban Task Board */}
-                    {viewMode === 'kanban' ? (
-                        <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 16 }}>
-                            {KANBAN_STAGES.map(col => {
-                                const colDocs = combinedDocs.filter(d => getDocStage(d, d.doc_type) === col.key);
-                                return (
-                                    <div 
-                                        key={col.key} 
-                                        style={{ 
-                                            minWidth: 260, 
-                                            maxWidth: 290, 
-                                            background: '#f8f9fa', 
-                                            borderRadius: 8, 
-                                            padding: 12,
-                                            borderTop: `4px solid ${col.color}` 
-                                        }}
-                                    >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                            <Text strong style={{ fontSize: 14 }}>{col.title}</Text>
-                                            <Badge count={colDocs.length} overflowCount={99} style={{ backgroundColor: col.color }} />
-                                        </div>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 300 }}>
-                                            {colDocs.length === 0 ? (
-                                                <div style={{ padding: 24, textAlign: 'center', color: '#bfbfbf', fontSize: 12 }}>
-                                                    No documents
-                                                </div>
-                                            ) : (
-                                                colDocs.map(doc => (
-                                                    <Card 
-                                                        key={`${doc.doc_type}_${doc.id}`}
-                                                        size="small" 
-                                                        hoverable
-                                                        style={{ borderRadius: 6, borderColor: '#e8e8e8' }}
-                                                        onClick={() => openDetail(doc.id, doc.doc_type)}
-                                                    >
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                                                            <Tag color={doc.doc_type === 'ECR' ? 'blue' : 'purple'}>
-                                                                {doc.doc_type}
-                                                            </Tag>
-                                                            <Text strong style={{ fontSize: 12 }}>
-                                                                {doc.ecr_no || doc.ecn_no || `#${doc.id}`}
-                                                            </Text>
-                                                        </div>
-
-                                                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, lineHeight: 1.3 }}>
-                                                            {doc.title_of_change || 'Untitled Change'}
-                                                        </div>
-
-                                                        <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 8 }}>
-                                                            <UserOutlined style={{ marginRight: 4 }} />
-                                                            {doc.request_by_name || doc.engineer_assigned || 'N/A'} ({doc.department || ''})
-                                                        </div>
-
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f0f0f0', paddingTop: 6 }}>
-                                                            <StatusBadge status={doc.process_status} />
-                                                            <span style={{ fontSize: 11, color: '#8c8c8c' }}>
-                                                                {moment(doc.created_at).format('DD-MMM')}
-                                                            </span>
-                                                        </div>
-                                                    </Card>
-                                                ))
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        /* View Mode: Table Overview with Tabs */
-                        <Tabs defaultActiveKey="my_tasks" items={[
-                            {
-                                key: 'my_tasks',
-                                label: (
-                                    <span>
-                                        My Action Items <Badge count={totalMyTasks} style={{ marginLeft: 6, backgroundColor: '#f5222d' }} />
-                                    </span>
-                                ),
-                                children: (
-                                    <div style={{ marginTop: 8 }}>
-                                        <h4 style={{ color: '#1890ff', marginBottom: 12 }}>Pending ECR Actions ({myTasks.ecrTasks?.length || 0})</h4>
-                                        <Table 
-                                            dataSource={myTasks.ecrTasks || []} 
-                                            columns={ecrColumns} 
-                                            rowKey="id" 
-                                            pagination={{ pageSize: 5 }}
-                                            locale={{ emptyText: 'No pending ECR actions assigned to you.' }}
-                                            style={{ marginBottom: 24 }}
-                                        />
-
-                                        <h4 style={{ color: '#722ed1', marginBottom: 12 }}>Pending ECN Actions ({myTasks.ecnTasks?.length || 0})</h4>
-                                        <Table 
-                                            dataSource={myTasks.ecnTasks || []} 
-                                            columns={ecnColumns} 
-                                            rowKey="id" 
-                                            pagination={{ pageSize: 5 }}
-                                            locale={{ emptyText: 'No pending ECN actions assigned to you.' }}
-                                        />
-                                    </div>
-                                )
-                            },
-                            {
-                                key: 'all_ecr',
-                                label: `All ECRs (${ecrData.length})`,
-                                children: <Table dataSource={ecrData} columns={ecrColumns} rowKey="id" pagination={{ pageSize: 10 }} />
-                            },
-                            {
-                                key: 'all_ecn',
-                                label: `All ECNs (${ecnData.length})`,
-                                children: <Table dataSource={ecnData} columns={ecnColumns} rowKey="id" pagination={{ pageSize: 10 }} />
-                            }
-                        ]} />
-                    )}
-
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                        Engineering Change Request & Notice Management Platform
+                    </Text>
                 </div>
+
+                {/* Segmented View Switcher & Action Tools */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <Segmented
+                        value={currentView}
+                        onChange={(view) => {
+                            if (view === 'require') {
+                                setEditEcrData(null);
+                            }
+                            setCurrentView(view);
+                        }}
+                        size="middle"
+                        options={[
+                            {
+                                label: (
+                                    <Tooltip title="Executive Pipeline Dashboard">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <AppstoreOutlined style={{ fontSize: 15 }} />
+                                            <span style={{ fontSize: 13 }}>Dashboard</span>
+                                        </Space>
+                                    </Tooltip>
+                                ),
+                                value: 'dashboard'
+                            },
+                            {
+                                label: (
+                                    <Tooltip title="Timeline & Gantt Chart">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <CalendarOutlined style={{ fontSize: 15 }} />
+                                            <span style={{ fontSize: 13 }}>Gantt</span>
+                                        </Space>
+                                    </Tooltip>
+                                ),
+                                value: 'gantt'
+                            },
+                            {
+                                label: (
+                                    <Tooltip title="Initiate New ECR Request">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <PlusCircleOutlined style={{ fontSize: 15, color: '#1677ff' }} />
+                                            <span style={{ fontSize: 13 }}>Require ECR</span>
+                                        </Space>
+                                    </Tooltip>
+                                ),
+                                value: 'require'
+                            },
+                            {
+                                label: (
+                                    <Tooltip title={activeDocId ? `Active Doc: ${activeDocType} #${activeDocId} Workspace` : 'Active Document Workspace'}>
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <FileTextOutlined style={{ fontSize: 15, color: '#722ed1' }} />
+                                            <span style={{ fontSize: 13 }}>Workspace</span>
+                                        </Space>
+                                    </Tooltip>
+                                ),
+                                value: 'workspace'
+                            },
+                            {
+                                label: (
+                                    <Tooltip title="Investigation, Discussions & Problem Hub">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <MessageOutlined style={{ fontSize: 15, color: '#fa8c16' }} />
+                                            <span style={{ fontSize: 13 }}>Problem Hub</span>
+                                        </Space>
+                                    </Tooltip>
+                                ),
+                                value: 'investigation'
+                            }
+                        ]}
+                    />
+
+                    {/* Action Tools: Icon-First with Tooltips */}
+                    <Tooltip title="Refresh Workflow Data">
+                        <Button 
+                            icon={<SyncOutlined spin={loading} />} 
+                            onClick={() => { fetchData(); fetchConfig(); }}
+                            style={{ borderRadius: 8 }}
+                        />
+                    </Tooltip>
+
+                    {isSettingsAuthorized && (
+                        <Tooltip title="System Configuration & Stage Flow Settings">
+                            <Button 
+                                icon={<SettingOutlined />} 
+                                onClick={() => setIsSettingsModalOpen(true)}
+                                style={{ borderRadius: 8, borderColor: '#1890ff', color: '#1890ff' }}
+                            />
+                        </Tooltip>
+                    )}
+                </div>
+            </div>
+
+            {/* View Body */}
+            <Spin spinning={loading}>
+                {currentView === 'dashboard' && (
+                    <EcntDashboardView 
+                        ecrData={ecrData} 
+                        ecnData={ecnData} 
+                        myTasks={myTasks}
+                        systemConfig={systemConfig}
+                        onOpenDoc={handleOpenDoc}
+                        onNavigateToRequire={handleRequireNew}
+                        onNavigateToGantt={() => handleOpenGantt(null)}
+                    />
+                )}
+
+                {currentView === 'gantt' && (
+                    <EcntGanttChartView 
+                        ecrData={ecrData} 
+                        ecnData={ecnData} 
+                        selectedDocInitial={activeDocId ? { id: activeDocId, type: activeDocType } : null}
+                        onBackToDashboard={handleBackToDashboard}
+                        onOpenDoc={handleOpenDoc}
+                    />
+                )}
+
+                {currentView === 'require' && (
+                    <EcrRequireView 
+                        initialData={editEcrData}
+                        systemConfig={systemConfig}
+                        onBack={handleBackToDashboard}
+                        onSuccess={() => {
+                            fetchData();
+                            handleBackToDashboard();
+                        }}
+                    />
+                )}
+
+                {currentView === 'workspace' && (
+                    activeDocId ? (
+                        <EcntWorkspaceView 
+                            documentType={activeDocType}
+                            documentId={activeDocId}
+                            systemConfig={systemConfig}
+                            onBack={handleBackToDashboard}
+                            onOpenInvestigation={handleOpenInvestigation}
+                            onOpenGantt={handleOpenGantt}
+                            onEditEcr={handleEditEcr}
+                        />
+                    ) : (
+                        <Card style={{ borderRadius: 12, textAlign: 'center', padding: '60px 20px', margin: '20px 0', border: '1px solid #e8e8e8' }}>
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={
+                                    <div>
+                                        <div style={{ fontSize: 16, fontWeight: 600, color: '#262626', marginBottom: 8 }}>
+                                            No Document Selected
+                                        </div>
+                                        <div style={{ fontSize: 13, color: '#8c8c8c', maxWidth: 460, margin: '0 auto 20px auto' }}>
+                                            Please select an ECR or ECN workflow item from the Dashboard table or Kanban board to view its workspace and take action.
+                                        </div>
+                                        <Button type="primary" icon={<AppstoreOutlined />} onClick={handleBackToDashboard} style={{ borderRadius: 8 }}>
+                                            Go to Dashboard
+                                        </Button>
+                                    </div>
+                                }
+                            />
+                        </Card>
+                    )
+                )}
+
+                {currentView === 'investigation' && (
+                    activeDocId ? (
+                        <EcntInvestigationHub 
+                            documentType={activeDocType}
+                            documentId={activeDocId}
+                            docData={activeDocData}
+                            onBack={() => handleOpenDoc(activeDocId, activeDocType)}
+                            onOpenWorkspace={() => handleOpenDoc(activeDocId, activeDocType)}
+                        />
+                    ) : (
+                        <Card style={{ borderRadius: 12, textAlign: 'center', padding: '60px 20px', margin: '20px 0', border: '1px solid #e8e8e8' }}>
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={
+                                    <div>
+                                        <div style={{ fontSize: 16, fontWeight: 600, color: '#262626', marginBottom: 8 }}>
+                                            No Problem Hub Context Selected
+                                        </div>
+                                        <div style={{ fontSize: 13, color: '#8c8c8c', maxWidth: 460, margin: '0 auto 20px auto' }}>
+                                            Please select an active document from the Dashboard to join discussions and problem root-cause investigation.
+                                        </div>
+                                        <Button type="primary" icon={<AppstoreOutlined />} onClick={handleBackToDashboard} style={{ borderRadius: 8 }}>
+                                            Go to Dashboard
+                                        </Button>
+                                    </div>
+                                }
+                            />
+                        </Card>
+                    )
+                )}
+            </Spin>
+
+            <EcntSettingsModal
+                open={isSettingsModalOpen}
+                onClose={() => setIsSettingsModalOpen(false)}
+                currentConfig={systemConfig}
+                onConfigUpdated={(cfg) => {
+                    setSystemConfig(cfg);
+                    fetchConfig();
+                }}
+            />
             </Content>
-
-            <CreateECRModal 
-                open={isCreateOpen} 
-                onClose={() => setIsCreateOpen(false)} 
-                onSuccess={() => {
-                    setIsCreateOpen(false);
-                    fetchData();
-                }}
-            />
-
-            <CreateECNModal
-                open={isCreateEcnOpen}
-                linkedEcr={selectedEcrForEcn}
-                onClose={() => setIsCreateEcnOpen(false)}
-                onSuccess={() => {
-                    setIsCreateEcnOpen(false);
-                    fetchData();
-                }}
-            />
-
-            <ECNDetailModal
-                open={isDetailOpen}
-                documentId={selectedDocId}
-                documentType={selectedDocType}
-                onClose={() => {
-                    setIsDetailOpen(false);
-                    fetchData();
-                }}
-            />
-        </Spin>
+        </Layout>
+    </Layout>
     );
 }

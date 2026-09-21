@@ -63,145 +63,131 @@ const ModeToolbar = () => {
     // Mode-specific toolbars
     // ══════════════════════════════════════════════════════════════════
 
-    switch (store.activeMode) {
-        case 'view':
-            return (
-                <div className="pdf-ws-toolbar" style={{
-                    background: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                }}>
-                    <SelectionTools />
-                </div>
-            );
+    const renderToolbarContent = () => {
+        switch (store.activeMode) {
+            case 'view':
+                return <SelectionTools />;
 
-        case 'annotate':
-            return (
-                <div className="pdf-ws-toolbar" style={{
-                    background: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                }}>
-                    <SelectionTools />
-                    <ToolDivider />
-                    <div className="pdf-ws-toolbar-group">
-                        <ToolBtn tool="highlight" icon={<HighlightOutlined />} label="Highlight" />
-                        <ToolBtn tool="underline" icon={<UnderlineOutlined />} label="Underline" />
-                        <ToolBtn tool="strikethrough" icon={<StrikethroughOutlined />} label="Strikethrough" />
-                        <ToolBtn tool="sticky" icon={<MessageOutlined />} label="Sticky Note" />
+            case 'annotate':
+                return (
+                    <>
+                        <SelectionTools />
                         <ToolDivider />
-                        <ToolBtn tool="addText" icon={<FontSizeOutlined />} label="Add Text" />
-                        <ToolBtn tool="addImage" icon={<PictureOutlined />} label="Insert Image" />
-                        <ToolBtn tool="maskReplace" icon={<BlockOutlined />} label="Mask & Replace Text" />
-                        <ToolDivider />
-                        <ToolBtn tool="eraser" icon={<ClearOutlined />} label="Eraser (Delete)" danger={true} />
-                    </div>
-                </div>
-            );
-
-        case 'shapes':
-            return (
-                <div className="pdf-ws-toolbar" style={{
-                    background: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                }}>
-                    <SelectionTools />
-                    <ToolDivider />
-                    <div className="pdf-ws-toolbar-group">
-                        <ToolBtn tool="rect" icon={<BorderOutlined />} label="Rectangle" />
-                        <ToolBtn tool="circle" icon={<RadiusSettingOutlined />} label="Circle / Ellipse" />
-                        <ToolBtn tool="arrow" icon={<ArrowRightOutlined />} label="Arrow" />
-                        <ToolBtn tool="line" icon={<LineOutlined />} label="Line" />
-                        <ToolBtn tool="freehand" icon={<EditOutlined />} label="Freehand Draw" />
-                    </div>
-                    <ToolDivider />
-                    <div className="pdf-ws-toolbar-group">
-                        <ToolBtn tool="stampCheckmark" icon={<CheckOutlined />} label="Checkmark (✓)" />
-                        <ToolBtn tool="stampCross" icon={<CloseOutlined />} label="Cross (✕)" />
-                        <ToolBtn tool="stampCircle" icon={
-                            <span style={{
-                                display: 'inline-flex', width: 14, height: 14,
-                                borderRadius: '50%', border: '2px solid currentColor',
-                                boxSizing: 'border-box',
-                            }} />
-                        } label="Circle (○)" />
-                        <ToolBtn tool="stampOk" icon={<CheckCircleOutlined />} label="OK Symbol" />
-                    </div>
-                    <ToolDivider />
-                    <div className="pdf-ws-toolbar-group">
-                        <ToolBtn tool="ruler" icon={<ColumnWidthOutlined />} label="Measurement Ruler" />
-                    </div>
-                </div>
-            );
-
-        case 'dwgCheck':
-            return (
-                <div className="pdf-ws-toolbar" style={{
-                    background: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                }}>
-                    <SelectionTools />
-                    <ToolDivider />
-                    <div className="pdf-ws-toolbar-group">
-                        <ToolBtn tool="rect" icon={<BorderOutlined />} label="Rectangle Shape" />
-                        <ToolBtn tool="circle" icon={<RadiusSettingOutlined />} label="Ellipse Shape" />
-                        <ToolBtn tool="addText" icon={<FontSizeOutlined />} label="Add Text" />
-                        <ToolBtn tool="arrow" icon={<ArrowRightOutlined />} label="Draw Arrow" />
-                    </div>
-                    <ToolDivider />
-                    <div className="pdf-ws-toolbar-group">
-                        <ToolBtn tool="highlight" icon={<HighlightOutlined />} label="Highlight" />
-                        <ToolBtn tool="underline" icon={<UnderlineOutlined />} label="Underline" />
-                        <ToolBtn tool="strikethrough" icon={<StrikethroughOutlined />} label="Strikethrough" />
-                    </div>
-                    <ToolDivider />
-                    <div className="pdf-ws-toolbar-group">
-                        <ToolBtn tool="stampCheckmark" icon={<CheckOutlined />} label="Checkmark (✓)" />
-                        <ToolBtn tool="stampCross" icon={<CloseOutlined />} label="Cross (✕)" />
-                        <ToolBtn tool="stampCircle" icon={
-                            <span style={{
-                                display: 'inline-flex', width: 14, height: 14,
-                                borderRadius: '50%', border: '2px solid currentColor',
-                                boxSizing: 'border-box',
-                            }} />
-                        } label="Circle (○)" />
-                        <ToolBtn tool="stampOk" icon={<CheckCircleOutlined />} label="OK Symbol" />
-                    </div>
-                    {isAdOrEng && (
-                        <>
+                        <div className="pdf-ws-toolbar-group">
+                            <ToolBtn tool="highlight" icon={<HighlightOutlined />} label="Highlight" />
+                            <ToolBtn tool="underline" icon={<UnderlineOutlined />} label="Underline" />
+                            <ToolBtn tool="strikethrough" icon={<StrikethroughOutlined />} label="Strikethrough" />
+                            <ToolBtn tool="sticky" icon={<MessageOutlined />} label="Sticky Note" />
                             <ToolDivider />
-                            <div className="pdf-ws-toolbar-group">
-                                <ToolBtn tool="stampUserDate" icon={<IdcardOutlined />} label="User & Date Stamp" />
-                            </div>
-                        </>
-                    )}
-                </div>
-            );
+                            <ToolBtn tool="addText" icon={<FontSizeOutlined />} label="Add Text" />
+                            <ToolBtn tool="addImage" icon={<PictureOutlined />} label="Insert Image" />
+                            <ToolBtn tool="maskReplace" icon={<BlockOutlined />} label="Mask & Replace Text" />
+                            <ToolDivider />
+                            <ToolBtn tool="eraser" icon={<ClearOutlined />} label="Eraser (Delete)" danger={true} />
+                        </div>
+                    </>
+                );
 
-        case 'sign':
-            return (
-                <div className="pdf-ws-toolbar" style={{
-                    background: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                }}>
-                    <SelectionTools />
-                    <ToolDivider />
-                    <div className="pdf-ws-toolbar-group">
-                        <ToolBtn tool="formFill" icon={<FormOutlined />} label="Fill Form Fields" />
-                        <ToolBtn tool="signature" icon={<EditOutlined />} label="Add Signature" />
-                        <ToolBtn tool="stamp" icon={<SafetyCertificateOutlined />} label="Add Stamp / Approve" />
+            case 'shapes':
+                return (
+                    <>
+                        <SelectionTools />
+                        <ToolDivider />
+                        <div className="pdf-ws-toolbar-group">
+                            <ToolBtn tool="rect" icon={<BorderOutlined />} label="Rectangle" />
+                            <ToolBtn tool="circle" icon={<RadiusSettingOutlined />} label="Circle / Ellipse" />
+                            <ToolBtn tool="arrow" icon={<ArrowRightOutlined />} label="Arrow" />
+                            <ToolBtn tool="line" icon={<LineOutlined />} label="Line" />
+                            <ToolBtn tool="freehand" icon={<EditOutlined />} label="Freehand Draw" />
+                        </div>
+                        <ToolDivider />
+                        <div className="pdf-ws-toolbar-group">
+                            <ToolBtn tool="stampCheckmark" icon={<CheckOutlined />} label="Checkmark (✓)" />
+                            <ToolBtn tool="stampCross" icon={<CloseOutlined />} label="Cross (✕)" />
+                            <ToolBtn tool="stampCircle" icon={
+                                <span style={{
+                                    display: 'inline-flex', width: 14, height: 14,
+                                    borderRadius: '50%', border: '2px solid currentColor',
+                                    boxSizing: 'border-box',
+                                }} />
+                            } label="Circle (○)" />
+                            <ToolBtn tool="stampOk" icon={<CheckCircleOutlined />} label="OK Symbol" />
+                        </div>
+                        <ToolDivider />
+                        <div className="pdf-ws-toolbar-group">
+                            <ToolBtn tool="ruler" icon={<ColumnWidthOutlined />} label="Measurement Ruler" />
+                        </div>
                         {isAdOrEng && (
-                            <ToolBtn tool="stampUserDate" icon={<IdcardOutlined />} label="User & Date Stamp" />
+                            <>
+                                <ToolDivider />
+                                <div className="pdf-ws-toolbar-group">
+                                    <ToolBtn tool="stampUserDate" icon={<IdcardOutlined />} label="User & Date Stamp" />
+                                </div>
+                            </>
                         )}
-                        <ToolBtn tool="date" icon={<CalendarOutlined />} label="Add Date" />
-                    </div>
-                </div>
-            );
+                    </>
+                );
 
-        case 'merge':
-            return (
-                <div className="pdf-ws-toolbar" style={{
-                    background: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                }}>
+            case 'dwgCheck':
+                return (
+                    <>
+                        <SelectionTools />
+                        <ToolDivider />
+                        <div className="pdf-ws-toolbar-group">
+                            <ToolBtn tool="rect" icon={<BorderOutlined />} label="Rectangle Shape" />
+                            <ToolBtn tool="circle" icon={<RadiusSettingOutlined />} label="Ellipse Shape" />
+                            <ToolBtn tool="addText" icon={<FontSizeOutlined />} label="Add Text" />
+                            <ToolBtn tool="arrow" icon={<ArrowRightOutlined />} label="Draw Arrow" />
+                        </div>
+                        <ToolDivider />
+                        <div className="pdf-ws-toolbar-group">
+                            <ToolBtn tool="highlight" icon={<HighlightOutlined />} label="Highlight" />
+                            <ToolBtn tool="underline" icon={<UnderlineOutlined />} label="Underline" />
+                            <ToolBtn tool="strikethrough" icon={<StrikethroughOutlined />} label="Strikethrough" />
+                        </div>
+                        <ToolDivider />
+                        <div className="pdf-ws-toolbar-group">
+                            <ToolBtn tool="stampCheckmark" icon={<CheckOutlined />} label="Checkmark (✓)" />
+                            <ToolBtn tool="stampCross" icon={<CloseOutlined />} label="Cross (✕)" />
+                            <ToolBtn tool="stampCircle" icon={
+                                <span style={{
+                                    display: 'inline-flex', width: 14, height: 14,
+                                    borderRadius: '50%', border: '2px solid currentColor',
+                                    boxSizing: 'border-box',
+                                }} />
+                            } label="Circle (○)" />
+                            <ToolBtn tool="stampOk" icon={<CheckCircleOutlined />} label="OK Symbol" />
+                        </div>
+                        {isAdOrEng && (
+                            <>
+                                <ToolDivider />
+                                <div className="pdf-ws-toolbar-group">
+                                    <ToolBtn tool="stampUserDate" icon={<IdcardOutlined />} label="User & Date Stamp" />
+                                </div>
+                            </>
+                        )}
+                    </>
+                );
+
+            case 'sign':
+                return (
+                    <>
+                        <SelectionTools />
+                        <ToolDivider />
+                        <div className="pdf-ws-toolbar-group">
+                            <ToolBtn tool="formFill" icon={<FormOutlined />} label="Fill Form Fields" />
+                            <ToolBtn tool="signature" icon={<EditOutlined />} label="Add Signature" />
+                            <ToolBtn tool="stamp" icon={<SafetyCertificateOutlined />} label="Add Stamp / Approve" />
+                            {isAdOrEng && (
+                                <ToolBtn tool="stampUserDate" icon={<IdcardOutlined />} label="User & Date Stamp" />
+                            )}
+                            <ToolBtn tool="date" icon={<CalendarOutlined />} label="Add Date" />
+                        </div>
+                    </>
+                );
+
+            case 'merge':
+                return (
                     <div className="pdf-ws-toolbar-group">
                         <MergeCellsOutlined style={{ fontSize: 16, color: theme.colors.primary, marginRight: 8 }} />
                         <span style={{ fontSize: 13, fontWeight: 600, color: theme.colors.textPrimary }}>
@@ -211,15 +197,10 @@ const ModeToolbar = () => {
                             Add files in the left panel, drag to reorder, then merge
                         </span>
                     </div>
-                </div>
-            );
+                );
 
-        case 'export':
-            return (
-                <div className="pdf-ws-toolbar" style={{
-                    background: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                }}>
+            case 'export':
+                return (
                     <div className="pdf-ws-toolbar-group">
                         <FileImageOutlined style={{ fontSize: 16, color: theme.colors.primary, marginRight: 8 }} />
                         <span style={{ fontSize: 13, fontWeight: 600, color: theme.colors.textPrimary }}>
@@ -229,12 +210,32 @@ const ModeToolbar = () => {
                             Select pages in the left panel, configure options on the right
                         </span>
                     </div>
-                </div>
-            );
+                );
 
-        default:
-            return null;
-    }
+            default:
+                return null;
+        }
+    };
+
+    const content = renderToolbarContent();
+    if (!content) return null;
+
+    return (
+        <div 
+            className="pdf-ws-toolbar"
+            onWheel={(e) => {
+                if (e.deltaY) {
+                    e.currentTarget.scrollLeft += e.deltaY;
+                }
+            }}
+            style={{
+                background: theme.colors.surface,
+                borderColor: theme.colors.border,
+            }}
+        >
+            {content}
+        </div>
+    );
 };
 
 export default ModeToolbar;

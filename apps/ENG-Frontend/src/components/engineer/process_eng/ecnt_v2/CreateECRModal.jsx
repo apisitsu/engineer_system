@@ -122,8 +122,8 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                     <Col span={12}>
                         <Form.Item name="status_type" label="Status" rules={[{ required: true }]}>
                             <Select>
-                                <Option value="PERMANENT">PERMANENT (เปลี่ยนถาวร)</Option>
-                                <Option value="TEMPORARY">TEMPORARY (เปลี่ยนชั่วคราว/ทดสอบ)</Option>
+                                <Option value="PERMANENT">PERMANENT (Permanent Change)</Option>
+                                <Option value="TEMPORARY">TEMPORARY (Temporary / Trial)</Option>
                             </Select>
                         </Form.Item>
                     </Col>
@@ -131,11 +131,11 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                     <Col span={12}>
                         <Form.Item name="objective" label="Objective" rules={[{ required: true }]}>
                             <Select placeholder="Select objective...">
-                                <Option value="REDUCE_CYCLE">REDUCE CYCLE (ลดรอบเวลา)</Option>
-                                <Option value="COST_REDUCTION">COST REDUCTION (ลดต้นทุน)</Option>
-                                <Option value="INCREASE_USAGE_TOOLING">INCREASE USAGE TOOLING (ยืดอายุทูล)</Option>
-                                <Option value="IMPROVE_YIELD">IMPROVE YIELD (เพิ่มผลผลิต/ลดของเสีย)</Option>
-                                <Option value="OTHER">OTHER (อื่นๆ)</Option>
+                                <Option value="REDUCE_CYCLE">REDUCE CYCLE (Cycle Time Reduction)</Option>
+                                <Option value="COST_REDUCTION">COST REDUCTION (Cost Saving)</Option>
+                                <Option value="INCREASE_USAGE_TOOLING">INCREASE USAGE TOOLING (Tool Life Extension)</Option>
+                                <Option value="IMPROVE_YIELD">IMPROVE YIELD (Yield Improvement / Scrap Reduction)</Option>
+                                <Option value="OTHER">OTHER (Other)</Option>
                             </Select>
                         </Form.Item>
                     </Col>
@@ -183,8 +183,8 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                     <Col span={24}>
                         <AttachableField
                             name="reason_of_change"
-                            label="Reason of Change (เหตุผลการเปลี่ยนแปลง)"
-                            placeholder="ระบุเหตุผลการเปลี่ยนแปลง (สามารถกด Ctrl+V เพื่อวางรูปภาพ หรือกดปุ่มแนบไฟล์)..."
+                            label="Reason of Change"
+                            placeholder="Describe the reason for change (Press Ctrl+V to paste screenshot or use upload button)..."
                             rules={[{ required: true }]}
                             rows={3}
                             attachments={fieldAttachments['reason_of_change'] || []}
@@ -208,14 +208,14 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                         <Row gutter={12}>
                             <Col span={8}><Form.Item name="dwg_part_no" label="Part No."><Input /></Form.Item></Col>
                             <Col span={8}><Form.Item name="dwg_cn" label="C/N No."><Input /></Form.Item></Col>
-                            <Col span={8}><Form.Item name="dwg_revision" label="Revision (ล่าสุด)"><Input /></Form.Item></Col>
+                            <Col span={8}><Form.Item name="dwg_revision" label="Revision (Latest)"><Input /></Form.Item></Col>
                             <Col span={24}><Form.Item name="dwg_reason_of_change" label="Reason for Drawing Change"><Input /></Form.Item></Col>
                             
                             <Col span={12}>
                                 <AttachableField
                                     name="dwg_before_change"
                                     label="Before Change (Drawing Detail)"
-                                    placeholder="รายละเอียด Drawing ก่อนเปลี่ยน (แนบรูป Drawing/สเก็ตช์ได้)..."
+                                    placeholder="Drawing details before change (Attach drawings or sketches)..."
                                     rows={3}
                                     attachments={fieldAttachments['dwg_before_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('dwg_before_change', atts)}
@@ -226,7 +226,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                 <AttachableField
                                     name="dwg_after_change"
                                     label="After Change (Drawing Detail)"
-                                    placeholder="รายละเอียด Drawing หลังเปลี่ยน (แนบรูป Drawing/สเก็ตช์ได้)..."
+                                    placeholder="Drawing details after change (Attach drawings or sketches)..."
                                     rows={3}
                                     attachments={fieldAttachments['dwg_after_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('dwg_after_change', atts)}
@@ -259,7 +259,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                 <AttachableField
                                     name="prog_before_change"
                                     label="Cutting Program Before Change"
-                                    placeholder="Program code/ภาพโปรแกรมก่อนเปลี่ยน..."
+                                    placeholder="Program code or screenshots before change..."
                                     rows={3}
                                     attachments={fieldAttachments['prog_before_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('prog_before_change', atts)}
@@ -270,7 +270,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                 <AttachableField
                                     name="prog_after_change"
                                     label="Cutting Program After Change"
-                                    placeholder="Program code/ภาพโปรแกรมหลังเปลี่ยน..."
+                                    placeholder="Program code or screenshots after change..."
                                     rows={3}
                                     attachments={fieldAttachments['prog_after_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('prog_after_change', atts)}
@@ -281,7 +281,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                 <AttachableField
                                     name="prog_condition_before"
                                     label="Condition Before (Spindle, Feed, Depth)"
-                                    placeholder="Condition ก่อนเปลี่ยน (รอบ/ฟีด/ลึก)..."
+                                    placeholder="Cutting conditions before change (RPM, Feed, Depth)..."
                                     rows={3}
                                     attachments={fieldAttachments['prog_condition_before'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('prog_condition_before', atts)}
@@ -292,7 +292,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                 <AttachableField
                                     name="prog_condition_after"
                                     label="Condition After (Spindle, Feed, Depth)"
-                                    placeholder="Condition หลังเปลี่ยน (รอบ/ฟีด/ลึก)..."
+                                    placeholder="Cutting conditions after change (RPM, Feed, Depth)..."
                                     rows={3}
                                     attachments={fieldAttachments['prog_condition_after'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('prog_condition_after', atts)}
@@ -321,7 +321,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                 <AttachableField
                                     name="usage_before_change"
                                     label="Before Setup Change"
-                                    placeholder="สภาพ Setup ก่อนเปลี่ยน (แนบภาพถ่ายหน้างาน/หน้าเครื่องได้)..."
+                                    placeholder="Setup condition before change (Attach photos or diagrams)..."
                                     rows={3}
                                     attachments={fieldAttachments['usage_before_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('usage_before_change', atts)}
@@ -332,7 +332,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                 <AttachableField
                                     name="usage_after_change"
                                     label="After Setup Change"
-                                    placeholder="สภาพ Setup หลังเปลี่ยน (แนบภาพถ่ายหน้างาน/หน้าเครื่องได้)..."
+                                    placeholder="Setup condition after change (Attach photos or diagrams)..."
                                     rows={3}
                                     attachments={fieldAttachments['usage_after_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('usage_after_change', atts)}

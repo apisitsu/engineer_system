@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
+import './engine/fabricSafeguard';
 
 /**
  * ShortcutsHandler — Global keyboard shortcut listener for the PDF Workstation.
@@ -17,7 +18,8 @@ export default function ShortcutsHandler({
     onDelete,
     onSave,
     fabricCanvasRefs,
-    currentPage
+    currentPage,
+    pushHistory
 }) {
     const store = usePdfEditorStore();
 
@@ -84,18 +86,19 @@ export default function ShortcutsHandler({
 
         // ── Copy / Paste ──
         if (ctrl && (code === 'keyc' || key === 'c')) {
-            if (fabricCanvasRefs?.current) {
-                Object.values(fabricCanvasRefs.current).forEach(fc => {
-                    if (fc) {
-                        const active = fc.getActiveObject();
-                        if (active) {
-                            e.preventDefault();
-                            active.clone().then(cloned => {
-                                store.setClipboard(cloned);
-                            });
-                        }
-                    }
-                });
+            const fc = fabricCanvasRefs?.current?.[currentPage] || Object.values(fabricCanvasRefs?.current || {}).find(c => c?.getActiveObject());
+            const active = fc?.getActiveObject();
+            if (active) {
+                e.preventDefault();
+                try {
+                    active.clone(['id', 'customData', 'text', 'textLines', 'fill', 'stroke', 'strokeWidth', 'fontSize', 'fontFamily', 'fontWeight']).then(cloned => {
+                        store.setClipboard(cloned);
+                    }).catch(err => {
+                        console.error('Ctrl+C clone error:', err);
+                    });
+                } catch (err) {
+                    console.error('Ctrl+C error:', err);
+                }
             }
             return;
         }
@@ -106,27 +109,32 @@ export default function ShortcutsHandler({
                 const fc = fabricCanvasRefs.current[currentPage];
                 if (fc) {
                     e.preventDefault();
-                    clipboard.clone().then(clonedObj => {
-                        fc.discardActiveObject();
-                        clonedObj.set({
-                            left: clonedObj.left + 20,
-                            top: clonedObj.top + 20,
-                            evented: true,
-                        });
-                        if (clonedObj.type === 'activeSelection') {
-                            clonedObj.canvas = fc;
-                            clonedObj.forEachObject(obj => fc.add(obj));
-                            clonedObj.setCoords();
-                        } else {
-                            fc.add(clonedObj);
-                        }
-                        if (clonedObj.customData) {
-                            clonedObj.set('customData', { ...clonedObj.customData, createdAt: Date.now() });
-                        }
-                        fc.setActiveObject(clonedObj);
-                        store.setClipboard(clonedObj); // Update clipboard to the new slightly offset object
-                        fc.renderAll();
-                    });
+                    if (pushHistory) pushHistory(currentPage);
+                    try {
+                        clipboard.clone(['id', 'customData', 'text', 'textLines', 'fill', 'stroke', 'strokeWidth', 'fontSize', 'fontFamily', 'fontWeight']).then(clonedObj => {
+                            fc.discardActiveObject();
+                            clonedObj.set({
+                                left: clonedObj.left + 20,
+                                top: clonedObj.top + 20,
+                                evented: true,
+                            });
+                            if (clonedObj.type === 'activeSelection') {
+                                clonedObj.canvas = fc;
+                                clonedObj.forEachObject(obj => fc.add(obj));
+                                clonedObj.setCoords();
+                            } else {
+                                fc.add(clonedObj);
+                            }
+                            if (clonedObj.customData) {
+                                clonedObj.set('customData', { ...clonedObj.customData, createdAt: Date.now() });
+                            }
+                            fc.setActiveObject(clonedObj);
+                            store.setClipboard(clonedObj); // Update clipboard to the new slightly offset object
+                            fc.renderAll();
+                        }).catch(err => console.error('Ctrl+V paste clone error:', err));
+                    } catch (err) {
+                        console.error('Ctrl+V error:', err);
+                    }
                 }
             }
             return;
@@ -205,7 +213,7 @@ export default function ShortcutsHandler({
                     break;
             }
         }
-    }, [store, fabricCanvasRefs, onUndo, onRedo, onPrevPage, onNextPage, onZoomIn, onZoomOut, onDelete, onSave, currentPage]);
+    }, [store, fabricCanvasRefs, onUndo, onRedo, onPrevPage, onNextPage, onZoomIn, onZoomOut, onDelete, onSave, currentPage, pushHistory]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);

@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
+import './engine/fabricSafeguard';
+import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
 import usePdfDocument from './hooks/usePdfDocument';
 import useAnnotations from './hooks/useAnnotations';
 import useHistory from './hooks/useHistory';
@@ -9,7 +11,9 @@ import useExport from './hooks/useExport';
  * usePdfEditor — Master Composition Hook
  * Composes individual domain hooks into a single interface for PdfEditorTool.
  */
-export default function usePdfEditor() {
+import { FABRIC_SERIALIZE_PROPS } from './engine/commitHelpers';
+
+export default function usePdfEditor(onSaveSuccess) {
     // ── Container ref for fit-to-width calculation ──
     const canvasWrapperRef = useRef(null);
     const fabricCanvasRefs = useRef({});
@@ -46,9 +50,18 @@ export default function usePdfEditor() {
         if (!fc) return null;
         // Do not call discardActiveObject here, as doing so during an active transform
         // causes Fabric to recursively re-invoke endCurrentTransform and crash the call stack.
-        const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
+        const json = fc.toObject ? fc.toObject(FABRIC_SERIALIZE_PROPS) : fc.toJSON(FABRIC_SERIALIZE_PROPS);
         json._canvasWidth = fc.width;
         json._canvasHeight = fc.height;
+        if (json && Array.isArray(json.objects)) {
+            json.objects.forEach(obj => {
+                if (obj && (obj.type === 'FabricText' || obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
+                    if (obj.text === undefined || obj.text === null) {
+                        obj.text = '';
+                    }
+                }
+            });
+        }
         return json;
     };
 
@@ -82,20 +95,33 @@ export default function usePdfEditor() {
         if (pushHistoryRef.current) pushHistoryRef.current();
     }, []);
 
-    const _applyStateToCanvases = (restoredState) => {
+    const _applyStateToCanvases = useCallback((restoredState) => {
         if (!restoredState) return;
+        // Deselect any active object in store to avoid stale selection handles
+        usePdfEditorStore.getState().clearSelection();
+
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
-            if (fc && restoredState.annotations[pNum]) {
+            if (fc) {
+                try {
+                    fc.discardActiveObject();
+                } catch (e) {
+                    console.warn("discardActiveObject warning:", e);
+                }
+            }
+            if (fc && restoredState.annotations?.[pNum]) {
                 fc.loadFromJSON(restoredState.annotations[pNum]).then(() => {
                     fc.renderAll();
+                    usePdfEditorStore.getState().setCanvasObjectCount(Number(pNum), fc.getObjects().length);
                 }).catch(err => console.error("loadFromJSON error:", err));
             } else if (fc) {
                 fc.clear();
+                fc.renderAll();
+                usePdfEditorStore.getState().setCanvasObjectCount(Number(pNum), 0);
             }
         });
-    };
+    }, [fabricCanvasRefs]);
 
-    const undo = () => {
+    const undo = useCallback(() => {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
             const json = getCanvasSnapshot(fc);
@@ -105,9 +131,9 @@ export default function usePdfEditor() {
         });
         const restoredState = _undo(currentAnnotations, deepCloneHighlights(pageHighlights));
         _applyStateToCanvases(restoredState);
-    };
+    }, [pageAnnotations, pageHighlights, _undo, _applyStateToCanvases, fabricCanvasRefs]);
 
-    const redo = () => {
+    const redo = useCallback(() => {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
             const json = getCanvasSnapshot(fc);
@@ -117,7 +143,7 @@ export default function usePdfEditor() {
         });
         const restoredState = _redo(currentAnnotations, deepCloneHighlights(pageHighlights));
         _applyStateToCanvases(restoredState);
-    };
+    }, [pageAnnotations, pageHighlights, _redo, _applyStateToCanvases, fabricCanvasRefs]);
 
     // ── 4. Merge State ──
     const { mergeFiles, setMergeFiles } = useMerge();
