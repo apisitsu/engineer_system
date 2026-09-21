@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Table, Card, Typography, Button, Space, Tag, Modal, Form, Select, Alert, message, Layout
+    Table, Card, Typography, Button, Space, Tag, Modal, Form, Input, Select, Alert, message, Layout
 } from 'antd';
 import {
     MailOutlined, EditOutlined, PlusOutlined, DeleteOutlined,
@@ -31,6 +31,9 @@ const EmailConfigManager = () => {
     const [modalVisible, setModalVisible] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
     const [users, setUsers] = useState([]);
+    const [memberCode, setMemberCode] = useState(null);
+    const [memberEmail, setMemberEmail] = useState('');
+    const [savingMember, setSavingMember] = useState(false);
     const [form] = Form.useForm();
 
     const fetchUsers = async () => {
@@ -120,13 +123,30 @@ const EmailConfigManager = () => {
     // Recipients picker. Only people whose profile has an email can be chosen: the
     // stage permission check matches the address, so picking someone without one
     // would silently lock them out (the LE403 / T1460 / L6121 bug).
-    const usersWithoutEmail = users.filter(u => !u.gmail_email);
-    const recipientOptions = users.map(u => {
-        const base = `${u.u_name || u.u_code} (${u.u_code}${u.u_department ? `, ${u.u_department}` : ''})`;
-        return u.gmail_email
-            ? { value: u.gmail_email, label: `${base} — ${u.gmail_email}` }
-            : { value: `nomail:${u.u_code}`, label: `${base} — no email in profile`, disabled: true };
-    });
+    const usersWithoutEmail = users.filter(u => !u.email);
+    const userLabel = (u) => `${u.u_name || u.u_code} (${u.u_code}${u.u_department ? `, ${u.u_department}` : ''})`;
+    const recipientOptions = users.map(u => (
+        u.email
+            ? { value: u.email, label: `${userLabel(u)} — ${u.email}` }
+            : { value: `nomail:${u.u_code}`, label: `${userLabel(u)} — no email set`, disabled: true }
+    ));
+    const memberOptions = users.map(u => ({ value: u.u_code, label: `${userLabel(u)}${u.email ? ` — ${u.email}` : ''}` }));
+
+    const saveMemberEmail = async () => {
+        if (!memberCode || !memberEmail.trim()) return;
+        setSavingMember(true);
+        try {
+            await axios.put(`${server.MTC_EMAIL_CONFIG_MEMBERS}/${encodeURIComponent(memberCode)}`, { email: memberEmail.trim() });
+            message.success('Email saved');
+            setMemberCode(null);
+            setMemberEmail('');
+            fetchUsers();
+        } catch (error) {
+            message.error(error.response?.data?.error || 'Failed to save email');
+        } finally {
+            setSavingMember(false);
+        }
+    };
 
     // Stage picker: fixed keys; on create, hide the ones already configured; when
     // editing, keep the row's own stage even if it is not in the standard list.
@@ -267,13 +287,47 @@ const EmailConfigManager = () => {
                                         style={{ width: '100%' }}
                                     />
                                 </Form.Item>
-                                {usersWithoutEmail.length > 0 && (
-                                    <Alert
-                                        type="info"
-                                        showIcon
-                                        message={`${usersWithoutEmail.length} of ${users.length} users have no email in their profile and cannot be selected. Set their email in User Management first.`}
+                                <Alert
+                                    type="info"
+                                    showIcon
+                                    style={{ marginBottom: 8 }}
+                                    message={
+                                        usersWithoutEmail.length > 0
+                                            ? `${usersWithoutEmail.length} of ${users.length} people have no email set for this system yet and cannot be selected above. Set it below.`
+                                            : 'Set or change the email this system uses for a person:'
+                                    }
+                                    description="Saved for General DWG Request only; user profiles are not changed."
+                                />
+                                <Space.Compact style={{ width: '100%' }}>
+                                    <Select
+                                        showSearch
+                                        placeholder="Person"
+                                        style={{ width: '45%' }}
+                                        options={memberOptions}
+                                        optionFilterProp="label"
+                                        value={memberCode}
+                                        onChange={(code) => {
+                                            setMemberCode(code);
+                                            setMemberEmail(users.find(u => u.u_code === code)?.email || '');
+                                        }}
                                     />
-                                )}
+                                    <Input
+                                        placeholder="name@minebea.co.th"
+                                        style={{ width: '40%' }}
+                                        value={memberEmail}
+                                        onChange={(e) => setMemberEmail(e.target.value)}
+                                        onPressEnter={saveMemberEmail}
+                                    />
+                                    <Button
+                                        type="primary"
+                                        style={{ width: '15%' }}
+                                        loading={savingMember}
+                                        disabled={!memberCode || !memberEmail.trim()}
+                                        onClick={saveMemberEmail}
+                                    >
+                                        Save
+                                    </Button>
+                                </Space.Compact>
                             </Form>
                         </Modal>
                     </Card>

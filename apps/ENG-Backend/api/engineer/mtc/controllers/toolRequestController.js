@@ -100,9 +100,36 @@ function calcDueDate(typeOfRequest) {
     return due.format('YYYY-MM-DD HH:mm:ss');
 }
 
+// ── Who is this person, as far as tr_email_config is concerned ───────────────
+// tr_email_config lists addresses; the JWT carries only u_code. This module's own
+// tr_email_member (u_code -> address, set from the Email Config page) is the bridge.
+// m_user_profile.gmail_email is a read-only fallback: it is a shared table other
+// modules own, so nothing here writes to it. Never trusts the request body.
+async function getMemberEmails(uCode) {
+    const code = String(uCode || '').trim().toLowerCase();
+    if (!code) return [];
+    const emails = [];
+    try {
+        const m = await engPool.query(
+            `SELECT email FROM ${TABLES.TR_EMAIL_MEMBER} WHERE lower(u_code) = $1`, [code]);
+        m.rows.forEach(r => r.email && emails.push(r.email.trim().toLowerCase()));
+    } catch (err) {
+        // Table not created yet (migration 20260921e not run): fall back to the profile
+        // rather than turning a missing table into a lock-out for everyone.
+        logger.warn('tr_email_member lookup failed, using profile only', { error: err.message });
+    }
+    const p = await engPool.query(
+        'SELECT gmail_email FROM m_user_profile WHERE lower(u_code) = $1', [code]);
+    const pe = (p.rows[0]?.gmail_email || '').trim().toLowerCase();
+    if (pe && !emails.includes(pe)) emails.push(pe);
+    return emails;
+}
+
 /**
  * GET /api/engineer/mtc/tool-requests/permissions
  * คืน allowed emails ของแต่ละ stage (ดึงจาก DB ทั้งหมด)
+ * `me.emails` = the caller's own addresses, so the modal decides canAct from the
+ * same identity the backend checks in submitAction.
  */
 const getStagePermissions = async (req, res) => {
     try {
@@ -111,7 +138,9 @@ const getStagePermissions = async (req, res) => {
         configRes.rows.forEach(row => {
             permissions[row.stage] = row.emails.split(',').map(e => e.trim()).filter(Boolean);
         });
-        res.json({ data: permissions });
+        let myEmails = [];
+        try { myEmails = await getMemberEmails(req.user?.empno); } catch (_) { /* best effort */ }
+        res.json({ data: permissions, me: { emails: myEmails } });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -562,15 +591,12 @@ const submitAction = async (req, res) => {
             let isAllowed = allowedCodes.includes(userCode);
             if (!isAllowed && userCode) {
                 // The config lists full emails but the JWT carries only u_code (e.g. LE403),
-                // which never equals an email's local part ("chairat.s"). Resolve the email
-                // server-side from the profile row keyed by the verified empno — never from
-                // the request body — and match the full address.
-                const { rows } = await engPool.query(
-                    'SELECT gmail_email FROM m_user_profile WHERE lower(u_code) = $1',
-                    [userCode]
-                );
-                const userEmail = (rows[0]?.gmail_email || '').trim().toLowerCase();
-                isAllowed = !!userEmail && recipientsAllowed.some(e => e.toLowerCase() === userEmail);
+                // which never equals an email's local part ("chairat.s"). Resolve the
+                // person's addresses server-side by the verified empno (tr_email_member,
+                // then the profile) — never from the request body — and match the full address.
+                const mine = await getMemberEmails(userCode);
+                const allowedLower = recipientsAllowed.map(e => e.toLowerCase());
+                isAllowed = mine.some(e => allowedLower.includes(e));
             }
             if (!isAllowed) return res.status(403).json({ error: `You don't have permission to act in the ${stage} stage` });
         }
@@ -688,13 +714,64 @@ const getEmailConfigs = async (req, res) => {
  * enforced by the route (server.js), like the rest of /email-config.
  */
 const getEmailConfigUsers = async (req, res) => {
+    // `email` = this module's tr_email_member address, else the profile's (read-only).
+    // `own` tells the UI which of the two it is, i.e. whether it can be edited here.
     try {
-        const result = await engPool.query(
-            `SELECT u_code, u_name, u_department, gmail_email
-               FROM m_user_profile
-              ORDER BY u_name ASC`
-        );
+        let result;
+        try {
+            result = await engPool.query(
+                `SELECT p.u_code, p.u_name, p.u_department,
+                        COALESCE(m.email, p.gmail_email) AS email,
+                        (m.email IS NOT NULL) AS own
+                   FROM m_user_profile p
+                   LEFT JOIN ${TABLES.TR_EMAIL_MEMBER} m ON lower(m.u_code) = lower(p.u_code)
+                  ORDER BY p.u_name ASC`
+            );
+        } catch (e) {
+            if (e.code !== '42P01') throw e;   // migration 20260921e not run yet
+            result = await engPool.query(
+                `SELECT u_code, u_name, u_department, gmail_email AS email, false AS own
+                   FROM m_user_profile ORDER BY u_name ASC`
+            );
+        }
         res.json({ data: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * PUT /api/engineer/mtc/email-config/members/:u_code   body: { email }
+ * Set the address General DWG Request uses for a person. Writes only tr_email_member —
+ * never m_user_profile. Admin-only by the route. An address may belong to one person.
+ */
+const setMemberEmail = async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email)) {
+        return res.status(400).json({ error: 'Invalid email address' });
+    }
+    try {
+        const u = await engPool.query(
+            'SELECT u_code FROM m_user_profile WHERE lower(u_code) = lower($1)', [req.params.u_code]);
+        if (!u.rows[0]) return res.status(404).json({ error: 'User not found' });
+        const uCode = u.rows[0].u_code;
+
+        const clash = await engPool.query(
+            `SELECT u_code FROM ${TABLES.TR_EMAIL_MEMBER} WHERE lower(email) = $1 AND lower(u_code) <> lower($2)
+             UNION
+             SELECT u_code FROM m_user_profile WHERE lower(gmail_email) = $1 AND lower(u_code) <> lower($2)`,
+            [email, uCode]);
+        if (clash.rows.length > 0) {
+            return res.status(409).json({ error: `${email} already belongs to ${clash.rows[0].u_code}` });
+        }
+
+        await engPool.query(
+            `INSERT INTO ${TABLES.TR_EMAIL_MEMBER} (u_code, email, updated_by)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (u_code) DO UPDATE SET email = EXCLUDED.email, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+            [uCode, email, req.user?.empno || null]);
+        logger.info('Member email set', { u_code: uCode, by: req.user?.empno });
+        res.json({ success: true, u_code: uCode, email });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -804,6 +881,7 @@ module.exports = {
     submitAction,
     getEmailConfigs,
     getEmailConfigUsers,
+    setMemberEmail,
     updateEmailConfig,
     createEmailConfig,
     deleteEmailConfig,

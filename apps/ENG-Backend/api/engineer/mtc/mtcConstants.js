@@ -17,6 +17,7 @@ const TABLES = {
   TR_REQUEST: 'tr_request',
   TR_WORKFLOW: 'tr_workflow',
   TR_EMAIL_CONFIG: 'tr_email_config',
+  TR_EMAIL_MEMBER: 'tr_email_member',
 
   // SDS v2 — New tables (lpb / rodpc schemas)
   LPB_ENG_BALL:           'lpb.eng_ball',

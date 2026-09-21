@@ -380,7 +380,7 @@ const { validateFileUpload } = require('./api/engineer/mtc/utils/fileUpload');
 // Public endpoints (no authentication required - viewing only)
 app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
-app.get('/api/engineer/mtc/tool-requests/permissions', toolReq.getStagePermissions);
+app.get('/api/engineer/mtc/tool-requests/permissions', mtcVerifyToken, toolReq.getStagePermissions);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
 
 // Protected endpoints (require authentication)
@@ -413,6 +413,7 @@ app.delete('/api/engineer/mtc/tool-requests/:id',
 // not just by the page hiding itself.
 app.get('/api/engineer/mtc/email-config', mtcVerifyToken, mtcIsAdmin, toolReq.getEmailConfigs);
 app.get('/api/engineer/mtc/email-config/users', mtcVerifyToken, mtcIsAdmin, toolReq.getEmailConfigUsers);
+app.put('/api/engineer/mtc/email-config/members/:u_code', mtcVerifyToken, mtcIsAdmin, toolReq.setMemberEmail);
 app.post('/api/engineer/mtc/email-config', mtcVerifyToken, mtcIsAdmin, toolReq.createEmailConfig);
 app.put('/api/engineer/mtc/email-config/:id', mtcVerifyToken, mtcIsAdmin, toolReq.updateEmailConfig);
 app.delete('/api/engineer/mtc/email-config/:id', mtcVerifyToken, mtcIsAdmin, toolReq.deleteEmailConfig);

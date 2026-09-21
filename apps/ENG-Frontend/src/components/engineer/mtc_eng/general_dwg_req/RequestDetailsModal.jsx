@@ -334,6 +334,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
   const [wcCodes, setWCCodes] = useState([]);
   const [wcLoading, setWCLoading] = useState(false);
   const [permissions, setPermissions] = useState({});
+  const [myEmails, setMyEmails] = useState([]);  // the caller's addresses as the backend resolves them
   const userName = useAuthStore(state => state.userName);
   const userInfo = useAuthStore(state => state.userInfo);
   const userDepartment = useAuthStore(state => state.userDepartment);
@@ -346,7 +347,10 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
     if (visible) {
       fetchWCCodes();
       axios.get(server.MTC_TOOL_REQUEST_PERMISSIONS)
-        .then(({ data }) => setPermissions(data.data || {}))
+        .then(({ data }) => {
+          setPermissions(data.data || {});
+          setMyEmails(data.me?.emails || []);
+        })
         .catch(() => { });
     }
   }, [visible]);
@@ -482,7 +486,9 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
   const canAct = userDepartment === 'AD'
     || allowedForStage.length === 0
     || allowedCodes.includes(userCode?.toLowerCase())
-    || (userEmail && allowedForStage.map(e => e.toLowerCase()).includes(userEmail.toLowerCase()));
+    || (userEmail && allowedForStage.map(e => e.toLowerCase()).includes(userEmail.toLowerCase()))
+    // Same identity the backend checks in submitAction (tr_email_member, then profile)
+    || myEmails.some(e => allowedForStage.map(a => a.toLowerCase()).includes(e));
   const workflow = request.workflow || [];
 
   // Steps progress
