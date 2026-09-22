@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Layout, Spin, Typography, Card, Table, Input, Button, Space, Radio, Tag, Row, Col, App, Collapse
+    Layout, Spin, Typography, Card, Table, Input, Button, Space, Radio, Tag, Row, Col, App, Collapse, Select
 } from 'antd';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -39,12 +39,17 @@ const ToolRequestContent = () => {
     const userDepartment = useAuthStore(state => state.userDepartment);
     const userInfo = useAuthStore(state => state.userInfo);
     const userRole = useAuthStore(state => state.userRole);
-    const isAdmin = userRole === 'AD' || userDepartment === 'AD';
+    const userPerms = useAuthStore(state => state.userPerms);
+    // Full AD, or specifically granted the 'general_dwg_admin' feature (see
+    // db_migrations/20260922_grant_general_dwg_admin.js) — same pattern as
+    // 'tooling_admin'/'sds_admin'. Must match EmailConfigManager.jsx's own guard.
+    const isAdmin = userRole === 'AD' || userDepartment === 'AD' || (userPerms || []).includes('general_dwg_admin');
 
     const [loading, setLoading] = useState(false);
     const [requests, setRequests] = useState([]);
     const [searchText, setSearchText] = useState('');
     const [filterType, setFilterType] = useState('all');
+    const [factoryFilter, setFactoryFilter] = useState('all');
 
     // Modal states
     const [modalVisible, setModalVisible] = useState(false);
@@ -213,8 +218,10 @@ const ToolRequestContent = () => {
             }));
     };
 
-    // Filter data based on search and filter type
+    // Filter data based on search, factory and filter type
     const filteredRequests = requests.filter(item => {
+        if (factoryFilter !== 'all' && item.factory !== factoryFilter) return false;
+
         if (searchText) {
             const lowerSearch = searchText.toLowerCase();
             const matchesSearch =
@@ -240,6 +247,10 @@ const ToolRequestContent = () => {
     });
 
     const getStatusColor = (status) => STATUS_COLORS[status] || 'default';
+
+    // Derived from what's loaded rather than hardcoded, so a future third factory
+    // shows up here with no code change.
+    const factoryOptions = [...new Set(requests.map(r => r.factory).filter(Boolean))].sort();
 
     const columns = [
         {
@@ -272,6 +283,13 @@ const ToolRequestContent = () => {
             dataIndex: 'requester',
             key: 'requester',
             width: 120
+        },
+        {
+            title: 'Factory',
+            dataIndex: 'factory',
+            key: 'factory',
+            width: 90,
+            render: (factory) => factory ? <Tag color="geekblue">{`Fac ${factory}`}</Tag> : '-'
         },
         {
             title: 'Department',
@@ -446,6 +464,16 @@ const ToolRequestContent = () => {
                                             <Button icon={<SyncOutlined />} onClick={fetchRequests}>
                                                 Refresh
                                             </Button>
+
+                                            <Select
+                                                value={factoryFilter}
+                                                onChange={setFactoryFilter}
+                                                style={{ width: 130 }}
+                                                options={[
+                                                    { value: 'all', label: 'All Factories' },
+                                                    ...factoryOptions.map(f => ({ value: f, label: `Fac ${f}` })),
+                                                ]}
+                                            />
 
                                             <Radio.Group
                                                 value={filterType}

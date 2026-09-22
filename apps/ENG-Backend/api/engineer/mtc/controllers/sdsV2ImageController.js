@@ -177,6 +177,17 @@ router.delete('/tooling/:tool_dwg_no', isAdmin, async (req, res) => {
 // description was typed there.
 const TURNING_TOOL_SLOTS = 8;
 const turningToolKey = (machine, slot) => `TURN:${machine}:${slot}`;
+// Besides the 8 cutting-tool positions, the same route stores the machine's single
+// "Turning Cutting Layout" picture (slot 'layout', printed in the right-hand strip where the
+// Standard sheet puts its Grinding Area picture). Its link param is likewise internal only.
+const TURNING_LAYOUT_SLOT = 'layout';
+const TURNING_LAYOUT_PARAM = 'Turning_Layout_Photo_Key';
+const parseTurningSlot = (v) => {
+  if (String(v) === TURNING_LAYOUT_SLOT) return TURNING_LAYOUT_SLOT;
+  const n = parseInt(v, 10);
+  return Number.isInteger(n) && n >= 1 && n <= TURNING_TOOL_SLOTS ? n : null;
+};
+const turningParamKey = (slot) => (slot === TURNING_LAYOUT_SLOT ? TURNING_LAYOUT_PARAM : `Tool_Photo_Key_${slot}`);
 
 /** GET /api/sds/v2/images/turning-tool?machine_type_name=X-100 — all 8 slots' status */
 router.get('/turning-tool', async (req, res) => {
@@ -187,11 +198,13 @@ router.get('/turning-tool', async (req, res) => {
       `SELECT param_key, param_value FROM ${TABLES.SDS_PARAMETER}
         WHERE machine_type_name = $1 AND cn IS NULL AND process_code IS NULL
           AND param_key = ANY($2)`,
-      [machine, Array.from({ length: TURNING_TOOL_SLOTS }, (_, i) => `Tool_Photo_Key_${i + 1}`)]
+      [machine, [TURNING_LAYOUT_PARAM, ...Array.from({ length: TURNING_TOOL_SLOTS }, (_, i) => `Tool_Photo_Key_${i + 1}`)]]
     );
     const keyBySlot = {};
     paramRows.rows.forEach((r) => {
-      const slot = parseInt(r.param_key.replace('Tool_Photo_Key_', ''), 10);
+      const slot = r.param_key === TURNING_LAYOUT_PARAM
+        ? TURNING_LAYOUT_SLOT
+        : parseInt(r.param_key.replace('Tool_Photo_Key_', ''), 10);
       if (r.param_value) keyBySlot[slot] = r.param_value;
     });
     const keys = Object.values(keyBySlot);
@@ -203,8 +216,7 @@ router.get('/turning-tool', async (req, res) => {
       );
       imgByKey = Object.fromEntries(imgRows.rows.map((r) => [r.tool_dwg_no, r]));
     }
-    const slots = Array.from({ length: TURNING_TOOL_SLOTS }, (_, i) => {
-      const slot = i + 1;
+    const slots = [...Array.from({ length: TURNING_TOOL_SLOTS }, (_, i) => i + 1), TURNING_LAYOUT_SLOT].map((slot) => {
       const key = keyBySlot[slot] || null;
       const img = key ? imgByKey[key] : null;
       return { slot, key, has_image: !!img, updated_at: img?.updated_at || null };
@@ -219,10 +231,10 @@ router.get('/turning-tool', async (req, res) => {
  *  multipart: machine_type_name, slot (1-8), file (field: image) */
 router.post('/turning-tool', isAdmin, async (req, res) => {
   const machine = (req.body.machine_type_name || '').trim();
-  const slot = parseInt(req.body.slot, 10);
+  const slot = parseTurningSlot(req.body.slot);
   if (!machine) return res.status(400).json({ error: 'machine_type_name is required' });
-  if (!Number.isInteger(slot) || slot < 1 || slot > TURNING_TOOL_SLOTS) {
-    return res.status(400).json({ error: `slot must be an integer 1-${TURNING_TOOL_SLOTS}` });
+  if (slot === null) {
+    return res.status(400).json({ error: `slot must be an integer 1-${TURNING_TOOL_SLOTS} or '${TURNING_LAYOUT_SLOT}'` });
   }
   if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
 
@@ -251,7 +263,7 @@ router.post('/turning-tool', isAdmin, async (req, res) => {
        VALUES (NULL, $1, $2, $3, NULL, $4)
        ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
        DO UPDATE SET param_value = EXCLUDED.param_value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-      [machine, `Tool_Photo_Key_${slot}`, key, empno]
+      [machine, turningParamKey(slot), key, empno]
     );
     await client.query('COMMIT');
     res.json({ slot, key, has_image: true });
@@ -267,9 +279,9 @@ router.post('/turning-tool', isAdmin, async (req, res) => {
 /** DELETE /api/sds/v2/images/turning-tool/:machine_type_name/:slot */
 router.delete('/turning-tool/:machine_type_name/:slot', isAdmin, async (req, res) => {
   const machine = req.params.machine_type_name;
-  const slot = parseInt(req.params.slot, 10);
-  if (!Number.isInteger(slot) || slot < 1 || slot > TURNING_TOOL_SLOTS) {
-    return res.status(400).json({ error: `slot must be an integer 1-${TURNING_TOOL_SLOTS}` });
+  const slot = parseTurningSlot(req.params.slot);
+  if (slot === null) {
+    return res.status(400).json({ error: `slot must be an integer 1-${TURNING_TOOL_SLOTS} or '${TURNING_LAYOUT_SLOT}'` });
   }
   const key = turningToolKey(machine, slot);
   const client = await engPool.connect();
@@ -279,7 +291,7 @@ router.delete('/turning-tool/:machine_type_name/:slot', isAdmin, async (req, res
     await client.query(
       `DELETE FROM ${TABLES.SDS_PARAMETER}
         WHERE machine_type_name = $1 AND cn IS NULL AND process_code IS NULL AND param_key = $2`,
-      [machine, `Tool_Photo_Key_${slot}`]
+      [machine, turningParamKey(slot)]
     );
     await client.query('COMMIT');
     res.json({ success: true });

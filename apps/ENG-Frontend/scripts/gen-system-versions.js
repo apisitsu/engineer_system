@@ -94,4 +94,4 @@ for (const [key, paths] of Object.entries(SYSTEMS)) {
 const outPath = path.join(__dirname, '../src/constance/mtc_version_dates.json');
 fs.writeFileSync(outPath, JSON.stringify(dates, null, 2) + '\n');
 console.log('[gen-system-versions] wrote', path.relative(repoRoot, outPath));
-console.log(dates);
+console.log(JSON.stringify(dates, null, 2));
