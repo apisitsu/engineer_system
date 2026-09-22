@@ -1083,7 +1083,7 @@ const WatermarkManagerModal = ({
                                     </Space>
                                 </div>
 
-                                {/* Row 2: Target Page Range (Compact Bar) */}
+                                {/* Row 2: Target Page Range (Left-Aligned Dropdown Bar) */}
                                 <div style={{
                                     display: 'flex',
                                     alignItems: 'center',
@@ -1093,35 +1093,39 @@ const WatermarkManagerModal = ({
                                     borderRadius: 8,
                                     border: '1px solid #e2e8f0',
                                     marginBottom: 16,
-                                    gap: 8
+                                    gap: 12
                                 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#475569' }}>
-                                        <span>Target Pages:</span>
-                                    </div>
-                                    <Space size={8}>
-                                        <Radio.Group
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap' }}>
+                                        <span style={{ fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                                            Target Pages:
+                                        </span>
+                                        <Select
                                             value={pageRangeMode}
-                                            onChange={e => setPageRangeMode(e.target.value)}
-                                            size="small"
-                                            optionType="button"
-                                            buttonStyle="solid"
-                                        >
-                                            {PAGE_RANGE_OPTIONS.map(o => (
-                                                <Radio.Button key={o.value} value={o.value}>
-                                                    {o.label}
-                                                </Radio.Button>
-                                            ))}
-                                        </Radio.Group>
+                                            onChange={setPageRangeMode}
+                                            size="middle"
+                                            style={{ width: 155 }}
+                                            options={[
+                                                { value: 'all', label: 'All Pages' },
+                                                { value: 'current', label: `Current Page (${currentPage || 1})` },
+                                                { value: 'custom', label: 'Custom Range' },
+                                                { value: 'odd', label: 'Odd Pages' },
+                                                { value: 'even', label: 'Even Pages' },
+                                            ]}
+                                        />
                                         {pageRangeMode === 'custom' && (
                                             <Input
-                                                size="small"
+                                                size="middle"
                                                 placeholder="e.g. 1, 3, 5-10"
                                                 value={customPageRange}
                                                 onChange={e => setCustomPageRange(e.target.value)}
-                                                style={{ width: 130, borderRadius: 4 }}
+                                                style={{ width: 160, borderRadius: 6 }}
+                                                autoFocus
                                             />
                                         )}
-                                    </Space>
+                                    </div>
+                                    <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
+                                        Total: <strong>{totalPages || 1}</strong> page{totalPages > 1 ? 's' : ''}
+                                    </div>
                                 </div>
 
                                 {/* Template Cards List */}
