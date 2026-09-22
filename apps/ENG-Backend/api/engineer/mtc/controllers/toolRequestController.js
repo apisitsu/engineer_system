@@ -88,6 +88,30 @@ async function getEmailRecipients(stage) {
     }
 }
 
+// ── Who may ACT on a stage — main config + ADMIN only, never CC ────────────────
+// getEmailRecipients(stage) merges CC_<stage> in on purpose: CC is meant for
+// visibility on notifications. It was also being reused as the permission gate,
+// which silently handed approve/deny rights to anyone cc'd — confirmed live
+// 2026-09-22 (e.g. Suranat, CC'd on Eng Check, could approve Eng Check; Chairat
+// and Suranat, CC'd on Eng Approve, could give the final approval meant for
+// Pattanapong alone). This is the same tr_email_config table but reads only the
+// stage's own row plus the always-eligible ADMIN row — no CC_ lookup.
+async function getStageActorEmails(stage) {
+    const lookupStage = stage.toUpperCase().replace('DRAFT_MAN', 'DRAFTMAN');
+    try {
+        const res = await engPool.query(
+            `SELECT emails FROM ${TABLES.TR_EMAIL_CONFIG} WHERE UPPER(stage) = ANY($1)`,
+            [[lookupStage, 'ADMIN']]
+        );
+        let all = [];
+        res.rows.forEach(row => { if (row.emails) all = all.concat(row.emails.split(',').map(e => e.trim()).filter(Boolean)); });
+        return [...new Set(all.map(e => e.toLowerCase()))];
+    } catch (error) {
+        logger.error('Error fetching stage actors', { stage, error: error.message });
+        return [];
+    }
+}
+
 // ── Due date by request type ──────────────────────────────────────────────────
 function calcDueDate(typeOfRequest) {
     const days = DUE_DATE_CONFIG[typeOfRequest] || DUE_DATE_CONFIG.DEFAULT;
@@ -127,17 +151,20 @@ async function getMemberEmails(uCode) {
 
 /**
  * GET /api/engineer/mtc/tool-requests/permissions
- * คืน allowed emails ของแต่ละ stage (ดึงจาก DB ทั้งหมด)
- * `me.emails` = the caller's own addresses, so the modal decides canAct from the
- * same identity the backend checks in submitAction.
+ * Who may ACT on each stage — main config + ADMIN, never CC (see getStageActorEmails).
+ * Keyed by the lowercase WORKFLOW_STAGES values ('eng_check', 'draft_man', ...), the
+ * same key RequestDetailsPage.jsx looks up by — a previous version keyed by the raw
+ * uppercase DB stage string ("ENG_CHECK"), which never matched and made the frontend
+ * gate a no-op (it always fell through to "no config for this stage = anyone may act").
+ * `me.emails` = the caller's own addresses, so the page decides canAct from the same
+ * identity submitAction checks.
  */
 const getStagePermissions = async (req, res) => {
     try {
-        const configRes = await engPool.query(`SELECT stage, emails FROM ${TABLES.TR_EMAIL_CONFIG}`);
         const permissions = {};
-        configRes.rows.forEach(row => {
-            permissions[row.stage] = row.emails.split(',').map(e => e.trim()).filter(Boolean);
-        });
+        for (const stageKey of Object.values(WORKFLOW_STAGES)) {
+            permissions[stageKey] = await getStageActorEmails(stageKey);
+        }
         let myEmails = [];
         try { myEmails = await getMemberEmails(req.user?.empno); } catch (_) { /* best effort */ }
         res.json({ data: permissions, me: { emails: myEmails } });
@@ -583,7 +610,7 @@ const submitAction = async (req, res) => {
     // req.body.user_department/user_code เป็นค่าที่ client ส่งมาเอง แก้ก่อนส่งได้อิสระ
     // (เคยปล่อยให้ปลอมเป็น department 'AD' แล้วข้ามการตรวจสิทธิ์ทุก stage ได้)
     try {
-        const recipientsAllowed = await getEmailRecipients(stage);
+        const recipientsAllowed = await getStageActorEmails(stage);
         const userDept = (req.user?.department || '').toUpperCase();
         if (recipientsAllowed.length > 0 && userDept !== 'AD') {
             const allowedCodes = recipientsAllowed.map(e => e.split('@')[0].toLowerCase());
@@ -594,9 +621,8 @@ const submitAction = async (req, res) => {
                 // which never equals an email's local part ("chairat.s"). Resolve the
                 // person's addresses server-side by the verified empno (tr_email_member,
                 // then the profile) — never from the request body — and match the full address.
-                const mine = await getMemberEmails(userCode);
-                const allowedLower = recipientsAllowed.map(e => e.toLowerCase());
-                isAllowed = mine.some(e => allowedLower.includes(e));
+                const mine = await getMemberEmails(userCode);   // already lowercased, like recipientsAllowed
+                isAllowed = mine.some(e => recipientsAllowed.includes(e));
             }
             if (!isAllowed) return res.status(403).json({ error: `You don't have permission to act in the ${stage} stage` });
         }
