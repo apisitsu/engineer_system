@@ -272,6 +272,59 @@ describe('PdfCommitEngine', () => {
             expect(verifiedDoc.getPage(0).getWidth()).toBeCloseTo(595.28, 1);
             expect(verifiedDoc.getPage(1).getWidth()).toBeCloseTo(841.89, 1);
         });
+
+        it('should correctly commit underlay watermarks and resolve dynamic {PAGE} of {TOTAL_PAGES} tags', async () => {
+            const doc = await PDFDocument.create();
+            doc.addPage([595.28, 841.89]);
+            doc.addPage([595.28, 841.89]);
+            const twoPageBytes = await doc.save();
+
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 595.28,
+                    _canvasHeight: 841.89,
+                    objects: [
+                        {
+                            type: 'text',
+                            text: 'Page {PAGE} of {TOTAL_PAGES}',
+                            left: 297.64,
+                            top: 820,
+                            fontSize: 12,
+                            fill: '#000000',
+                            customData: { type: 'watermark', layer: 'underlay' }
+                        },
+                        {
+                            type: 'Rect',
+                            left: 100,
+                            top: 100,
+                            width: 200,
+                            height: 100,
+                            fill: '#00ff00'
+                        }
+                    ]
+                },
+                '2': {
+                    _canvasWidth: 595.28,
+                    _canvasHeight: 841.89,
+                    objects: [
+                        {
+                            type: 'text',
+                            text: 'Page {PAGE} of {TOTAL_PAGES}',
+                            left: 297.64,
+                            top: 820,
+                            fontSize: 12,
+                            fill: '#000000',
+                            customData: { type: 'watermark', layer: 'underlay' }
+                        }
+                    ]
+                }
+            };
+
+            const committedBytes = await commitAllToPdf(twoPageBytes, pageAnnotations);
+            expect(committedBytes).toBeInstanceOf(Uint8Array);
+            const verified = await PDFDocument.load(committedBytes);
+            expect(verified.getPageCount()).toBe(2);
+        });
     });
 
     describe('wrapTextToWidth', () => {

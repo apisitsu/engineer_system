@@ -1128,8 +1128,14 @@ const PdfEditorTool = () => {
                     </div>
 
                     <Segmented
-                        value={store.activeMode}
-                        onChange={(val) => store.setActiveMode(val)}
+                        value={store.activeMode === 'watermark' ? 'view' : store.activeMode}
+                        onChange={(val) => {
+                            if (val === 'watermark') {
+                                setWatermarkOpen(true);
+                                return;
+                            }
+                            store.setActiveMode(val);
+                        }}
                         options={MODE_OPTIONS.map(m => ({
                             value: m.value,
                             label: (

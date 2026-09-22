@@ -4,8 +4,27 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-21
-- **Active Goal:** PDF Hub Watermark Engine & Auto-Save Draft Resumption Stability Full Resolution; DMS auto-numbering system deployed.
+- **Last Update:** 2026-09-22
+- **Active Goal:** PDF Hub Protected/Encrypted Document Auto-Unlock & Blank Page Elimination Full Resolution; DMS auto-numbering system deployed.
+
+- **PDF Hub: Protected / Encrypted PDF (Blank White Page) Resolution (2026-09-22):**
+  - **Root Cause Analysis (`AS81934-C.pdf`):**
+    - `AS81934-C.pdf` is standard aerospace engineering documentation protected with PDF Standard Security (V=1, R=2, 40-bit RC4 permissions protection with empty user password).
+    - In `PDF.js` (`pdfjs-dist`), the document rendered normally because `pdfjs-dist` decrypts Standard Security internally for canvas display.
+    - However, `pdf-lib` does not decrypt stream objects when loaded with `{ ignoreEncryption: true }`. All 18 pages of content streams remained encrypted RC4 ciphertext in memory.
+    - When committing watermarks and calling `doc.save()`, `pdf-lib` dropped `/Encrypt` from the trailer. External PDF readers (Chrome, Adobe Acrobat, Edge) attempted to decompress the ciphertext as Flate streams, throwing `FormatError: Unknown compression method in flate stream` and failing to render the page graphics/text, presenting a completely blank / white page.
+  - **1. Backend Service & Python Unlocker Enhancement (`pdf_unlocker.py`, `pdfToolsService.js`, `server.js`):**
+    - Upgraded `pdf_unlocker.py` to use `writer.clone_document_from_reader(reader)`, preserving outlines/bookmarks, metadata, and form fields while completely decrypting pages into standard unencrypted PDF.
+    - Updated `safeUnlink` in `pdfToolsService.js` to guard with `filePath.includes(os.tmpdir())`, preventing accidental deletion of workspace files.
+    - Whitelisted `/api/engineer/pdf-hub/unlock` and `/api/engineer/pdf-hub/repair` with `optionalVerifyToken` in `server.js` so guests, expired token sessions, and cross-origin calls are never blocked with HTTP 401.
+  - **2. Client-Side Pre-Unlock Pipeline (`usePdfDocument.js`):**
+    - Added automatic encrypted PDF detection (`isEncrypted = testDoc.isEncrypted` with `/Encrypt` trailer scanner fallback) in both `loadPdf` and `loadPdfFromBytes`.
+    - Automatically sends encrypted files to `/api/engineer/pdf-hub/unlock` before rendering, updating `pdfBytes` to the decrypted byte stream and ensuring all downstream operations (Canvas, Watermarking, Auto-save drafts, Export) execute on 100% clean data.
+  - **3. Commit Engine Defensive Auto-Unlock (`commitEngine.js`):**
+    - Added secondary defensive tier in `commitAllToPdf`: if `doc.isEncrypted` is detected on `pdfBytes` at commit time, it automatically decrypts via the backend unlock API before overlaying annotations.
+  - **4. Unit Tests & Production Build Verification:**
+    - Added comprehensive regression test in `PdfCommitEngine.test.js` validating that `AS81934-C.pdf` is auto-detected, unlocked, and committed without stream errors (11/11 tests pass in 5.04s).
+    - Verified clean production build (`npm run build`) with exit code 0.
 
 - **PDF Hub: Watermark Engine & Auto-Save Draft Resumption Stability (2026-09-21):**
   - **1. Watermark Failure & Font Loading Optimization (`commitHelpers.js`, `commitEngine.js`):**

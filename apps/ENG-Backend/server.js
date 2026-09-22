@@ -118,11 +118,12 @@ app.get('/api/health', (req, res) => {
 // --- Verify Token Middleware Setup ---
 const { verifyToken, optionalVerifyToken } = require('./middleware/auth');
 
-// Allow public access to login, refresh token, public endpoints, and read-only ECNT viewer endpoints
+// Allow public access to login, refresh token, public endpoints, and read-only ECNT/DMS/PDF-Hub viewer endpoints
 app.use('/api', (req, res, next) => {
   if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/logout-user' || req.path === '/proxy/job_check' || req.path.startsWith('/public')
       || req.path === '/activity/session/end' || req.path === '/ecnt/user-candidates'
-      || (req.method === 'GET' && (req.path.startsWith('/ecnt/') || req.path.startsWith('/engineer/new_prod/dms')))) {
+      || req.path === '/engineer/pdf-hub/unlock' || req.path === '/engineer/pdf-hub/repair' || req.path === '/engineer/pdf-hub/watermark-log'
+      || (req.method === 'GET' && (req.path.startsWith('/ecnt/') || req.path.startsWith('/engineer/new_prod/dms') || req.path.startsWith('/engineer/pdf-hub/watermarks') || req.path.startsWith('/engineer/pdf-hub/stamps') || req.path.startsWith('/engineer/pdf-hub/watermark-history')))) {
     return optionalVerifyToken(req, res, next);
   }
 
