@@ -1,4 +1,5 @@
 const { engPool } = require('../../../../instance/eng_db'); // Use new schema
+const { pool: rodpcPool } = require('../../../../instance/instance'); // Factory floor DB — read-only here
 const moment = require('moment');
 const path = require('path');
 const { TABLES, PATHS } = require('../mtcConstants');
@@ -173,6 +174,33 @@ const getStagePermissions = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/engineer/mtc/tool-requests/work-centers
+ * Work centers for the Factory/Work Center pickers, read straight from rodpc's own
+ * m_workcenter — NOT the local `work_centers` table (api/master/wc), which is a stale,
+ * hand-typed, Fac-4-only partial copy (missing ~20 real Fac 4 codes and all of Fac 11
+ * entirely — confirmed live 2026-09-22). That table is shared with SDS Production
+ * History and Tooling Return, so it is left alone rather than patched.
+ *
+ * `status` ('1' for every Fac 4 row, '99' for every Fac 11 row in the live data) looks
+ * like it could mean active/inactive, but a real Fac 11 row (e.g. "QUALITY CONTROL")
+ * carries '99' too — filtering on it would silently drop the entire second factory.
+ * Not filtered here for that reason; revisit only once someone confirms what it means.
+ */
+const getFactoryWorkCenters = async (req, res) => {
+    try {
+        const result = await rodpcPool.query(
+            `SELECT wc_code AS code, name, factory_number AS factory
+               FROM m_workcenter
+              ORDER BY factory_number, wc_code`
+        );
+        res.json({ data: result.rows });
+    } catch (err) {
+        logger.error('Error fetching factory work centers', { error: err.message });
+        res.status(500).json({ error: err.message });
+    }
+};
+
 // ── Workflow stage map ────────────────────────────────────────────────────────
 const STAGE_MAP = {
     [WORKFLOW_STAGES.ENG_CHECK]: { stepNo: 1, approveStatus: WORKFLOW_STATUS.PENDING_DRAFT_MAN, approveStage: 'Draft Man', denyStatus: WORKFLOW_STATUS.DENIED, denyStage: 'Denied', emailApprove: WORKFLOW_STAGES.DRAFT_MAN, emailDeny: null },
@@ -188,7 +216,7 @@ const STAGE_MAP = {
  * List all tool requests with optional filtering
  */
 const getToolRequests = async (req, res) => {
-    const { status, search, startDate, endDate, page, limit } = req.query;
+    const { status, search, startDate, endDate, page, limit, factory } = req.query;
 
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
@@ -201,6 +229,11 @@ const getToolRequests = async (req, res) => {
     if (status && status !== 'all') {
         baseWhere += ` AND status = $${paramIndex++}`;
         params.push(status);
+    }
+
+    if (factory && factory !== 'all') {
+        baseWhere += ` AND factory = $${paramIndex++}`;
+        params.push(factory);
     }
 
     if (search) {
@@ -274,6 +307,7 @@ const createToolRequest = async (req, res) => {
     try {
         const {
             department,
+            factory,
             work_center,
             work_center_name,
             type_of_request,
@@ -293,7 +327,7 @@ const createToolRequest = async (req, res) => {
         const requester_email = req.body.requester_email;
 
         // Validation
-        if (!department || !work_center || !requester || !type_of_request || !category || !title || !detail) {
+        if (!department || !factory || !work_center || !requester || !type_of_request || !category || !title || !detail) {
             return res.status(400).json({
                 result: 'false',
                 message: 'Please fill in all required fields'
@@ -335,16 +369,16 @@ const createToolRequest = async (req, res) => {
 
         const sql = `
             INSERT INTO ${TABLES.TR_REQUEST} (
-                request_item, department, work_center, work_center_name,
+                request_item, department, factory, work_center, work_center_name,
                 requester, requester_email, type_of_request, category,
                 drawing_required, type_of_drawing, title, detail,
                 machine_no, machine_name, req_due_date, req_no,
                 status, current_stage, file_path, req_by, req_date
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()) RETURNING id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW()) RETURNING id
         `;
 
         const params = [
-            request_item, department, work_center, work_center_name,
+            request_item, department, factory, work_center, work_center_name,
             requester, requester_email, type_of_request, category,
             drawing_required, type_of_drawing, title, detail,
             machine_no, machine_name, req_due_date, request_item,
@@ -412,6 +446,7 @@ const updateToolRequest = async (req, res) => {
     const { id } = req.params;
     const {
         department,
+        factory,
         work_center,
         work_center_name,
         type_of_request,
@@ -430,25 +465,26 @@ const updateToolRequest = async (req, res) => {
     const sql = `
         UPDATE ${TABLES.TR_REQUEST} SET
             department = COALESCE($1, department),
-            work_center = COALESCE($2, work_center),
-            work_center_name = COALESCE($3, work_center_name),
-            type_of_request = COALESCE($4, type_of_request),
-            category = COALESCE($5, category),
-            drawing_required = COALESCE($6, drawing_required),
-            type_of_drawing = COALESCE($7, type_of_drawing),
-            title = COALESCE($8, title),
-            detail = COALESCE($9, detail),
-            machine_no = $10,
-            machine_name = $11,
-            status = COALESCE($12, status),
-            current_stage = COALESCE($13, current_stage),
-            req_no = COALESCE($14, req_no),
+            factory = COALESCE($2, factory),
+            work_center = COALESCE($3, work_center),
+            work_center_name = COALESCE($4, work_center_name),
+            type_of_request = COALESCE($5, type_of_request),
+            category = COALESCE($6, category),
+            drawing_required = COALESCE($7, drawing_required),
+            type_of_drawing = COALESCE($8, type_of_drawing),
+            title = COALESCE($9, title),
+            detail = COALESCE($10, detail),
+            machine_no = $11,
+            machine_name = $12,
+            status = COALESCE($13, status),
+            current_stage = COALESCE($14, current_stage),
+            req_no = COALESCE($15, req_no),
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $15
+        WHERE id = $16
     `;
 
     const params = [
-        department, work_center, work_center_name,
+        department, factory, work_center, work_center_name,
         type_of_request, category, drawing_required, type_of_drawing,
         title, detail, machine_no, machine_name,
         status, current_stage, request_no, id
@@ -499,6 +535,15 @@ const getToolRequestDashboard = async (req, res) => {
         `);
         stats.byStatus = statusCountsRes.rows.reduce((acc, row) => {
             acc[row.status] = parseInt(row.count);
+            return acc;
+        }, {});
+
+        const factoryCountsRes = await engPool.query(`
+            SELECT COALESCE(factory, 'unspecified') AS factory, COUNT(*) as count FROM ${TABLES.TR_REQUEST}
+            WHERE deleted_at IS NULL GROUP BY factory
+        `);
+        stats.byFactory = factoryCountsRes.rows.reduce((acc, row) => {
+            acc[row.factory] = parseInt(row.count);
             return acc;
         }, {});
 
@@ -903,6 +948,7 @@ module.exports = {
     updateToolRequest,
     deleteToolRequest,
     getToolRequestDashboard,
+    getFactoryWorkCenters,
     getStagePermissions,
     submitAction,
     getEmailConfigs,
