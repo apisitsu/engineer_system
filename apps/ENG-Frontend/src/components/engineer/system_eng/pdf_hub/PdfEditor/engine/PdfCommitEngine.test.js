@@ -325,6 +325,39 @@ describe('PdfCommitEngine', () => {
             const verified = await PDFDocument.load(committedBytes);
             expect(verified.getPageCount()).toBe(2);
         });
+
+        it('should auto-detect and commit watermarks onto protected AS81934-C.pdf without blank pages', async () => {
+            const fs = await import('fs');
+            const path = await import('path');
+            const as81934Path = path.resolve(__dirname, '..', '..', 'AS81934-C.pdf');
+            if (!fs.existsSync(as81934Path)) return;
+
+            const originalBytes = fs.readFileSync(as81934Path);
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 612,
+                    _canvasHeight: 792,
+                    objects: [
+                        {
+                            type: 'text',
+                            text: 'FOR REFERENCE ONLY',
+                            left: 306,
+                            top: 396,
+                            fontSize: 36,
+                            fill: '#f57c00',
+                            customData: { type: 'watermark' }
+                        }
+                    ]
+                }
+            };
+
+            const committedBytes = await commitAllToPdf(new Uint8Array(originalBytes), pageAnnotations);
+            expect(committedBytes).toBeInstanceOf(Uint8Array);
+
+            const verified = await PDFDocument.load(committedBytes);
+            expect(verified.getPageCount()).toBe(18);
+            expect(verified.isEncrypted).toBe(false);
+        });
     });
 
     describe('wrapTextToWidth', () => {

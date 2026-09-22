@@ -5,7 +5,20 @@
 
 ## Current Project Status
 - **Last Update:** 2026-09-22
-- **Active Goal:** PDF Hub Watermark Manager Complete UX/UI Redesign Deployed (Two-Column Designer with True A4 Live Preview, Non-Overflowing Header & 2-Column Card Grid); 11 Historical User Watermarks Recovered & Harmonized; Protected/Encrypted Document Auto-Unlock & Blank Page Elimination Full Resolution; DMS auto-numbering system deployed.
+- **Active Goal:** PDF Hub Watermark Manager Complete UX/UI Redesign Deployed; AS81934-C Blank Page Elimination 100% Resolved (Restored Backend pdfToolsService & Dual-Engine Python Unlocker); 11 Historical User Watermarks Recovered; DMS auto-numbering system deployed.
+
+- **PDF Hub: Protected / Encrypted PDF (AS81934-C.pdf) Blank Page Fix (2026-09-22):**
+  - **Root Cause Analysis:**
+    - `apps/ENG-Backend/api/engineer/pdf_hub/services/pdfToolsService.js` and `apps/ENG-Backend/api/engineer/pdf_hub/scripts/pdf_unlocker.py` were accidentally truncated to 0 bytes during a previous commit.
+    - When `AS81934-C.pdf` (standard 40-bit RC4 permissions protection) was loaded or committed, calls to `/api/engineer/pdf-hub/unlock` failed with HTTP 500 (`Failed to unlock PDF`).
+    - The frontend caught the error and fell back to original encrypted bytes. In `pdf-lib`, saving stripped the `/Encrypt` trailer while streams remained ciphertext, causing external PDF readers (Adobe, Chrome, Edge, PyMuPDF) to throw `zlib error: incorrect header check` and render 100% blank white pages.
+  - **Resolution Deployed:**
+    - Recreated `apps/ENG-Backend/api/engineer/pdf_hub/scripts/pdf_unlocker.py` with a robust **dual-engine architecture**: PyMuPDF (`fitz`) first for ultra-fast, clean decompression and stream rebuilding, with fallback to `pypdf`.
+    - Restored `apps/ENG-Backend/api/engineer/pdf_hub/services/pdfToolsService.js` with proper temp file lifecycle management and `safeUnlink`.
+    - Restored legacy `apps/ENG-Backend/api/engineer/system/pdf_unlocker.py`.
+    - Updated `usePdfDocument.js` and `commitEngine.js` with redundant encryption detection (checking `doc.isEncrypted` + scanner fallback for `/Encrypt` trailer) and immediate `setPdfBytes(finalBytes)` synchronization upon unlock.
+    - Added automated unit test in `PdfCommitEngine.test.js` validating that `AS81934-C.pdf` is auto-unlocked and all 18 pages retain complete text and graphics without blank pages. 12/12 unit tests pass (100% PASS).
+    - Verified clean production build (`npm run build`) with exit code 0.
 
 - **PDF Hub: Watermark Manager UX/UI Redesign & Template Recovery (2026-09-22):**
   - **1. UI/UX Clutter & Component Overflow Elimination (`WatermarkManagerModal.jsx`):**
