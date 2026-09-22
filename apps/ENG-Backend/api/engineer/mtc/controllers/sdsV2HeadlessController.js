@@ -1309,9 +1309,10 @@ function buildGridPdfHtml(grid) {
         const rs = span ? span.rs : 1;
         let cellHmm = 0;
         for (let i = r; i < r + rs; i++) cellHmm += (rowH[i] || 0) * scale;
+        const imgPct = ((cd.imgScale || 1) * 100).toFixed(1);
         content = `<div style="height:${cellHmm.toFixed(3)}mm;width:100%;overflow:hidden;`
           + `display:flex;align-items:center;justify-content:center;">`
-          + `<img src="${cd.img}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;"></div>`;
+          + `<img src="${cd.img}" style="max-width:${imgPct}%;max-height:${imgPct}%;object-fit:contain;display:block;"></div>`;
       } else {
         content = escHtml(cd && cd.v);
         // Cap an unwrapped value at the room Excel would give it, and mark the cut with an
@@ -1482,7 +1483,10 @@ function applyDataToGrid(grid, valueMap, mappings) {
     .filter((m) => !IMAGE_PARAM_KEY(m.param_key))
     .map((m) => cellAddrToRC(m.cell_address))
     .filter(Boolean);
-  const placeImage = (extentKey, dataUri) => {
+  // `scale` shrinks the picture inside its box (still centered by the flex wrapper in
+  // buildGridPdfHtml) without touching the box/border itself — the printed frame is part
+  // of the template's own design, not something a photo's size should resize.
+  const placeImage = (extentKey, dataUri, scale = 1) => {
     if (!dataUri) return;
     const ext = IMAGE_EXTENTS[extentKey];
     if (!ext) return;
@@ -1491,7 +1495,7 @@ function applyDataToGrid(grid, valueMap, mappings) {
     const collides = mappedRC.some(({ r, c }) => r >= tl.r && r <= br.r && c >= tl.c && c <= br.c);
     if (collides) return;
     const k = `${tl.r},${tl.c}`;
-    cells[k] = { ...(cells[k] || {}), img: dataUri };
+    cells[k] = { ...(cells[k] || {}), img: dataUri, imgScale: scale };
     if (!existingTl.has(k)) { newMerges.push({ r1: tl.r, c1: tl.c, r2: br.r, c2: br.c }); existingTl.add(k); }
   };
 
@@ -1630,7 +1634,7 @@ function applyDataToGrid(grid, valueMap, mappings) {
   // 4b) Turning-style per-tool photos (Holder_Info_N-keyed) — see buildValueMap.
   const turningImgs = valueMap._turningToolImages || {};
   for (const [n, dataUri] of Object.entries(turningImgs)) placeImage(`turning_tool_image_${n}`, dataUri);
-  placeImage('turning_layout_image', valueMap._turningLayoutImage);
+  placeImage('turning_layout_image', valueMap._turningLayoutImage, 0.7);
 
   return { ...grid, cells, fills, merges: [...(grid.merges || []), ...newMerges] };
 }
