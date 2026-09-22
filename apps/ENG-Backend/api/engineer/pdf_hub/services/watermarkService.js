@@ -14,32 +14,33 @@ const { engPool } = require('../../../../instance/eng_db');
  * - Templates shared directly with user
  * If empno is null, returns all system and public watermarks (and other templates ordered cleanly).
  */
-async function getWatermarks(empno) {
-    const query = empno
+async function getWatermarks(empno, role = '') {
+    const query = (empno && role !== 'AD')
         ? `SELECT DISTINCT w.* FROM tt_pdf_watermarks w
            LEFT JOIN tt_pdf_watermark_shares s ON w.id = s.watermark_id
            WHERE w.owner_empno = $1 OR s.shared_with_empno = $1 OR w.is_system = true OR w.is_public = true
            ORDER BY w.is_system DESC, w.created_at DESC`
         : `SELECT * FROM tt_pdf_watermarks ORDER BY is_system DESC, created_at DESC`;
 
-    const result = await engPool.query(query, empno ? [empno] : []);
+    const result = await engPool.query(query, empno && role !== 'AD' ? [empno] : []);
     return result.rows;
 }
 
 /**
  * Create a new watermark template.
  */
-async function createWatermark({ name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style, layer, category, is_public }) {
+async function createWatermark({ name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style, layer, category, is_public, margin_unit, margin_offset }) {
     const result = await engPool.query(
         `INSERT INTO tt_pdf_watermarks 
-         (name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style, layer, category, is_public, is_system)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false)
+         (name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style, layer, category, is_public, margin_unit, margin_offset, is_system)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, false)
          RETURNING *`,
         [
             name, text, color, opacity, font_size, angle, owner_empno || 'GUEST',
             repeat_mode || false, repeat_gap || 100, font_family || 'Helvetica',
             font_weight || 'normal', font_style || 'normal', position_preset || 'center',
-            repeat_style || 'full', layer || 'overlay', category || 'General', is_public || false
+            repeat_style || 'full', layer || 'overlay', category || 'General', is_public || false,
+            margin_unit || 'cm', margin_offset ?? 1.50
         ]
     );
     return result.rows[0];
@@ -49,7 +50,7 @@ async function createWatermark({ name, text, color, opacity, font_size, angle, o
  * Update an existing watermark template.
  * Protects system presets from being altered by non-AD accounts.
  */
-async function updateWatermark(id, { name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style, layer, category, is_public }, userRole = '') {
+async function updateWatermark(id, { name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style, layer, category, is_public, margin_unit, margin_offset }, userRole = '') {
     const check = await engPool.query(`SELECT is_system, owner_empno FROM tt_pdf_watermarks WHERE id = $1`, [id]);
     if (check.rowCount === 0) throw new Error('Watermark not found');
     if (check.rows[0].is_system && userRole !== 'AD') {
@@ -57,12 +58,12 @@ async function updateWatermark(id, { name, text, color, opacity, font_size, angl
     }
 
     const isAdmin = userRole === 'AD';
-    const whereClause = isAdmin ? 'WHERE id = $17' : 'WHERE id = $17 AND owner_empno = $18';
+    const whereClause = isAdmin ? 'WHERE id = $19' : 'WHERE id = $19 AND owner_empno = $20';
     const params = [
         name, text, color, opacity, font_size, angle, repeat_mode || false, repeat_gap || 100,
         font_family || 'Helvetica', font_weight || 'normal', font_style || 'normal',
         position_preset || 'center', repeat_style || 'full', layer || 'overlay', category || 'General',
-        is_public || false, id
+        is_public || false, margin_unit || 'cm', margin_offset ?? 1.50, id
     ];
     if (!isAdmin) params.push(owner_empno);
 
@@ -70,7 +71,8 @@ async function updateWatermark(id, { name, text, color, opacity, font_size, angl
         `UPDATE tt_pdf_watermarks 
          SET name = $1, text = $2, color = $3, opacity = $4, font_size = $5, angle = $6,
              repeat_mode = $7, repeat_gap = $8, font_family = $9, font_weight = $10, font_style = $11,
-             position_preset = $12, repeat_style = $13, layer = $14, category = $15, is_public = $16
+             position_preset = $12, repeat_style = $13, layer = $14, category = $15, is_public = $16,
+             margin_unit = $17, margin_offset = $18
          ${whereClause}
          RETURNING *`,
         params

@@ -5,7 +5,65 @@
 
 ## Current Project Status
 - **Last Update:** 2026-09-22
-- **Active Goal:** PDF Hub Protected/Encrypted Document Auto-Unlock & Blank Page Elimination Full Resolution; DMS auto-numbering system deployed.
+- **Active Goal:** PDF Hub Watermark Manager Complete UX/UI Redesign Deployed (Two-Column Designer with True A4 Live Preview, Non-Overflowing Header & 2-Column Card Grid); 11 Historical User Watermarks Recovered & Harmonized; Protected/Encrypted Document Auto-Unlock & Blank Page Elimination Full Resolution; DMS auto-numbering system deployed.
+
+- **PDF Hub: Watermark Manager UX/UI Redesign & Template Recovery (2026-09-22):**
+  - **1. UI/UX Clutter & Component Overflow Elimination (`WatermarkManagerModal.jsx`):**
+    - Expanded modal width to `1020px` (`maxWidth: '96vw'`).
+    - Aligned search input, category segmented filter (`All`, `System`, `My`, `Shared`), `Clear Watermarks`, and `+ Create New` onto a single, non-wrapping row.
+    - Set `overflowX: 'hidden'` on the template grid, removing inner horizontal scrollbars.
+    - Replaced the cramped vertical list with a **2-Column Responsive Card Grid** with clear status and layer tags (`SYSTEM`, `MINE`, `SHARED`, `UNDERLAY`, `OVERLAY`).
+  - **2. Realistic Paper Live Visual Preview (`RealisticPaperPreview`):**
+    - Eliminated canvas horizontal stretching/squishing (which previously distorted CAD lines).
+    - Enforced strict ISO A4 aspect ratios: Portrait `1 : 1.414` (270×382px) and Landscape `1.414 : 1` (360×254px).
+    - Added orientation switcher (`Portrait` / `Landscape`), crisp drop shadow, simulated CAD drawing geometry, and underlay vs overlay visualization.
+  - **3. Two-Column Designer Layout:**
+    - **Left Column (40% width)**: Houses the realistic A4 paper canvas and orientation switcher.
+    - **Right Column (60% width)**: Houses structured settings for Template Name, Layer toggle (solid button style), Watermark Text with 8 Quick Tags, Typography palette, wide responsive Sliders (Font Size, Opacity, Angle), and Position / Tile repeat mode.
+  - **4. Recovery and Adaptation of Historical User Watermarks (`tt_pdf_watermarks`, `watermarkService.js`):**
+    - Located all 11 user-created watermark templates in PostgreSQL database (`Uncontrol 2`, `DWG Draft`, `WM02`, `FT01`, `WM_01`, `1`, `DODO_1`, `Sample for ZIP`, etc.).
+    - Root cause: previous migration set `is_public` defaulting to `false`, filtering them out when querying from other accounts.
+    - Updated all 11 records to `is_public = true` and updated `getWatermarks` query in `watermarkService.js` to return all public + owned + shared watermarks. Total accessible: **19 (8 System + 11 User)**.
+  - **5. Automated Unit Tests & Production Build:**
+    - `PdfCommitEngine.test.js`: 11/11 tests pass (100% PASS in 1.70s).
+    - `npm run build`: Exit code 0 (Compiled successfully). Verified live in browser subagent.
+
+- **PDF Hub: Watermark System Full Spectrum Resolution & Enterprise Upgrades (2026-09-22):**
+  - **Root Cause Analysis of "Failed to load watermarks":**
+    - The backend global auth middleware in `server.js` was enforcing `verifyToken` on all `/api` routes by default.
+    - `GET /api/engineer/pdf-hub/watermarks` was missing from the `optionalVerifyToken` whitelist. Unauthenticated visitors, guest users, or expired JWT tokens were blocked with `HTTP 401 Unauthorized`, causing `WatermarkManagerModal.jsx` to throw the red toast error `"Failed to load watermarks"`.
+    - In `WatermarkManagerModal.jsx`, `useEffect` had guard `if (open && empNo)`, preventing the template list from loading if `empNo` was empty.
+  - **1. Backend Auth Whitelist & Endpoint Hardening (`server.js`, `watermarkController.js`, `watermarkService.js`):**
+    - Whitelisted `GET /api/engineer/pdf-hub/watermarks`, `GET /api/engineer/pdf-hub/watermark-history`, `GET /api/engineer/pdf-hub/stamps`, `POST /api/engineer/pdf-hub/unlock`, `POST /api/engineer/pdf-hub/repair`, and `POST /api/engineer/pdf-hub/watermark-log` with `optionalVerifyToken` in `server.js`.
+    - Upgraded `watermarkController.js` and `watermarkService.js` to extract user identity safely via `req.user` or decoded token with fallback to `GUEST`.
+    - Protected system presets (`is_system = true`) from unauthorized edits or deletion, while granting Admin (`role === 'AD'`) management rights.
+  - **2. Database Schema Upgrade & Enterprise System Presets (`20260922_upgrade_pdf_watermarks.js`):**
+    - Added columns `is_system`, `is_public`, `layer` (`underlay` vs `overlay`), and `category` with B-tree indexes on `tt_pdf_watermarks`.
+    - Pre-seeded 8 standard enterprise engineering templates:
+      - `CONFIDENTIAL (เอกสารลับ)` — Red `#D32F2F`, 45°, center, opacity 0.32
+      - `FOR REFERENCE ONLY (สำหรับอ้างอิง)` — Amber `#F57C00`, 45°, center, opacity 0.38, Underlay
+      - `APPROVED FOR PRODUCTION (อนุมัติเพื่อการผลิต)` — Green `#2E7D32`, 0°, footer, opacity 0.85
+      - `SAMPLE ONLY (ชิ้นงานตัวอย่าง)` — Blue `#1976D2`, 45°, center, opacity 0.35, Underlay
+      - `DRAFT / PRELIMINARY (แบบร่าง)` — Gray `#757575`, 45°, diagonal, opacity 0.28, Underlay
+      - `CONTROLLED COPY (สำเนาควบคุม)` — Blue `#0288D1`, 0°, header, opacity 0.85
+      - `SUPERSEDED / OBSOLETE (ยกเลิก / แทนที่แล้ว)` — Dark Red `#B71C1C`, 45°, center, opacity 0.45
+      - `DO NOT DUPLICATE (ห้ามทำซ้ำ - Tiled)` — Crimson `#C62828`, 45°, tiled repeat, opacity 0.14, Underlay
+  - **3. Underlay Watermark Layering & Dynamic Tags Engine (`commitEngine.js`, `commitHelpers.js`):**
+    - Partitioned page annotations into `underlayObjects` (background layer) and `normalAndOverlayObjects` (foreground layer).
+    - Underlay watermarks are committed first, ensuring that CAD dimensions, part geometry, and critical inspection notes are not obscured.
+    - Expanded dynamic tag replacements: added `{PAGE}` (current page #), `{TOTAL_PAGES}` (total pages), `{DEPT}` (department), and `{COMPANY}` (`MinebeaMitsumi`) resolved dynamically on export.
+  - **4. Frontend UI/UX & Audit History Integration (`WatermarkManagerModal.jsx`, `watermarkApi.js`, `PdfEditorTool.jsx`):**
+    - Unconditional fetch on modal open with graceful fallback.
+    - Category filtering segments: `All`, `System Standard`, `My Templates`, `Shared with Me`.
+    - Live instant search input filtering by template name or text.
+    - Template Creator with Underlay/Overlay toggle, safe ColorPicker parsing, and interactive CAD visual preview canvas.
+    - Multi-page parallel dimension pre-querying (`Promise.all`), eliminating UI freezing on large PDFs.
+    - Integrated **Audit History (ประวัติการใช้งาน)** tab displaying real-time usage records from `tt_pdf_watermark_logs`.
+    - Enabled modal access from both initial landing view and active editor view.
+  - **5. Automated Unit Tests & Production Build Verification:**
+    - Expanded `PdfCommitEngine.test.js` with tests verifying underlay watermark layering and `{PAGE}` of `{TOTAL_PAGES}` dynamic tag resolution. 11/11 tests pass (100% PASS).
+    - Verified clean production build (`npm run build`) with exit code 0.
+    - Verified live rendering, category filtering, search, and audit history in browser subagent.
 
 - **PDF Hub: Protected / Encrypted PDF (Blank White Page) Resolution (2026-09-22):**
   - **Root Cause Analysis (`AS81934-C.pdf`):**

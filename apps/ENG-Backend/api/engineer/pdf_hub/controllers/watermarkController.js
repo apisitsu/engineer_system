@@ -39,8 +39,8 @@ function getRequesterInfo(req) {
  */
 async function getWatermarks(req, res) {
     try {
-        const { empno } = getRequesterInfo(req);
-        const data = await watermarkService.getWatermarks(empno);
+        const { empno, role } = getRequesterInfo(req);
+        const data = await watermarkService.getWatermarks(empno, role);
         res.json({ result: 'true', data });
     } catch (err) {
         console.error('pdfHub getWatermarks error:', err.message);

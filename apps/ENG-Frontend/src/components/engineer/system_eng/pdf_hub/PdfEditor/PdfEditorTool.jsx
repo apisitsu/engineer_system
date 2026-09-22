@@ -1166,6 +1166,22 @@ const PdfEditorTool = () => {
                     onClose={() => setDashboardOpen(false)} 
                 />
 
+                {/* ── Watermark Modal ── */}
+                <WatermarkManagerModal
+                    open={watermarkOpen}
+                    onClose={() => setWatermarkOpen(false)}
+                    pdfDoc={pdfDoc}
+                    pdfFile={pdfFile}
+                    totalPages={totalPages || 1}
+                    currentPage={currentPage || 1}
+                    fabricCanvasRefs={fabricCanvasRefs}
+                    pushHistory={pushHistory}
+                    logPdfUsage={logPdfUsage}
+                    pageAnnotations={pageAnnotations}
+                    setPageAnnotations={setPageAnnotations}
+                    zoom={zoom}
+                />
+
                 {DraftRecoveryModal}
                 {DocumentLoadingOverlay}
 

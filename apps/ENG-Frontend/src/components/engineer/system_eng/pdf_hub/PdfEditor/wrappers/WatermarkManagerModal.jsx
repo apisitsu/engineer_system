@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
     Modal, Form, Input, Button, List, Spin, Space, Popconfirm, Select, Slider,
     message, ColorPicker, Row, Col, Tooltip, InputNumber, Switch,
-    Segmented, Tag, Radio, Table, Empty
+    Segmented, Tag, Radio, Table, Empty, Card
 } from 'antd';
 import {
     DeleteOutlined, ShareAltOutlined, PlusOutlined, FormatPainterOutlined,
     EditOutlined, BoldOutlined, ItalicOutlined, BorderOuterOutlined,
     VerticalAlignTopOutlined, VerticalAlignBottomOutlined, VerticalAlignMiddleOutlined,
     ColumnHeightOutlined, ClearOutlined, SearchOutlined, HistoryOutlined,
-    SafetyCertificateOutlined, UserOutlined, TeamOutlined, CopyOutlined
+    CopyOutlined, ArrowLeftOutlined, CheckOutlined
 } from '@ant-design/icons';
 import * as fabric from 'fabric';
 import { useAuthStore } from '../../../../../../stores/authStore';
@@ -26,7 +26,7 @@ const FONT_OPTIONS = [
 
 const COLOR_PRESETS = [
     {
-        label: 'Corporate Standards',
+        label: 'Engineering Standards',
         colors: [
             '#D32F2F', '#C62828', '#B71C1C', '#F57C00', '#2E7D32', '#1976D2',
             '#0288D1', '#757575', '#000000', '#555555', '#9E9E9E', '#E91E63'
@@ -35,29 +35,33 @@ const COLOR_PRESETS = [
 ];
 
 const POSITION_PRESETS = [
-    { key: 'center', label: 'Center (กึ่งกลาง)', icon: <VerticalAlignMiddleOutlined /> },
-    { key: 'header', label: 'Header (หัวกระดาษ)', icon: <VerticalAlignTopOutlined /> },
-    { key: 'footer', label: 'Footer (ท้ายกระดาษ)', icon: <VerticalAlignBottomOutlined /> },
-    { key: 'diagonal', label: 'Diagonal (แนวทแยง)', icon: <ColumnHeightOutlined /> },
+    { key: 'center', label: 'Center', icon: <VerticalAlignMiddleOutlined /> },
+    { key: 'header', label: 'Header (Top)', icon: <VerticalAlignTopOutlined /> },
+    { key: 'footer', label: 'Footer (Bottom)', icon: <VerticalAlignBottomOutlined /> },
+    { key: 'diagonal', label: 'Diagonal', icon: <ColumnHeightOutlined /> },
+    { key: 'top-left', label: 'Top-Left' },
+    { key: 'top-right', label: 'Top-Right' },
+    { key: 'bottom-left', label: 'Bottom-Left' },
+    { key: 'bottom-right', label: 'Bottom-Right' },
 ];
 
 const PAGE_RANGE_OPTIONS = [
-    { value: 'all', label: 'All Pages (ทุกหน้า)' },
-    { value: 'current', label: 'Current Page (หน้านี้)' },
-    { value: 'custom', label: 'Custom Range (ระบุหน้า)' },
-    { value: 'odd', label: 'Odd Pages (หน้าคี่)' },
-    { value: 'even', label: 'Even Pages (หน้าคู่)' },
+    { value: 'all', label: 'All Pages' },
+    { value: 'current', label: 'Current Page' },
+    { value: 'custom', label: 'Custom Range' },
+    { value: 'odd', label: 'Odd Pages' },
+    { value: 'even', label: 'Even Pages' },
 ];
 
 const PLACEHOLDER_TAGS = [
-    { key: '{DATE}', label: 'Date (วันที่)', color: 'blue' },
-    { key: '{TIME}', label: 'Time (เวลา)', color: 'cyan' },
-    { key: '{USER}', label: 'User (ชื่อผู้ใช้)', color: 'green' },
-    { key: '{FILENAME}', label: 'Filename (ชื่อไฟล์)', color: 'orange' },
-    { key: '{PAGE}', label: 'Page # (เลขหน้า)', color: 'purple' },
-    { key: '{TOTAL_PAGES}', label: 'Total Pages (จำนวนหน้า)', color: 'magenta' },
-    { key: '{DEPT}', label: 'Dept (แผนก)', color: 'gold' },
-    { key: '{COMPANY}', label: 'Company (บริษัท)', color: 'geekblue' },
+    { key: '{DATE}', label: 'Date', color: 'blue' },
+    { key: '{TIME}', label: 'Time', color: 'cyan' },
+    { key: '{USER}', label: 'User', color: 'green' },
+    { key: '{FILENAME}', label: 'Filename', color: 'orange' },
+    { key: '{PAGE}', label: 'Page #', color: 'purple' },
+    { key: '{TOTAL_PAGES}', label: 'Total Pages', color: 'magenta' },
+    { key: '{DEPT}', label: 'Dept', color: 'gold' },
+    { key: '{COMPANY}', label: 'Company', color: 'geekblue' },
 ];
 
 /** Safe Color Parser */
@@ -69,7 +73,13 @@ function safeColorToHex(c, fallback = '#000000') {
     return fallback;
 }
 
-/** Replace dynamic placeholders in watermark text (client-side preview and non-page placeholders) */
+/** Clean Thai characters or parenthetical annotations from template name for clean international UI */
+function getDisplayName(name) {
+    if (!name) return '';
+    return String(name).replace(/\s*\([^)]*[\u0E00-\u0E7F]+[^)]*\)/g, '').trim();
+}
+
+/** Replace dynamic placeholders for client-side preview */
 function resolvePlaceholders(text, userName, pdfFileName, userDept) {
     if (!text) return '';
     const now = new Date();
@@ -101,9 +111,20 @@ function parsePageRange(rangeStr, totalPages) {
     return pages;
 }
 
-// ── Live Preview Component ──
-const WatermarkPreview = ({ formValues, pdfFileName, userName }) => {
+// ── Left Column: True-Aspect Paper Preview Component ──
+const RealisticPaperPreview = ({ formValues, pdfFileName, userName }) => {
     const canvasRef = useRef(null);
+    const [orientation, setOrientation] = useState('portrait'); // 'portrait' | 'landscape'
+
+    // Real A4 Aspect Ratios:
+    // Portrait: 210 x 297 mm -> Aspect 1 : 1.414 -> e.g. 270 x 382 px
+    // Landscape: 297 x 210 mm -> Aspect 1.414 : 1 -> e.g. 360 x 254 px
+    const previewDims = useMemo(() => {
+        if (orientation === 'portrait') {
+            return { width: 270, height: 382 };
+        }
+        return { width: 360, height: 254 };
+    }, [orientation]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -114,70 +135,107 @@ const WatermarkPreview = ({ formValues, pdfFileName, userName }) => {
 
         ctx.clearRect(0, 0, W, H);
 
-        // Draw page background
+        // 1. Draw crisp white paper sheet with subtle inner border
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, W, H);
 
-        // Draw subtle CAD grid
-        ctx.strokeStyle = '#f0f0f0';
-        ctx.lineWidth = 0.5;
-        for (let y = 0; y < H; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-        for (let x = 0; x < W; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+        // 2. Draw subtle CAD engineering grid
+        ctx.strokeStyle = '#f1f5f9';
+        ctx.lineWidth = 1;
+        const gridStep = 24;
+        for (let y = 0; y < H; y += gridStep) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+        for (let x = 0; x < W; x += gridStep) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
 
-        // Mock CAD lines to visualize Underlay vs Overlay
+        // Mock CAD Drawing details to show Underlay vs Overlay
         const isUnderlay = formValues?.layer === 'underlay';
-        const drawMockCad = () => {
+        const drawMockCadDrawing = () => {
             ctx.save();
-            ctx.strokeStyle = '#cfd8dc';
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(30, 30, W - 60, H - 60);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.2;
+            
+            // Outer drawing boundary & title block
+            const pad = 16;
+            ctx.strokeRect(pad, pad, W - pad * 2, H - pad * 2);
+            
+            // Title block box (bottom right)
+            const tbW = Math.min(125, W * 0.44);
+            const tbH = 32;
+            ctx.strokeRect(W - pad - tbW, H - pad - tbH, tbW, tbH);
+            ctx.fillStyle = '#64748b';
+            ctx.font = '7px sans-serif';
+            ctx.fillText('MINEBEAMITSUMI ENGINEERING', W - pad - tbW + 5, H - pad - tbH + 11);
+            ctx.fillText('DWG NO: B-70492-REV.C', W - pad - tbW + 5, H - pad - tbH + 22);
+
+            // Sample CAD mechanical part geometry in center
             ctx.beginPath();
-            ctx.moveTo(30, 30); ctx.lineTo(W - 30, H - 30);
-            ctx.moveTo(30, H - 30); ctx.lineTo(W - 30, 30);
+            ctx.arc(W / 2, H / 2, Math.min(W, H) * 0.22, 0, Math.PI * 2);
             ctx.stroke();
-            ctx.fillStyle = '#90a4ae';
-            ctx.font = '9px monospace';
-            ctx.fillText('SAMPLE CAD DRAWING / GEOMETRY', 40, 45);
-            ctx.fillText('Ø 25.40 ±0.05', W / 2, H / 2 - 20);
+
+            ctx.beginPath();
+            ctx.arc(W / 2, H / 2, Math.min(W, H) * 0.12, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Center crosshair
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(W / 2 - 50, H / 2); ctx.lineTo(W / 2 + 50, H / 2);
+            ctx.moveTo(W / 2, H / 2 - 50); ctx.lineTo(W / 2, H / 2 + 50);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Dimensions
+            ctx.fillStyle = '#475569';
+            ctx.font = '8px monospace';
+            ctx.fillText('Ø 42.00 ±0.02', W / 2 + 10, H / 2 - 30);
+            ctx.fillText('Ø 20.00 H7', W / 2 - 35, H / 2 + 40);
+
             ctx.restore();
         };
 
+        // If overlay, draw CAD first, watermark on top.
+        // If underlay, draw watermark first, CAD on top!
         if (!isUnderlay) {
-            drawMockCad();
+            drawMockCadDrawing();
         }
 
-        // Watermark text resolution
+        // Draw Watermark
         const rawText = formValues?.text || 'WATERMARK';
         const text = resolvePlaceholders(rawText, userName, pdfFileName)
             .replace(/\{PAGE\}/g, '1')
-            .replace(/\{TOTAL_PAGES\}/g, '10');
+            .replace(/\{TOTAL_PAGES\}/g, '12');
 
-        const color = safeColorToHex(formValues?.color, '#000000');
-        const opacity = formValues?.opacity ?? 0.3;
-        const fontSize = Math.max(7, Math.min((formValues?.font_size || 48) * 0.36, 36));
+        const color = safeColorToHex(formValues?.color, '#D32F2F');
+        const opacity = formValues?.opacity ?? 0.35;
+        // Proportionate font size for preview canvas
+        const baseFontSize = formValues?.font_size || 48;
+        const previewFontSize = Math.max(8, Math.min(baseFontSize * (W / 600), 50));
         const angle = -(formValues?.angle || 0) * Math.PI / 180;
         const fontFamily = formValues?.font_family || 'Helvetica';
         const fontWeight = formValues?.font_weight === 'bold' ? 'bold' : 'normal';
         const fontStyle = formValues?.font_style === 'italic' ? 'italic' : 'normal';
         const repeatMode = formValues?.repeat_mode || false;
         const repeatStyle = formValues?.repeat_style || 'full';
-        const repeatGap = Math.max(20, (formValues?.repeat_gap || 100) * 0.36);
+        const repeatGap = Math.max(20, (formValues?.repeat_gap || 100) * (W / 600));
 
         ctx.globalAlpha = opacity;
         ctx.fillStyle = color;
-        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}, sans-serif`;
+        ctx.font = `${fontStyle} ${fontWeight} ${previewFontSize}px ${fontFamily}, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
         if (repeatMode) {
             const textMetrics = ctx.measureText(text);
             const textW = textMetrics.width + repeatGap;
-            const textH = fontSize + repeatGap;
+            const textH = previewFontSize + repeatGap;
+            const diagonal = Math.sqrt(W * W + H * H);
 
             if (repeatStyle === 'line') {
-                for (let col = -5; col < Math.ceil(W / textW) + 5; col++) {
-                    const cx = col * textW + W / 2;
-                    const cy = H / 2;
+                const cols = Math.ceil(diagonal / textW) * 2 + 2;
+                for (let col = -cols / 2; col < cols / 2; col++) {
+                    const dist = col * textW;
+                    const cx = W / 2 + dist * Math.cos(angle);
+                    const cy = H / 2 + dist * Math.sin(angle);
                     ctx.save();
                     ctx.translate(cx, cy);
                     ctx.rotate(angle);
@@ -185,11 +243,12 @@ const WatermarkPreview = ({ formValues, pdfFileName, userName }) => {
                     ctx.restore();
                 }
             } else {
-                for (let row = -2; row < Math.ceil(H / textH) + 2; row++) {
-                    for (let col = -2; col < Math.ceil(W / textW) + 2; col++) {
+                for (let row = -2; row < Math.ceil(H / textH) + 3; row++) {
+                    for (let col = -2; col < Math.ceil(W / textW) + 3; col++) {
                         const offsetX = (row % 2 === 0) ? 0 : textW / 2;
                         const cx = col * textW + offsetX + textW / 2;
                         const cy = row * textH + textH / 2;
+
                         ctx.save();
                         ctx.translate(cx, cy);
                         ctx.rotate(angle);
@@ -200,9 +259,39 @@ const WatermarkPreview = ({ formValues, pdfFileName, userName }) => {
             }
         } else {
             const preset = formValues?.position_preset || 'center';
+            const unit = formValues?.margin_unit || 'cm';
+            const offsetVal = Number(formValues?.margin_offset ?? 1.5);
+            // Convert to cm: 1 inch = 2.54 cm
+            const offsetCm = unit === 'in' ? offsetVal * 2.54 : offsetVal;
+            // Canvas A4 dimensions in cm: Portrait is 21.0 x 29.7 cm; Landscape is 29.7 x 21.0 cm
+            const pageWcm = orientation === 'portrait' ? 21.0 : 29.7;
+            const pageHcm = orientation === 'portrait' ? 29.7 : 21.0;
+            const pxPerCmX = W / pageWcm;
+            const pxPerCmY = H / pageHcm;
+            const offX = offsetCm * pxPerCmX;
+            const offY = offsetCm * pxPerCmY;
+
             let cx = W / 2, cy = H / 2;
-            if (preset === 'header') cy = fontSize + 12;
-            else if (preset === 'footer') cy = H - fontSize - 12;
+            const textMetrics = ctx.measureText(text);
+            const textW = textMetrics.width;
+
+            if (preset === 'header') {
+                cy = Math.max(previewFontSize / 2 + 4, offY + previewFontSize / 2);
+            } else if (preset === 'footer') {
+                cy = Math.min(H - previewFontSize / 2 - 4, H - offY - previewFontSize / 2);
+            } else if (preset === 'top-left') {
+                cx = Math.max(textW / 2 + 4, offX + textW / 2);
+                cy = Math.max(previewFontSize / 2 + 4, offY + previewFontSize / 2);
+            } else if (preset === 'top-right') {
+                cx = Math.min(W - textW / 2 - 4, W - offX - textW / 2);
+                cy = Math.max(previewFontSize / 2 + 4, offY + previewFontSize / 2);
+            } else if (preset === 'bottom-left') {
+                cx = Math.max(textW / 2 + 4, offX + textW / 2);
+                cy = Math.min(H - previewFontSize / 2 - 4, H - offY - previewFontSize / 2);
+            } else if (preset === 'bottom-right') {
+                cx = Math.min(W - textW / 2 - 4, W - offX - textW / 2);
+                cy = Math.min(H - previewFontSize / 2 - 4, H - offY - previewFontSize / 2);
+            }
 
             ctx.save();
             ctx.translate(cx, cy);
@@ -214,33 +303,90 @@ const WatermarkPreview = ({ formValues, pdfFileName, userName }) => {
         ctx.globalAlpha = 1;
 
         if (isUnderlay) {
-            drawMockCad();
+            drawMockCadDrawing();
         }
-    }, [formValues, pdfFileName, userName]);
+    }, [formValues, pdfFileName, userName, previewDims, orientation]);
 
     return (
         <div style={{
-            border: '1px solid #d9d9d9',
-            borderRadius: 8,
-            overflow: 'hidden',
-            background: '#fafafa',
-            marginBottom: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: 10,
+            padding: '12px 14px',
+            height: 560,
+            minHeight: 560,
+            justifyContent: 'space-between'
         }}>
-            <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '6px 12px', borderBottom: '1px solid #f0f0f0', fontSize: 12, color: '#666', fontWeight: 500
-            }}>
-                <span><BorderOuterOutlined style={{ marginRight: 6 }} /> Live Visual Preview</span>
-                <Tag color={formValues?.layer === 'underlay' ? 'cyan' : 'blue'} style={{ margin: 0, fontSize: 10 }}>
-                    {formValues?.layer === 'underlay' ? 'LAYER: BACKGROUND (UNDERLAY)' : 'LAYER: FOREGROUND (OVERLAY)'}
-                </Tag>
+            {/* Header controls for preview */}
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
+                    <BorderOuterOutlined style={{ marginRight: 6, color: '#2563eb' }} />
+                    Live A4 Preview
+                </span>
+                <Segmented
+                    size="small"
+                    value={orientation}
+                    onChange={setOrientation}
+                    options={[
+                        { label: 'Portrait', value: 'portrait' },
+                        { label: 'Landscape', value: 'landscape' },
+                    ]}
+                />
             </div>
-            <canvas ref={canvasRef} width={340} height={180} style={{ display: 'block', width: '100%', height: 180 }} />
+
+            {/* Paper Sheet Simulation */}
+            <div style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                padding: '2px 0'
+            }}>
+                <div style={{
+                    background: '#ffffff',
+                    boxShadow: '0 8px 20px -4px rgba(0, 0, 0, 0.12), 0 6px 8px -4px rgba(0, 0, 0, 0.06)',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 4,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.25s ease',
+                }}>
+                    <canvas
+                        ref={canvasRef}
+                        width={previewDims.width}
+                        height={previewDims.height}
+                        style={{
+                            display: 'block',
+                            width: previewDims.width,
+                            height: previewDims.height,
+                        }}
+                    />
+                </div>
+            </div>
+
+            {/* Bottom preview metadata badges */}
+            <div style={{ width: '100%', marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Tag color={formValues?.layer === 'underlay' ? 'cyan' : 'purple'} style={{ margin: 0, fontWeight: 600, fontSize: 11 }}>
+                    {formValues?.layer === 'underlay' ? 'UNDERLAY' : 'OVERLAY'}
+                </Tag>
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                    {formValues?.font_family || 'Helvetica'} · {formValues?.font_size || 48}px · {formValues?.angle || 0}° · {Math.round((formValues?.opacity || 0.35) * 100)}%
+                    {formValues?.position_preset && formValues?.position_preset !== 'center' && formValues?.position_preset !== 'diagonal' && !formValues?.repeat_mode && (
+                        <> · Edge: {formValues?.margin_offset ?? 1.5}{formValues?.margin_unit || 'cm'}</>
+                    )}
+                </span>
+            </div>
         </div>
     );
 };
 
-// ── Main Component ──
+// ── Main WatermarkManagerModal Component ──
 const WatermarkManagerModal = ({
     open, onClose, fabricCanvasRefs, totalPages, pushHistory,
     pdfFile, currentPage, pdfDoc, pageAnnotations, setPageAnnotations,
@@ -254,18 +400,19 @@ const WatermarkManagerModal = ({
     const [watermarks, setWatermarks] = useState([]);
     const [loading, setLoading] = useState(false);
     const [viewMode, setViewMode] = useState('templates'); // 'templates' | 'history'
-    const [categoryFilter, setCategoryFilter] = useState('all'); // 'all' | 'system' | 'my' | 'shared'
+    const [categoryFilter, setCategoryFilter] = useState('my'); // Default to 'my' as requested
     const [searchQuery, setSearchQuery] = useState('');
 
     const [isCreate, setIsCreate] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [form] = Form.useForm();
 
-    // Live preview state
+    // Live preview state with margin support
     const [previewValues, setPreviewValues] = useState({
         text: '', opacity: 0.35, font_size: 48, angle: 45, color: '#D32F2F',
         repeat_mode: false, repeat_style: 'full', repeat_gap: 100, font_family: 'Helvetica',
         font_weight: 'bold', font_style: 'normal', position_preset: 'center',
+        margin_unit: 'cm', margin_offset: 1.50,
         layer: 'overlay', category: 'General'
     });
 
@@ -292,6 +439,7 @@ const WatermarkManagerModal = ({
             form.resetFields();
             setSearchQuery('');
             setViewMode('templates');
+            setCategoryFilter('my');
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
@@ -303,7 +451,6 @@ const WatermarkManagerModal = ({
             setWatermarks(Array.isArray(data) ? data : []);
         } catch (err) {
             console.warn('[WatermarkManager] fetch failed, fallback gracefully:', err.message);
-            // Non-blocking fallback: do not flood with red error toast
         } finally {
             setLoading(false);
         }
@@ -326,20 +473,31 @@ const WatermarkManagerModal = ({
         return watermarks.filter(wm => {
             // Category filter
             if (categoryFilter === 'system' && !wm.is_system) return false;
-            if (categoryFilter === 'my' && (wm.is_system || wm.owner_empno !== empNo)) return false;
+            if (categoryFilter === 'my' && (wm.is_system || (wm.owner_empno !== empNo && userRole !== 'AD'))) return false;
             if (categoryFilter === 'shared' && (wm.is_system || wm.owner_empno === empNo)) return false;
 
             // Search query filter
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase();
-                const matchName = wm.name?.toLowerCase().includes(q);
+                const displayName = getDisplayName(wm.name).toLowerCase();
+                const matchName = displayName.includes(q) || wm.name?.toLowerCase().includes(q);
                 const matchText = wm.text?.toLowerCase().includes(q);
                 const matchCat = wm.category?.toLowerCase().includes(q);
                 if (!matchName && !matchText && !matchCat) return false;
             }
             return true;
         });
-    }, [watermarks, categoryFilter, searchQuery, empNo]);
+    }, [watermarks, categoryFilter, searchQuery, empNo, userRole]);
+
+    // Counts for Category Tabs
+    const categoryCounts = useMemo(() => {
+        return {
+            my: watermarks.filter(w => !w.is_system && (w.owner_empno === empNo || userRole === 'AD')).length,
+            all: watermarks.length,
+            system: watermarks.filter(w => w.is_system).length,
+            shared: watermarks.filter(w => !w.is_system && w.owner_empno !== empNo).length,
+        };
+    }, [watermarks, empNo, userRole]);
 
     // Sync form changes to preview
     const updatePreview = useCallback(() => {
@@ -362,12 +520,14 @@ const WatermarkManagerModal = ({
                 font_weight: values.font_weight || 'normal',
                 font_style: values.font_style || 'normal',
                 position_preset: values.position_preset || 'center',
+                margin_unit: values.margin_unit || 'cm',
+                margin_offset: Number(values.margin_offset ?? 1.50),
                 repeat_mode: values.repeat_mode || false,
                 repeat_style: values.repeat_style || 'full',
                 repeat_gap: values.repeat_gap || 100,
                 layer: values.layer || 'overlay',
                 category: values.category || 'General',
-                is_public: values.is_public || false
+                is_public: true
             };
 
             if (editingId) {
@@ -426,7 +586,7 @@ const WatermarkManagerModal = ({
         form.resetFields();
         setTimeout(() => {
             form.setFieldsValue({
-                name: wm.name,
+                name: getDisplayName(wm.name),
                 text: wm.text,
                 color: wm.color,
                 opacity: wm.opacity,
@@ -439,9 +599,11 @@ const WatermarkManagerModal = ({
                 font_weight: wm.font_weight || 'normal',
                 font_style: wm.font_style || 'normal',
                 position_preset: wm.position_preset || 'center',
+                margin_unit: wm.margin_unit || 'cm',
+                margin_offset: Number(wm.margin_offset ?? 1.50),
                 layer: wm.layer || 'overlay',
                 category: wm.category || 'General',
-                is_public: wm.is_public || false
+                is_public: wm.is_public ?? true
             });
             updatePreview();
         }, 0);
@@ -453,7 +615,7 @@ const WatermarkManagerModal = ({
         form.resetFields();
         setTimeout(() => {
             form.setFieldsValue({
-                name: `${wm.name} (Copy)`,
+                name: `${getDisplayName(wm.name)} (Copy)`,
                 text: wm.text,
                 color: wm.color,
                 opacity: wm.opacity,
@@ -466,9 +628,11 @@ const WatermarkManagerModal = ({
                 font_weight: wm.font_weight || 'normal',
                 font_style: wm.font_style || 'normal',
                 position_preset: wm.position_preset || 'center',
+                margin_unit: wm.margin_unit || 'cm',
+                margin_offset: Number(wm.margin_offset ?? 1.50),
                 layer: wm.layer || 'overlay',
                 category: wm.category || 'General',
-                is_public: false
+                is_public: true
             });
             updatePreview();
         }, 0);
@@ -646,10 +810,31 @@ const WatermarkManagerModal = ({
                 let top = height / 2;
                 let angle = -(wm.angle || 0);
 
+                // Calculate edge distance in PDF points (1 inch = 72 pt, 1 cm = 28.3465 pt)
+                const unit = wm.margin_unit || 'cm';
+                const offsetVal = Number(wm.margin_offset ?? (unit === 'in' ? 0.6 : 1.5));
+                const ptsPerUnit = unit === 'in' ? 72 : 28.3465;
+                const offsetPts = offsetVal * ptsPerUnit * scale;
+
+                const halfTextW = (approxTextWidth / 2) * scale;
+                const halfTextH = (targetFontSize / 2) * scale;
+
                 if (preset === 'header') {
-                    top = (targetFontSize + 20) * scale;
+                    top = Math.max(halfTextH, offsetPts + halfTextH);
                 } else if (preset === 'footer') {
-                    top = height - ((targetFontSize + 20) * scale);
+                    top = Math.min(height - halfTextH, height - offsetPts - halfTextH);
+                } else if (preset === 'top-left') {
+                    left = Math.max(halfTextW, offsetPts + halfTextW);
+                    top = Math.max(halfTextH, offsetPts + halfTextH);
+                } else if (preset === 'top-right') {
+                    left = Math.min(width - halfTextW, width - offsetPts - halfTextW);
+                    top = Math.max(halfTextH, offsetPts + halfTextH);
+                } else if (preset === 'bottom-left') {
+                    left = Math.max(halfTextW, offsetPts + halfTextW);
+                    top = Math.min(height - halfTextH, height - offsetPts - halfTextH);
+                } else if (preset === 'bottom-right') {
+                    left = Math.min(width - halfTextW, width - offsetPts - halfTextW);
+                    top = Math.min(height - halfTextH, height - offsetPts - halfTextH);
                 } else if (preset === 'diagonal') {
                     angle = -45;
                 }
@@ -776,7 +961,7 @@ const WatermarkManagerModal = ({
         // Automatic Audit Logging
         watermarkApi.logWatermarkUsage({
             watermark_id: wm.id,
-            watermark_name: wm.name,
+            watermark_name: getDisplayName(wm.name),
             filename: pdfFile?.name || 'document.pdf',
             empno: empNo || 'GUEST',
             user_name: userName || 'Guest User'
@@ -787,94 +972,144 @@ const WatermarkManagerModal = ({
             : pageRangeMode === 'odd' ? 'odd pages'
             : pageRangeMode === 'even' ? 'even pages'
             : `pages: ${customPageRange}`;
-        message.success(`Applied "${wm.name}" to ${rangeLabel} (${targetPages.length} page${targetPages.length > 1 ? 's' : ''})`);
+        message.success(`Applied "${getDisplayName(wm.name)}" to ${rangeLabel} (${targetPages.length} page${targetPages.length > 1 ? 's' : ''})`);
         onClose();
     };
 
-    // ── Render ──
+    const isAdmin = userRole === 'AD';
+
+    // ── Render Modal ──
     return (
         <Modal
             title={
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <FormatPainterOutlined style={{ color: '#1677ff' }} />
-                    <span style={{ fontWeight: 600 }}>PDF Hub Watermark Manager</span>
-                    <Segmented
-                        size="small"
-                        value={viewMode}
-                        onChange={val => {
-                            setViewMode(val);
-                            if (val === 'history') loadHistoryData();
-                        }}
-                        options={[
-                            { label: 'Templates (เทมเพลต)', value: 'templates', icon: <FormatPainterOutlined /> },
-                            { label: 'Audit History (ประวัติการใช้งาน)', value: 'history', icon: <HistoryOutlined /> }
-                        ]}
-                    />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <FormatPainterOutlined style={{ color: '#2563eb', fontSize: 18 }} />
+                        <span style={{ fontWeight: 600, fontSize: 16 }}>PDF Hub Watermark Manager</span>
+                    </div>
+                    {isAdmin && (
+                        <Segmented
+                            size="middle"
+                            value={viewMode}
+                            onChange={val => {
+                                setViewMode(val);
+                                if (val === 'history') loadHistoryData();
+                            }}
+                            options={[
+                                { label: 'Templates Library', value: 'templates', icon: <FormatPainterOutlined /> },
+                                { label: 'Audit History', value: 'history', icon: <HistoryOutlined /> }
+                            ]}
+                        />
+                    )}
                 </div>
             }
             open={open}
             onCancel={onClose}
             footer={null}
-            width={780}
+            width={1160}
+            style={{ top: 20, maxWidth: '96vw' }}
+            styles={{
+                body: {
+                    padding: '16px 20px',
+                    maxHeight: isCreate ? 'calc(92vh - 50px)' : 'calc(90vh - 70px)',
+                    overflowY: isCreate ? 'hidden' : 'auto',
+                    overflowX: 'hidden'
+                }
+            }}
             destroyOnHidden
         >
             <Spin spinning={loading}>
                 {viewMode === 'templates' && (
                     <>
-                        {/* ════════ Template List View ════════ */}
-                        <div style={{ display: !isCreate ? 'block' : 'none' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                <Space>
-                                    <Input
-                                        placeholder="Search template name or text..."
-                                        prefix={<SearchOutlined style={{ color: '#aaa' }} />}
-                                        value={searchQuery}
-                                        onChange={e => setSearchQuery(e.target.value)}
-                                        style={{ width: 260 }}
-                                        allowClear
-                                    />
-                                    <Segmented
-                                        value={categoryFilter}
-                                        onChange={setCategoryFilter}
-                                        options={[
-                                            { label: `All (${watermarks.length})`, value: 'all' },
-                                            { label: `System (${watermarks.filter(w => w.is_system).length})`, value: 'system' },
-                                            { label: `My (${watermarks.filter(w => !w.is_system && w.owner_empno === empNo).length})`, value: 'my' },
-                                            { label: `Shared (${watermarks.filter(w => !w.is_system && w.owner_empno !== empNo).length})`, value: 'shared' }
-                                        ]}
-                                    />
-                                </Space>
-                                <Space>
-                                    <Popconfirm
-                                        title="Clear all watermarks from selected pages?"
-                                        onConfirm={handleClearWatermarks}
-                                        okText="Clear"
-                                        cancelText="Cancel"
-                                    >
-                                        <Button danger icon={<ClearOutlined />} size="middle">
-                                            Clear Watermarks
-                                        </Button>
-                                    </Popconfirm>
-                                    <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-                                        setIsCreate(true);
-                                        setEditingId(null);
-                                        form.resetFields();
-                                        updatePreview();
-                                    }}>
-                                        Create New
-                                    </Button>
-                                </Space>
-                            </div>
-
-                            {/* ── Page Range Selector ── */}
-                            <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fafafa', borderRadius: 8, border: '1px solid #f0f0f0' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                                    <div style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
-                                        📄 Apply to Pages:
+                        {/* ════════════════════════════════════════════════
+                            VIEW 1: TEMPLATE LIST & MANAGEMENT
+                            ════════════════════════════════════════════════ */}
+                        {!isCreate ? (
+                            <div style={{ overflowX: 'hidden' }}>
+                                {/* Row 1: Search, Categories & Action Icons (Strictly Single Row) */}
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 12,
+                                    marginBottom: 14,
+                                    flexWrap: 'nowrap'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                                        <Input
+                                            placeholder="Search template name or text..."
+                                            prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                                            value={searchQuery}
+                                            onChange={e => setSearchQuery(e.target.value)}
+                                            style={{ width: 230, borderRadius: 8 }}
+                                            allowClear
+                                        />
+                                        <Segmented
+                                            value={categoryFilter}
+                                            onChange={setCategoryFilter}
+                                            options={[
+                                                { label: `My (${categoryCounts.my})`, value: 'my' },
+                                                { label: `All (${categoryCounts.all})`, value: 'all' },
+                                                { label: `System (${categoryCounts.system})`, value: 'system' },
+                                                { label: `Shared (${categoryCounts.shared})`, value: 'shared' }
+                                            ]}
+                                        />
                                     </div>
-                                    <Space wrap>
-                                        <Radio.Group value={pageRangeMode} onChange={e => setPageRangeMode(e.target.value)} size="small" optionType="button" buttonStyle="solid">
-                                            {PAGE_RANGE_OPTIONS.map(o => <Radio.Button key={o.value} value={o.value}>{o.label}</Radio.Button>)}
+                                    <Space size={8} style={{ flexShrink: 0 }}>
+                                        <Tooltip title="Clear Watermarks from selected pages">
+                                            <Popconfirm
+                                                title="Clear watermarks from selected pages?"
+                                                onConfirm={handleClearWatermarks}
+                                                okText="Clear"
+                                                cancelText="Cancel"
+                                            >
+                                                <Button danger icon={<ClearOutlined />} style={{ borderRadius: 8 }} />
+                                            </Popconfirm>
+                                        </Tooltip>
+                                        <Tooltip title="Create New Watermark Template">
+                                            <Button
+                                                type="primary"
+                                                icon={<PlusOutlined />}
+                                                style={{ borderRadius: 8, background: '#2563eb' }}
+                                                onClick={() => {
+                                                    setIsCreate(true);
+                                                    setEditingId(null);
+                                                    form.resetFields();
+                                                    updatePreview();
+                                                }}
+                                            />
+                                        </Tooltip>
+                                    </Space>
+                                </div>
+
+                                {/* Row 2: Target Page Range (Compact Bar) */}
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '8px 14px',
+                                    background: '#f8fafc',
+                                    borderRadius: 8,
+                                    border: '1px solid #e2e8f0',
+                                    marginBottom: 16,
+                                    gap: 8
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#475569' }}>
+                                        <span>Target Pages:</span>
+                                    </div>
+                                    <Space size={8}>
+                                        <Radio.Group
+                                            value={pageRangeMode}
+                                            onChange={e => setPageRangeMode(e.target.value)}
+                                            size="small"
+                                            optionType="button"
+                                            buttonStyle="solid"
+                                        >
+                                            {PAGE_RANGE_OPTIONS.map(o => (
+                                                <Radio.Button key={o.value} value={o.value}>
+                                                    {o.label}
+                                                </Radio.Button>
+                                            ))}
                                         </Radio.Group>
                                         {pageRangeMode === 'custom' && (
                                             <Input
@@ -882,290 +1117,487 @@ const WatermarkManagerModal = ({
                                                 placeholder="e.g. 1, 3, 5-10"
                                                 value={customPageRange}
                                                 onChange={e => setCustomPageRange(e.target.value)}
-                                                style={{ width: 130 }}
+                                                style={{ width: 130, borderRadius: 4 }}
                                             />
                                         )}
                                     </Space>
                                 </div>
-                            </div>
 
-                            <List
-                                bordered
-                                dataSource={filteredWatermarks}
-                                style={{ maxHeight: 420, overflowY: 'auto' }}
-                                locale={{ emptyText: <Empty description="No matching watermark templates found" /> }}
-                                renderItem={(wm) => (
-                                    <List.Item
-                                        actions={[
-                                            <Tooltip title="Duplicate as new template" key="dup">
-                                                <Button type="text" icon={<CopyOutlined />} onClick={() => handleDuplicate(wm)} />
-                                            </Tooltip>,
-                                            (!wm.is_system && (wm.owner_empno === empNo || userRole === 'AD')) && (
-                                                <Tooltip title="Edit" key="edit">
-                                                    <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(wm)} />
-                                                </Tooltip>
-                                            ),
-                                            (!wm.is_system && wm.owner_empno === empNo) && (
-                                                <Tooltip title="Share" key="share">
-                                                    <Button type="text" icon={<ShareAltOutlined />} onClick={() => {
-                                                        setShareWmId(wm.id);
-                                                        setShareOpen(true);
-                                                    }} />
-                                                </Tooltip>
-                                            ),
-                                            (!wm.is_system && (wm.owner_empno === empNo || userRole === 'AD')) && (
-                                                <Popconfirm title="Delete watermark?" onConfirm={() => handleDelete(wm)} key="delete">
-                                                    <Button type="text" danger icon={<DeleteOutlined />} />
-                                                </Popconfirm>
-                                            )
-                                        ].filter(Boolean)}
-                                    >
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                                <strong style={{ fontSize: 13 }}>{wm.name}</strong>
-                                                {wm.is_system && (
-                                                    <Tag color="volcano" icon={<SafetyCertificateOutlined />} style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
-                                                        SYSTEM PRESET
-                                                    </Tag>
-                                                )}
-                                                {!wm.is_system && wm.owner_empno === empNo && (
-                                                    <Tag color="blue" icon={<UserOutlined />} style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
-                                                        MINE
-                                                    </Tag>
-                                                )}
-                                                {!wm.is_system && wm.owner_empno !== empNo && (
-                                                    <Tag color="green" icon={<TeamOutlined />} style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
-                                                        SHARED
-                                                    </Tag>
-                                                )}
-                                                {wm.layer === 'underlay' ? (
-                                                    <Tag color="cyan" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>UNDERLAY</Tag>
-                                                ) : (
-                                                    <Tag color="default" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>OVERLAY</Tag>
-                                                )}
-                                                {wm.repeat_mode && <Tag color="purple" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>TILE</Tag>}
-                                            </div>
-                                            <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>
-                                                Text: "{wm.text}" · {wm.font_family || 'Helvetica'} {wm.font_size}px · {wm.angle}° · {Math.round((wm.opacity || 0.3) * 100)}%
-                                            </div>
-                                            <Space style={{ marginTop: 2 }}>
-                                                <Button size="small" type="primary" onClick={() => applyWatermark(wm)}>
-                                                    Apply Watermark
-                                                </Button>
-                                            </Space>
-                                        </div>
-                                    </List.Item>
-                                )}
-                            />
-                        </div>
-
-                        {/* ════════ Create / Edit Form View ════════ */}
-                        <div style={{ display: isCreate ? 'block' : 'none' }}>
-                            <WatermarkPreview formValues={previewValues} pdfFileName={pdfFile?.name} userName={userName} />
-
-                            <Form
-                                form={form}
-                                layout="vertical"
-                                onFinish={handleSave}
-                                onValuesChange={() => updatePreview()}
-                                initialValues={{
-                                    opacity: 0.35, font_size: 48, angle: 45, color: '#D32F2F',
-                                    repeat_mode: false, repeat_style: 'full', repeat_gap: 100, font_family: 'Helvetica',
-                                    font_weight: 'bold', font_style: 'normal', position_preset: 'center',
-                                    layer: 'overlay', category: 'General', is_public: false
-                                }}
-                            >
-                                {/* ── Row 1: Name & Layer ── */}
-                                <Row gutter={16}>
-                                    <Col span={14}>
-                                        <Form.Item name="name" label="Template Name" rules={[{ required: true, message: 'Please enter template name' }]}>
-                                            <Input placeholder="e.g. CONFIDENTIAL DRAWING" />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={10}>
-                                        <Form.Item name="layer" label="Watermark Layer (ลำดับชั้น)">
-                                            <Segmented
-                                                block
-                                                options={[
-                                                    { value: 'underlay', label: 'Underlay (ใต้แบบ)' },
-                                                    { value: 'overlay', label: 'Overlay (ทับบน)' }
-                                                ]}
+                                {/* Template Cards List */}
+                                <List
+                                    grid={{ gutter: 12, xs: 1, sm: 1, md: 2, lg: 2, xl: 2, xxl: 2 }}
+                                    dataSource={filteredWatermarks}
+                                    style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 }}
+                                    locale={{
+                                        emptyText: (
+                                            <Empty
+                                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                                description="No matching watermark templates found."
                                             />
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-
-                                {/* ── Row 2: Watermark Text + Placeholders ── */}
-                                <Form.Item label="Watermark Text" required style={{ marginBottom: 8 }}>
-                                    <Form.Item name="text" noStyle rules={[{ required: true, message: 'Please enter watermark text' }]}>
-                                        <Input.TextArea placeholder="e.g. CONFIDENTIAL - FOR INTERNAL USE ONLY" autoSize={{ minRows: 2, maxRows: 3 }} />
-                                    </Form.Item>
-                                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                                        <span style={{ fontSize: 11, color: '#888', marginRight: 4 }}>Insert Tag:</span>
-                                        {PLACEHOLDER_TAGS.map(p => (
-                                            <Tag
-                                                key={p.key}
-                                                color={p.color}
-                                                style={{ cursor: 'pointer', fontSize: 11, margin: '2px 0' }}
-                                                onClick={() => insertPlaceholder(p.key)}
+                                        )
+                                    }}
+                                    renderItem={(wm) => (
+                                        <List.Item style={{ marginBottom: 12 }}>
+                                            <Card
+                                                size="small"
+                                                hoverable
+                                                style={{
+                                                    borderRadius: 10,
+                                                    border: '1px solid #e2e8f0',
+                                                    height: '100%',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    justifyContent: 'space-between',
+                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                                                }}
+                                                styles={{ body: { padding: '12px 14px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' } }}
                                             >
-                                                {p.label}
-                                            </Tag>
-                                        ))}
-                                    </div>
-                                </Form.Item>
-
-                                {/* ── Row 3: Color + Font Family + Style ── */}
-                                <Row gutter={16}>
-                                    <Col span={8}>
-                                        <Form.Item name="color" label="Color">
-                                            <ColorPicker format="hex" showText presets={COLOR_PRESETS} />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={8}>
-                                        <Form.Item name="font_family" label="Font Family">
-                                            <Select options={FONT_OPTIONS} />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={8}>
-                                        <Form.Item label="Style">
-                                            <Space>
-                                                <Form.Item name="font_weight" noStyle>
-                                                    <Segmented
-                                                        options={[
-                                                            { value: 'normal', icon: <span style={{ fontWeight: 400 }}>N</span> },
-                                                            { value: 'bold', icon: <BoldOutlined /> },
-                                                        ]}
-                                                    />
-                                                </Form.Item>
-                                                <Form.Item name="font_style" noStyle>
-                                                    <Segmented
-                                                        options={[
-                                                            { value: 'normal', icon: <span>R</span> },
-                                                            { value: 'italic', icon: <ItalicOutlined /> },
-                                                        ]}
-                                                    />
-                                                </Form.Item>
-                                            </Space>
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-
-                                {/* ── Row 4: Opacity + Font Size ── */}
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item label="Opacity (ความโปร่งใส)">
-                                            <Space style={{ width: '100%' }}>
-                                                <Form.Item name="opacity" noStyle>
-                                                    <Slider min={0.05} max={1} step={0.05} style={{ flex: 1, minWidth: 120 }} />
-                                                </Form.Item>
-                                                <Form.Item name="opacity" noStyle>
-                                                    <InputNumber min={0.05} max={1} step={0.05} style={{ width: 68 }} />
-                                                </Form.Item>
-                                            </Space>
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item label="Font Size (ขนาดตัวอักษร)">
-                                            <Space style={{ width: '100%' }}>
-                                                <Form.Item name="font_size" noStyle>
-                                                    <Slider min={8} max={200} style={{ flex: 1, minWidth: 120 }} />
-                                                </Form.Item>
-                                                <Form.Item name="font_size" noStyle>
-                                                    <InputNumber min={8} max={200} style={{ width: 68 }} />
-                                                </Form.Item>
-                                            </Space>
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-
-                                {/* ── Row 5: Angle ── */}
-                                <Form.Item label="Angle (มุมเอียง)">
-                                    <Space style={{ width: '100%' }}>
-                                        <Form.Item name="angle" noStyle>
-                                            <Slider min={-90} max={90} marks={{ '-45': '-45°', 0: '0°', 45: '45°' }} style={{ flex: 1, minWidth: 260 }} />
-                                        </Form.Item>
-                                        <Form.Item name="angle" noStyle>
-                                            <InputNumber min={-90} max={90} style={{ width: 68 }} addonAfter="°" />
-                                        </Form.Item>
-                                    </Space>
-                                </Form.Item>
-
-                                {/* ── Row 6: Tile / Repeat Mode ── */}
-                                <div style={{ padding: '10px 14px', background: '#fafafa', borderRadius: 8, border: '1px solid #f0f0f0', marginBottom: 16 }}>
-                                    <Row gutter={16} align="middle">
-                                        <Col span={12}>
-                                            <Form.Item name="repeat_mode" label="Tile (Repeat) Mode" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                                <Switch checkedChildren="ON" unCheckedChildren="OFF" />
-                                            </Form.Item>
-                                        </Col>
-                                        <Col span={12}>
-                                            <Form.Item noStyle shouldUpdate={(prev, cur) => prev.repeat_mode !== cur.repeat_mode}>
-                                                {({ getFieldValue }) => getFieldValue('repeat_mode') ? (
-                                                    <Space direction="vertical" style={{ width: '100%' }}>
-                                                        <Form.Item name="repeat_style" style={{ marginBottom: 0 }}>
-                                                            <Segmented options={[
-                                                                { label: 'Full Page', value: 'full' },
-                                                                { label: 'Single Line', value: 'line' }
-                                                            ]} block />
-                                                        </Form.Item>
-                                                        <Form.Item name="repeat_gap" label="Gap (px)" style={{ marginBottom: 0 }}>
-                                                            <InputNumber min={10} max={500} step={10} style={{ width: '100%' }} />
-                                                        </Form.Item>
-                                                    </Space>
-                                                ) : null}
-                                            </Form.Item>
-                                        </Col>
-                                    </Row>
-                                </div>
-
-                                {/* ── Row 7: Position Presets ── */}
-                                <Form.Item noStyle shouldUpdate={(prev, cur) => prev.repeat_mode !== cur.repeat_mode}>
-                                    {({ getFieldValue }) => !getFieldValue('repeat_mode') ? (
-                                        <Form.Item name="position_preset" label="Position Preset">
-                                            <Segmented
-                                                options={POSITION_PRESETS.map(p => ({
-                                                    value: p.key,
-                                                    label: (
-                                                        <Space size={4}>
-                                                            {p.icon}
-                                                            <span>{p.label}</span>
+                                                <div>
+                                                    {/* Header: Title & Badges */}
+                                                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                            <div style={{ width: 12, height: 12, borderRadius: '50%', background: wm.color, flexShrink: 0, border: '1px solid #cbd5e1' }} />
+                                                            <strong style={{ fontSize: 13, color: '#1e293b' }}>{getDisplayName(wm.name)}</strong>
+                                                        </div>
+                                                        <Space size={4} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                            {wm.is_system && (
+                                                                <Tag color="volcano" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px', margin: 0 }}>
+                                                                    SYSTEM
+                                                                </Tag>
+                                                            )}
+                                                            {!wm.is_system && wm.owner_empno === empNo && (
+                                                                <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px', margin: 0 }}>
+                                                                    MINE
+                                                                </Tag>
+                                                            )}
+                                                            {!wm.is_system && wm.owner_empno !== empNo && (
+                                                                <Tag color="green" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px', margin: 0 }}>
+                                                                    SHARED
+                                                                </Tag>
+                                                            )}
+                                                            {wm.layer === 'underlay' ? (
+                                                                <Tag color="cyan" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px', margin: 0 }}>UNDERLAY</Tag>
+                                                            ) : (
+                                                                <Tag color="default" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px', margin: 0 }}>OVERLAY</Tag>
+                                                            )}
+                                                            {wm.repeat_mode && <Tag color="purple" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px', margin: 0 }}>TILE</Tag>}
                                                         </Space>
-                                                    ),
-                                                }))}
-                                            />
-                                        </Form.Item>
-                                    ) : null}
-                                </Form.Item>
+                                                    </div>
 
-                                {/* ── Actions ── */}
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-                                    <Button onClick={() => {
-                                        setIsCreate(false);
-                                        setEditingId(null);
-                                    }}>Cancel</Button>
-                                    <Button type="primary" htmlType="submit">
-                                        {editingId ? 'Update Template' : 'Save Template'}
+                                                    {/* Watermark Text Content */}
+                                                    <div style={{
+                                                        background: '#f8fafc',
+                                                        border: '1px dashed #cbd5e1',
+                                                        borderRadius: 6,
+                                                        padding: '6px 10px',
+                                                        fontSize: 12,
+                                                        color: '#334155',
+                                                        fontWeight: 500,
+                                                        marginBottom: 8,
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis'
+                                                    }}>
+                                                        "{wm.text}"
+                                                    </div>
+
+                                                    {/* Attributes info */}
+                                                    <div style={{ color: '#64748b', fontSize: 11, marginBottom: 10 }}>
+                                                        {wm.font_family || 'Helvetica'} · {wm.font_size}px · {wm.angle}° · {Math.round((wm.opacity || 0.35) * 100)}%
+                                                        {wm.position_preset && wm.position_preset !== 'center' && wm.position_preset !== 'diagonal' && !wm.repeat_mode && (
+                                                            <> · Edge: {wm.margin_offset ?? 1.5}{wm.margin_unit || 'cm'}</>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Action Toolbar */}
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
+                                                    <Button
+                                                        type="primary"
+                                                        size="small"
+                                                        icon={<CheckOutlined />}
+                                                        style={{ borderRadius: 6, background: '#2563eb' }}
+                                                        onClick={() => applyWatermark(wm)}
+                                                    >
+                                                        Apply to PDF
+                                                    </Button>
+
+                                                    <Space size={4}>
+                                                        <Tooltip title="Duplicate as new template">
+                                                            <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => handleDuplicate(wm)} />
+                                                        </Tooltip>
+                                                        {(!wm.is_system && (wm.owner_empno === empNo || userRole === 'AD')) && (
+                                                            <Tooltip title="Edit template">
+                                                                <Button size="small" type="text" icon={<EditOutlined />} onClick={() => handleEdit(wm)} />
+                                                            </Tooltip>
+                                                        )}
+                                                        {(!wm.is_system && wm.owner_empno === empNo) && (
+                                                            <Tooltip title="Share template">
+                                                                <Button size="small" type="text" icon={<ShareAltOutlined />} onClick={() => {
+                                                                    setShareWmId(wm.id);
+                                                                    setShareOpen(true);
+                                                                }} />
+                                                            </Tooltip>
+                                                        )}
+                                                        {(!wm.is_system && (wm.owner_empno === empNo || userRole === 'AD')) && (
+                                                            <Popconfirm title="Delete watermark?" onConfirm={() => handleDelete(wm)}>
+                                                                <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                                                            </Popconfirm>
+                                                        )}
+                                                    </Space>
+                                                </div>
+                                            </Card>
+                                        </List.Item>
+                                    )}
+                                />
+                            </div>
+                        ) : (
+                            /* ════════════════════════════════════════════════
+                                VIEW 2: TWO-COLUMN DESIGNER & PREVIEW PANE
+                                Left: True A4 Aspect Preview | Right: Controls
+                                ════════════════════════════════════════════════ */
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                                    <Button
+                                        icon={<ArrowLeftOutlined />}
+                                        onClick={() => {
+                                            setIsCreate(false);
+                                            setEditingId(null);
+                                        }}
+                                        style={{ borderRadius: 8 }}
+                                    >
+                                        Back to Templates
                                     </Button>
+                                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1e293b' }}>
+                                        {editingId ? 'Edit Watermark Template' : 'Create New Watermark Template'}
+                                    </span>
+                                    <div style={{ width: 120 }} />
                                 </div>
-                            </Form>
-                        </div>
+
+                                <Row gutter={20} align="top">
+                                    {/* ── LEFT COLUMN: REALISTIC PAPER PREVIEW ── */}
+                                    <Col xs={24} md={9} lg={9}>
+                                        <RealisticPaperPreview
+                                            formValues={previewValues}
+                                            pdfFileName={pdfFile?.name}
+                                            userName={userName}
+                                        />
+                                    </Col>
+
+                                    {/* ── RIGHT COLUMN: SETTINGS FORM ── */}
+                                    <Col xs={24} md={15} lg={15}>
+                                        <div style={{
+                                            background: '#ffffff',
+                                            border: '1px solid #e2e8f0',
+                                            borderRadius: 10,
+                                            padding: '16px 20px',
+                                            height: 560,
+                                            maxHeight: 560,
+                                            overflowY: 'auto'
+                                        }}>
+                                            <Form
+                                                form={form}
+                                                layout="vertical"
+                                                onFinish={handleSave}
+                                                onValuesChange={() => updatePreview()}
+                                                initialValues={{
+                                                    opacity: 0.35, font_size: 48, angle: 45, color: '#D32F2F',
+                                                    repeat_mode: false, repeat_style: 'full', repeat_gap: 100, font_family: 'Helvetica',
+                                                    font_weight: 'bold', font_style: 'normal', position_preset: 'center',
+                                                    margin_unit: 'cm', margin_offset: 1.50,
+                                                    layer: 'overlay', category: 'General', is_public: true
+                                                }}
+                                            >
+                                                {/* 1. Name & Layer */}
+                                                <Row gutter={12}>
+                                                    <Col span={14}>
+                                                        <Form.Item
+                                                            name="name"
+                                                            label={<span style={{ fontSize: 12, fontWeight: 600 }}>Template Name</span>}
+                                                            rules={[{ required: true, message: 'Please enter template name' }]}
+                                                            style={{ marginBottom: 12 }}
+                                                        >
+                                                            <Input placeholder="e.g. CONFIDENTIAL PRODUCTION" style={{ borderRadius: 6 }} />
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col span={10}>
+                                                        <Form.Item
+                                                            name="layer"
+                                                            label={<span style={{ fontSize: 12, fontWeight: 600 }}>Layer</span>}
+                                                            style={{ marginBottom: 12 }}
+                                                        >
+                                                            <Tooltip title="Underlay = Behind CAD geometry (never obscures lines) | Overlay = On top of drawing">
+                                                                <Radio.Group buttonStyle="solid" style={{ display: 'flex', width: '100%' }}>
+                                                                    <Radio.Button value="underlay" style={{ flex: 1, textAlign: 'center', fontSize: 12 }}>Underlay</Radio.Button>
+                                                                    <Radio.Button value="overlay" style={{ flex: 1, textAlign: 'center', fontSize: 12 }}>Overlay</Radio.Button>
+                                                                </Radio.Group>
+                                                            </Tooltip>
+                                                        </Form.Item>
+                                                    </Col>
+                                                </Row>
+
+                                                {/* 2. Text & Placeholders */}
+                                                <Form.Item
+                                                    label={<span style={{ fontSize: 12, fontWeight: 600 }}>Watermark Text</span>}
+                                                    required
+                                                    style={{ marginBottom: 12 }}
+                                                >
+                                                    <Form.Item name="text" noStyle rules={[{ required: true, message: 'Please enter watermark text' }]}>
+                                                        <Input.TextArea
+                                                            placeholder="e.g. CONFIDENTIAL - DO NOT COPY"
+                                                            autoSize={{ minRows: 2, maxRows: 3 }}
+                                                            style={{ borderRadius: 6 }}
+                                                        />
+                                                    </Form.Item>
+                                                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                                                        <span style={{ fontSize: 11, color: '#64748b', marginRight: 4 }}>Quick Tags:</span>
+                                                        {PLACEHOLDER_TAGS.map(p => (
+                                                            <Tag
+                                                                key={p.key}
+                                                                color={p.color}
+                                                                style={{ cursor: 'pointer', fontSize: 11, margin: '2px 0', borderRadius: 4 }}
+                                                                onClick={() => insertPlaceholder(p.key)}
+                                                            >
+                                                                {p.label}
+                                                            </Tag>
+                                                        ))}
+                                                    </div>
+                                                </Form.Item>
+
+                                                {/* 3. Typography & Appearance */}
+                                                <Row gutter={12} align="middle">
+                                                    <Col span={7}>
+                                                        <Form.Item name="color" label={<span style={{ fontSize: 12, fontWeight: 600 }}>Color</span>} style={{ marginBottom: 12 }}>
+                                                            <ColorPicker format="hex" showText presets={COLOR_PRESETS} />
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col span={10}>
+                                                        <Form.Item name="font_family" label={<span style={{ fontSize: 12, fontWeight: 600 }}>Font Family</span>} style={{ marginBottom: 12 }}>
+                                                            <Select options={FONT_OPTIONS} style={{ borderRadius: 6 }} />
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col span={7}>
+                                                        <Form.Item label={<span style={{ fontSize: 12, fontWeight: 600 }}>Font Style</span>} style={{ marginBottom: 12 }}>
+                                                            <div style={{ display: 'flex', gap: 6 }}>
+                                                                <Form.Item name="font_weight" noStyle>
+                                                                    <Segmented
+                                                                        size="small"
+                                                                        options={[
+                                                                            { value: 'normal', label: 'Regular' },
+                                                                            { value: 'bold', label: <BoldOutlined /> },
+                                                                        ]}
+                                                                    />
+                                                                </Form.Item>
+                                                                <Form.Item name="font_style" noStyle>
+                                                                    <Segmented
+                                                                        size="small"
+                                                                        options={[
+                                                                            { value: 'normal', label: 'Upright' },
+                                                                            { value: 'italic', label: <ItalicOutlined /> },
+                                                                        ]}
+                                                                    />
+                                                                </Form.Item>
+                                                            </div>
+                                                        </Form.Item>
+                                                    </Col>
+                                                </Row>
+
+                                                {/* 4. Font Size & Opacity */}
+                                                <Row gutter={12}>
+                                                    <Col span={12}>
+                                                        <Form.Item label={<span style={{ fontSize: 12, fontWeight: 600 }}>Font Size</span>} style={{ marginBottom: 12 }}>
+                                                            <Row gutter={8} align="middle">
+                                                                <Col flex="1">
+                                                                    <Form.Item name="font_size" noStyle>
+                                                                        <Slider min={8} max={200} />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                                <Col flex="68px">
+                                                                    <Form.Item name="font_size" noStyle>
+                                                                        <InputNumber min={8} max={200} style={{ width: 68 }} addonAfter="px" />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                            </Row>
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col span={12}>
+                                                        <Form.Item label={<span style={{ fontSize: 12, fontWeight: 600 }}>Opacity</span>} style={{ marginBottom: 12 }}>
+                                                            <Row gutter={8} align="middle">
+                                                                <Col flex="1">
+                                                                    <Form.Item name="opacity" noStyle>
+                                                                        <Slider min={0.05} max={1} step={0.05} />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                                <Col flex="64px">
+                                                                    <Form.Item name="opacity" noStyle>
+                                                                        <InputNumber min={0.05} max={1} step={0.05} style={{ width: 64 }} />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                            </Row>
+                                                        </Form.Item>
+                                                    </Col>
+                                                </Row>
+
+                                                {/* 5. Angle */}
+                                                <Form.Item label={<span style={{ fontSize: 12, fontWeight: 600 }}>Angle</span>} style={{ marginBottom: 12 }}>
+                                                    <Row gutter={8} align="middle">
+                                                        <Col flex="1">
+                                                            <Form.Item name="angle" noStyle>
+                                                                <Slider min={-90} max={90} marks={{ '-45': '-45°', 0: '0°', 45: '45°' }} />
+                                                            </Form.Item>
+                                                        </Col>
+                                                        <Col flex="72px">
+                                                            <Form.Item name="angle" noStyle>
+                                                                <InputNumber min={-90} max={90} style={{ width: 72 }} addonAfter="°" />
+                                                            </Form.Item>
+                                                        </Col>
+                                                    </Row>
+                                                </Form.Item>
+
+                                                {/* 6. Position Preset & Margin from Paper Edge */}
+                                                <Form.Item noStyle shouldUpdate={(prev, cur) => prev.repeat_mode !== cur.repeat_mode || prev.position_preset !== cur.position_preset || prev.margin_unit !== cur.margin_unit}>
+                                                    {({ getFieldValue }) => {
+                                                        const isRepeat = getFieldValue('repeat_mode');
+                                                        if (isRepeat) return null;
+                                                        const currentPreset = getFieldValue('position_preset') || 'center';
+                                                        const hasEdgeMargin = currentPreset !== 'center' && currentPreset !== 'diagonal';
+                                                        const unit = getFieldValue('margin_unit') || 'cm';
+
+                                                        return (
+                                                            <div style={{
+                                                                padding: '10px 12px',
+                                                                background: '#f8fafc',
+                                                                borderRadius: 8,
+                                                                border: '1px solid #e2e8f0',
+                                                                marginBottom: 12
+                                                            }}>
+                                                                <Row gutter={12} align="middle">
+                                                                    <Col span={hasEdgeMargin ? 13 : 24}>
+                                                                        <Form.Item
+                                                                            name="position_preset"
+                                                                            label={<span style={{ fontSize: 12, fontWeight: 600 }}>Position Preset</span>}
+                                                                            style={{ marginBottom: 0 }}
+                                                                        >
+                                                                            <Select
+                                                                                style={{ width: '100%' }}
+                                                                                options={POSITION_PRESETS.map(p => ({
+                                                                                    value: p.key,
+                                                                                    label: (
+                                                                                        <Space size={6}>
+                                                                                            {p.icon}
+                                                                                            <span>{p.label}</span>
+                                                                                        </Space>
+                                                                                    )
+                                                                                }))}
+                                                                            />
+                                                                        </Form.Item>
+                                                                    </Col>
+                                                                    {hasEdgeMargin && (
+                                                                        <Col span={11}>
+                                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                                <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                                                                                    Edge Distance
+                                                                                </span>
+                                                                                <Space.Compact style={{ width: '100%' }}>
+                                                                                    <Form.Item name="margin_offset" noStyle>
+                                                                                        <InputNumber
+                                                                                            min={0}
+                                                                                            max={unit === 'in' ? 4 : 10}
+                                                                                            step={unit === 'in' ? 0.05 : 0.1}
+                                                                                            style={{ flex: 1 }}
+                                                                                        />
+                                                                                    </Form.Item>
+                                                                                    <Form.Item name="margin_unit" noStyle>
+                                                                                        <Select
+                                                                                            style={{ width: 70 }}
+                                                                                            options={[
+                                                                                                { value: 'cm', label: 'cm' },
+                                                                                                { value: 'in', label: 'inch' }
+                                                                                            ]}
+                                                                                        />
+                                                                                    </Form.Item>
+                                                                                </Space.Compact>
+                                                                            </div>
+                                                                        </Col>
+                                                                    )}
+                                                                </Row>
+                                                            </div>
+                                                        );
+                                                    }}
+                                                </Form.Item>
+
+                                                {/* 7. Tile (Repeat Mode) */}
+                                                <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 14 }}>
+                                                    <Row gutter={12} align="middle">
+                                                        <Col span={10}>
+                                                            <Form.Item name="repeat_mode" label={<span style={{ fontSize: 12, fontWeight: 600 }}>Tile Mode (Repeat)</span>} valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                                <Switch checkedChildren="ON" unCheckedChildren="OFF" />
+                              </Form.Item>
+                                                        </Col>
+                                                        <Col span={14}>
+                                                            <Form.Item noStyle shouldUpdate={(prev, cur) => prev.repeat_mode !== cur.repeat_mode}>
+                                                                {({ getFieldValue }) => getFieldValue('repeat_mode') ? (
+                                                                    <Row gutter={8}>
+                                                                        <Col span={12}>
+                                                                            <Form.Item name="repeat_style" style={{ marginBottom: 0 }}>
+                                                                                <Segmented options={[
+                                                                                    { label: 'Full Page', value: 'full' },
+                                                                                    { label: 'Line', value: 'line' }
+                                                                                ]} block size="small" />
+                                                                            </Form.Item>
+                                                                        </Col>
+                                                                        <Col span={12}>
+                                                                            <Form.Item name="repeat_gap" style={{ marginBottom: 0 }}>
+                                                                                <InputNumber min={10} max={500} step={10} addonBefore="Gap" style={{ width: '100%' }} size="small" />
+                                                                            </Form.Item>
+                                                                        </Col>
+                                                                    </Row>
+                                                                ) : null}
+                                                            </Form.Item>
+                                                        </Col>
+                                                    </Row>
+                                                </div>
+
+                                                {/* Form Footer Action Buttons */}
+                                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
+                                                    <Button onClick={() => {
+                                                        setIsCreate(false);
+                                                        setEditingId(null);
+                                                    }} style={{ borderRadius: 6 }}>
+                                                        Cancel
+                                                    </Button>
+                                                    <Button type="primary" htmlType="submit" style={{ borderRadius: 6, background: '#2563eb' }}>
+                                                        {editingId ? 'Update Template' : 'Save Template'}
+                                                    </Button>
+                                                </div>
+                                            </Form>
+                                        </div>
+                                    </Col>
+                                </Row>
+                            </div>
+                        )}
                     </>
                 )}
 
-                {/* ════════ Audit History View ════════ */}
+                {/* ════════════════════════════════════════════════
+                    VIEW 3: AUDIT HISTORY RECORDS
+                    ════════════════════════════════════════════════ */}
                 {viewMode === 'history' && (
                     <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                            <span style={{ color: '#666', fontSize: 13 }}>Recent watermark application audit records</span>
-                            <Button size="small" onClick={loadHistoryData} loading={historyLoading}>Refresh History</Button>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                            <span style={{ color: '#475569', fontSize: 13 }}>
+                                Historical audit trail of watermark applications across all documents.
+                            </span>
+                            <Button size="small" onClick={loadHistoryData} loading={historyLoading} style={{ borderRadius: 6 }}>
+                                Refresh History
+                            </Button>
                         </div>
                         <Table
                             size="small"
                             loading={historyLoading}
                             dataSource={historyLogs}
                             rowKey="id"
-                            pagination={{ pageSize: 8 }}
+                            pagination={{ pageSize: 8, showSizeChanger: false }}
                             columns={[
                                 { title: 'File Name', dataIndex: 'filename', key: 'filename', ellipsis: true },
                                 { title: 'Watermark', dataIndex: 'watermark_name', key: 'watermark_name', render: text => <Tag color="blue">{text}</Tag> },

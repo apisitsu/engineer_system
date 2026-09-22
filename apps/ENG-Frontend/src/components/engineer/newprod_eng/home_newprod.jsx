@@ -45,7 +45,7 @@ const HomeNewProd = () => {
       icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
       path: '/eng/html-to-pdf',
       category: 'Utilities',
-      status: 'Active',
+      status: 'Deactive',
       tags: ['PDF', 'HTML', 'Converter'],
       restricted: true
     },
