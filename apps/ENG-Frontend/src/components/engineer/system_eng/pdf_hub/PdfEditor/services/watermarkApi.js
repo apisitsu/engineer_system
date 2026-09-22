@@ -1,11 +1,14 @@
 import axios from 'axios';
 import { server } from '../../../../../../constance/constance';
 
-const getHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
+const getHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 export async function fetchWatermarks() {
     const res = await axios.get(server.PDF_WATERMARKS, { headers: getHeaders() });
-    return res.data?.data;
+    return res.data?.data || [];
 }
 
 export async function createWatermark(payload) {
@@ -19,7 +22,8 @@ export async function updateWatermark(id, payload) {
 }
 
 export async function deleteWatermark(id, empNo) {
-    await axios.delete(`${server.PDF_WATERMARKS}/${id}?empno=${empNo}`, { headers: getHeaders() });
+    const query = empNo ? `?empno=${encodeURIComponent(empNo)}` : '';
+    await axios.delete(`${server.PDF_WATERMARKS}/${id}${query}`, { headers: getHeaders() });
 }
 
 export async function shareWatermark(id, targetEmpno) {
@@ -27,10 +31,14 @@ export async function shareWatermark(id, targetEmpno) {
 }
 
 export async function logWatermarkUsage(payload) {
-    await axios.post(server.PDF_WATERMARK_LOG, payload, { headers: getHeaders() });
+    try {
+        await axios.post(server.PDF_WATERMARK_LOG, payload, { headers: getHeaders() });
+    } catch (e) {
+        console.warn('[watermarkApi] Failed to log watermark usage:', e.message);
+    }
 }
 
 export async function fetchWatermarkHistory() {
     const res = await axios.get(server.PDF_WATERMARK_HISTORY, { headers: getHeaders() });
-    return res.data?.data;
+    return res.data?.data || [];
 }

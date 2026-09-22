@@ -90,7 +90,8 @@ export const process = createMenu([
 
 export const newprod = createMenu([
     { label: "Home", path: "/eng/newprod_eng" },
-    { label: "HTML to PDF", path: "/eng/html-to-pdf" },
+    { label: "DOC Management", path: "/eng/newprod_eng/documents" },
+    // { label: "HTML to PDF", path: "/eng/html-to-pdf" },
 ]);
 
 export const mtc = createMenu([

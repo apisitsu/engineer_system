@@ -329,7 +329,6 @@ const PdfEditorTool = () => {
         // ── Reset all states (like a full reload) ──
         store.setActiveMode('view');
         store.setViewMode('continuous');
-        setZoom(1.0);
         store.clearSelection();
         store.setOverlayEnabled(false);
         setOverlayPdfDoc(null);
@@ -1129,8 +1128,14 @@ const PdfEditorTool = () => {
                     </div>
 
                     <Segmented
-                        value={store.activeMode}
-                        onChange={(val) => store.setActiveMode(val)}
+                        value={store.activeMode === 'watermark' ? 'view' : store.activeMode}
+                        onChange={(val) => {
+                            if (val === 'watermark') {
+                                setWatermarkOpen(true);
+                                return;
+                            }
+                            store.setActiveMode(val);
+                        }}
                         options={MODE_OPTIONS.map(m => ({
                             value: m.value,
                             label: (
@@ -1159,6 +1164,22 @@ const PdfEditorTool = () => {
                 <PdfUsageDashboard 
                     open={dashboardOpen} 
                     onClose={() => setDashboardOpen(false)} 
+                />
+
+                {/* ── Watermark Modal ── */}
+                <WatermarkManagerModal
+                    open={watermarkOpen}
+                    onClose={() => setWatermarkOpen(false)}
+                    pdfDoc={pdfDoc}
+                    pdfFile={pdfFile}
+                    totalPages={totalPages || 1}
+                    currentPage={currentPage || 1}
+                    fabricCanvasRefs={fabricCanvasRefs}
+                    pushHistory={pushHistory}
+                    logPdfUsage={logPdfUsage}
+                    pageAnnotations={pageAnnotations}
+                    setPageAnnotations={setPageAnnotations}
+                    zoom={zoom}
                 />
 
                 {DraftRecoveryModal}
@@ -1383,6 +1404,7 @@ const PdfEditorTool = () => {
                 logPdfUsage={logPdfUsage}
                 pageAnnotations={pageAnnotations}
                 setPageAnnotations={setPageAnnotations}
+                zoom={zoom}
             />
         </div>
     );

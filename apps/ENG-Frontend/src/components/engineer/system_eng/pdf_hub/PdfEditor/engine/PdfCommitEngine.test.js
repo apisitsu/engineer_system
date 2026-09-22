@@ -142,6 +142,189 @@ describe('PdfCommitEngine', () => {
             expect(page.getWidth()).toBe(400);
             expect(page.getHeight()).toBe(600);
         });
+
+        it('should efficiently handle 100+ tiled watermark text objects using document font caching', async () => {
+            // Generate 120 tiled watermark objects to simulate full-page repeat mode
+            const tiledObjects = [];
+            for (let i = 0; i < 120; i++) {
+                tiledObjects.push({
+                    type: 'text',
+                    text: 'CONFIDENTIAL 2026-09-21',
+                    left: (i % 10) * 80,
+                    top: Math.floor(i / 10) * 60,
+                    fontSize: 24,
+                    fill: '#ff0000',
+                    opacity: 0.15,
+                    angle: -45,
+                    originX: 'center',
+                    originY: 'center',
+                    customData: { type: 'watermark', tiled: true }
+                });
+            }
+
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 800,
+                    _canvasHeight: 720,
+                    objects: tiledObjects
+                }
+            };
+
+            const startTime = Date.now();
+            const resultBytes = await commitAllToPdf(mockPdfBytes, pageAnnotations);
+            const elapsed = Date.now() - startTime;
+
+            expect(resultBytes).toBeInstanceOf(Uint8Array);
+            expect(elapsed).toBeLessThan(5000); // Must be fast via font cache (<5s)
+
+            const verifiedDoc = await PDFDocument.load(resultBytes);
+            expect(verifiedDoc.getPageCount()).toBe(1);
+        });
+
+        it('should safely guard against NaN or undefined coordinates and dimensions', async () => {
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 0, // Zero or invalid canvas dimension
+                    _canvasHeight: 0,
+                    objects: [
+                        {
+                            type: 'text',
+                            text: 'CORRUPTED COORDS',
+                            left: NaN,
+                            top: undefined,
+                            fontSize: NaN,
+                            originX: 'center',
+                            fill: { r: 255, g: 0, b: 0 } // Object instead of hex string
+                        },
+                        {
+                            type: 'Rect',
+                            left: undefined,
+                            top: NaN,
+                            width: NaN,
+                            height: undefined,
+                            fill: '#0000ff'
+                        }
+                    ]
+                }
+            };
+
+            // Must NOT throw or corrupt the PDF stream
+            const resultBytes = await commitAllToPdf(mockPdfBytes, pageAnnotations);
+            expect(resultBytes).toBeInstanceOf(Uint8Array);
+
+            // Output PDF must load cleanly without syntax errors
+            const cleanDoc = await PDFDocument.load(resultBytes);
+            expect(cleanDoc.getPageCount()).toBe(1);
+        });
+
+        it('should consistently commit watermarks across multi-page documents with different aspect ratios', async () => {
+            const multiDoc = await PDFDocument.create();
+            multiDoc.addPage([595.28, 841.89]); // Page 1: Portrait A4
+            multiDoc.addPage([841.89, 595.28]); // Page 2: Landscape A4
+            const multiPdfBytes = await multiDoc.save();
+
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 803.6, // Rendered on screen at zoom 1.35
+                    _canvasHeight: 1136.5,
+                    objects: [
+                        {
+                            type: 'text',
+                            text: 'INTERNAL ONLY',
+                            left: 401.8,
+                            top: 568.25,
+                            fontSize: 48, // Unscaled 48pt font matching Shape Properties & Watermark Manager
+                            scaleX: 1.35, // Visual scale carried on canvas
+                            scaleY: 1.35,
+                            originX: 'center',
+                            originY: 'center',
+                            fill: '#000000',
+                            customData: { type: 'watermark' }
+                        }
+                    ]
+                },
+                '2': {
+                    _canvasWidth: 841.89, // Unrendered page (unzoomed landscape)
+                    _canvasHeight: 595.28,
+                    objects: [
+                        {
+                            type: 'text',
+                            text: 'INTERNAL ONLY',
+                            width: 300,
+                            height: 57.6,
+                            left: 420.945,
+                            top: 297.64,
+                            fontSize: 48, // 48 on unzoomed canvas
+                            originX: 'center',
+                            originY: 'center',
+                            fill: '#000000',
+                            customData: { type: 'watermark' }
+                        }
+                    ]
+                }
+            };
+
+            const resultBytes = await commitAllToPdf(multiPdfBytes, pageAnnotations);
+            expect(resultBytes).toBeInstanceOf(Uint8Array);
+
+            const verifiedDoc = await PDFDocument.load(resultBytes);
+            expect(verifiedDoc.getPageCount()).toBe(2);
+            expect(verifiedDoc.getPage(0).getWidth()).toBeCloseTo(595.28, 1);
+            expect(verifiedDoc.getPage(1).getWidth()).toBeCloseTo(841.89, 1);
+        });
+
+        it('should correctly commit underlay watermarks and resolve dynamic {PAGE} of {TOTAL_PAGES} tags', async () => {
+            const doc = await PDFDocument.create();
+            doc.addPage([595.28, 841.89]);
+            doc.addPage([595.28, 841.89]);
+            const twoPageBytes = await doc.save();
+
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 595.28,
+                    _canvasHeight: 841.89,
+                    objects: [
+                        {
+                            type: 'text',
+                            text: 'Page {PAGE} of {TOTAL_PAGES}',
+                            left: 297.64,
+                            top: 820,
+                            fontSize: 12,
+                            fill: '#000000',
+                            customData: { type: 'watermark', layer: 'underlay' }
+                        },
+                        {
+                            type: 'Rect',
+                            left: 100,
+                            top: 100,
+                            width: 200,
+                            height: 100,
+                            fill: '#00ff00'
+                        }
+                    ]
+                },
+                '2': {
+                    _canvasWidth: 595.28,
+                    _canvasHeight: 841.89,
+                    objects: [
+                        {
+                            type: 'text',
+                            text: 'Page {PAGE} of {TOTAL_PAGES}',
+                            left: 297.64,
+                            top: 820,
+                            fontSize: 12,
+                            fill: '#000000',
+                            customData: { type: 'watermark', layer: 'underlay' }
+                        }
+                    ]
+                }
+            };
+
+            const committedBytes = await commitAllToPdf(twoPageBytes, pageAnnotations);
+            expect(committedBytes).toBeInstanceOf(Uint8Array);
+            const verified = await PDFDocument.load(committedBytes);
+            expect(verified.getPageCount()).toBe(2);
+        });
     });
 
     describe('wrapTextToWidth', () => {

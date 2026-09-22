@@ -4,8 +4,165 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-18
-- **Active Goal:** ECNT V2 Enterprise Platform: Production readiness, multi-persona real-world testing, and live deployment verification.
+- **Last Update:** 2026-09-22
+- **Active Goal:** PDF Hub Watermark Manager Complete UX/UI Redesign Deployed (Two-Column Designer with True A4 Live Preview, Non-Overflowing Header & 2-Column Card Grid); 11 Historical User Watermarks Recovered & Harmonized; Protected/Encrypted Document Auto-Unlock & Blank Page Elimination Full Resolution; DMS auto-numbering system deployed.
+
+- **PDF Hub: Watermark Manager UX/UI Redesign & Template Recovery (2026-09-22):**
+  - **1. UI/UX Clutter & Component Overflow Elimination (`WatermarkManagerModal.jsx`):**
+    - Expanded modal width to `1160px` (`maxWidth: '96vw'`).
+    - Aligned search input, category segmented filter (`My` default, `All`, `System`, `Shared`), `Clear Watermarks` icon button, and `+ Create New` icon button onto a single, non-wrapping row.
+    - Set `overflowX: 'hidden'` on the template grid, removing inner horizontal scrollbars.
+    - Replaced the cramped vertical list with a **2-Column Responsive Card Grid** with clear status and layer tags (`SYSTEM`, `MINE`, `SHARED`, `UNDERLAY`, `OVERLAY`).
+    - Audit History restricted to Admin (`role === 'AD'`) only. 100% English interface with zero Thai characters.
+  - **2. Realistic Paper Live Visual Preview (`RealisticPaperPreview`):**
+    - Pinned firmly in place on the left column (`height: 520px`, `position: 'sticky'`), never scrolling away when scrolling settings.
+    - Sized to exact ISO A4 aspect ratios: Portrait `255 × 360 px` (1 : 1.414) and Landscape `360 × 255 px` (1.414 : 1), fitting comfortably without vertical or horizontal scrollbars.
+  - **3. Independent Form Scrolling & Typography Refinement:**
+    - Right settings card has independent vertical scroll (`overflowY: 'auto'`) with generous bottom padding (`24px`), ensuring action buttons (`Cancel` and `Update Template`) are 100% visible and never clipped.
+    - Widened `Font Size` numeric input to `100px` (addon `"px"` fully readable, no squishing or clipping).
+    - Reorganized Typography row into balanced 3 columns: `Color` (7 cols), `Font Family` (10 cols), and `Font Style` (7 cols, clean `B` and `I` icon toggle buttons).
+  - **2. Realistic Paper Live Visual Preview (`RealisticPaperPreview`):**
+    - Eliminated canvas horizontal stretching/squishing (which previously distorted CAD lines).
+    - Enforced strict ISO A4 aspect ratios: Portrait `1 : 1.414` (270×382px) and Landscape `1.414 : 1` (360×254px).
+    - Added orientation switcher (`Portrait` / `Landscape`), crisp drop shadow, simulated CAD drawing geometry, and underlay vs overlay visualization.
+  - **3. Two-Column Designer Layout:**
+    - **Left Column (40% width)**: Houses the realistic A4 paper canvas and orientation switcher.
+    - **Right Column (60% width)**: Houses structured settings for Template Name, Layer toggle (solid button style), Watermark Text with 8 Quick Tags, Typography palette, wide responsive Sliders (Font Size, Opacity, Angle), and Position / Tile repeat mode.
+  - **4. Recovery and Adaptation of Historical User Watermarks (`tt_pdf_watermarks`, `watermarkService.js`):**
+    - Located all 11 user-created watermark templates in PostgreSQL database (`Uncontrol 2`, `DWG Draft`, `WM02`, `FT01`, `WM_01`, `1`, `DODO_1`, `Sample for ZIP`, etc.).
+    - Root cause: previous migration set `is_public` defaulting to `false`, filtering them out when querying from other accounts.
+    - Updated all 11 records to `is_public = true` and updated `getWatermarks` query in `watermarkService.js` to return all public + owned + shared watermarks. Total accessible: **19 (8 System + 11 User)**.
+  - **5. Automated Unit Tests & Production Build:**
+    - `PdfCommitEngine.test.js`: 11/11 tests pass (100% PASS in 1.70s).
+    - `npm run build`: Exit code 0 (Compiled successfully). Verified live in browser subagent.
+
+- **PDF Hub: Watermark System Full Spectrum Resolution & Enterprise Upgrades (2026-09-22):**
+  - **Root Cause Analysis of "Failed to load watermarks":**
+    - The backend global auth middleware in `server.js` was enforcing `verifyToken` on all `/api` routes by default.
+    - `GET /api/engineer/pdf-hub/watermarks` was missing from the `optionalVerifyToken` whitelist. Unauthenticated visitors, guest users, or expired JWT tokens were blocked with `HTTP 401 Unauthorized`, causing `WatermarkManagerModal.jsx` to throw the red toast error `"Failed to load watermarks"`.
+    - In `WatermarkManagerModal.jsx`, `useEffect` had guard `if (open && empNo)`, preventing the template list from loading if `empNo` was empty.
+  - **1. Backend Auth Whitelist & Endpoint Hardening (`server.js`, `watermarkController.js`, `watermarkService.js`):**
+    - Whitelisted `GET /api/engineer/pdf-hub/watermarks`, `GET /api/engineer/pdf-hub/watermark-history`, `GET /api/engineer/pdf-hub/stamps`, `POST /api/engineer/pdf-hub/unlock`, `POST /api/engineer/pdf-hub/repair`, and `POST /api/engineer/pdf-hub/watermark-log` with `optionalVerifyToken` in `server.js`.
+    - Upgraded `watermarkController.js` and `watermarkService.js` to extract user identity safely via `req.user` or decoded token with fallback to `GUEST`.
+    - Protected system presets (`is_system = true`) from unauthorized edits or deletion, while granting Admin (`role === 'AD'`) management rights.
+  - **2. Database Schema Upgrade & Enterprise System Presets (`20260922_upgrade_pdf_watermarks.js`):**
+    - Added columns `is_system`, `is_public`, `layer` (`underlay` vs `overlay`), and `category` with B-tree indexes on `tt_pdf_watermarks`.
+    - Pre-seeded 8 standard enterprise engineering templates:
+      - `CONFIDENTIAL (เอกสารลับ)` — Red `#D32F2F`, 45°, center, opacity 0.32
+      - `FOR REFERENCE ONLY (สำหรับอ้างอิง)` — Amber `#F57C00`, 45°, center, opacity 0.38, Underlay
+      - `APPROVED FOR PRODUCTION (อนุมัติเพื่อการผลิต)` — Green `#2E7D32`, 0°, footer, opacity 0.85
+      - `SAMPLE ONLY (ชิ้นงานตัวอย่าง)` — Blue `#1976D2`, 45°, center, opacity 0.35, Underlay
+      - `DRAFT / PRELIMINARY (แบบร่าง)` — Gray `#757575`, 45°, diagonal, opacity 0.28, Underlay
+      - `CONTROLLED COPY (สำเนาควบคุม)` — Blue `#0288D1`, 0°, header, opacity 0.85
+      - `SUPERSEDED / OBSOLETE (ยกเลิก / แทนที่แล้ว)` — Dark Red `#B71C1C`, 45°, center, opacity 0.45
+      - `DO NOT DUPLICATE (ห้ามทำซ้ำ - Tiled)` — Crimson `#C62828`, 45°, tiled repeat, opacity 0.14, Underlay
+  - **3. Underlay Watermark Layering & Dynamic Tags Engine (`commitEngine.js`, `commitHelpers.js`):**
+    - Partitioned page annotations into `underlayObjects` (background layer) and `normalAndOverlayObjects` (foreground layer).
+    - Underlay watermarks are committed first, ensuring that CAD dimensions, part geometry, and critical inspection notes are not obscured.
+    - Expanded dynamic tag replacements: added `{PAGE}` (current page #), `{TOTAL_PAGES}` (total pages), `{DEPT}` (department), and `{COMPANY}` (`MinebeaMitsumi`) resolved dynamically on export.
+  - **4. Frontend UI/UX & Audit History Integration (`WatermarkManagerModal.jsx`, `watermarkApi.js`, `PdfEditorTool.jsx`):**
+    - Unconditional fetch on modal open with graceful fallback.
+    - Category filtering segments: `All`, `System Standard`, `My Templates`, `Shared with Me`.
+    - Live instant search input filtering by template name or text.
+    - Template Creator with Underlay/Overlay toggle, safe ColorPicker parsing, and interactive CAD visual preview canvas.
+    - Multi-page parallel dimension pre-querying (`Promise.all`), eliminating UI freezing on large PDFs.
+    - Integrated **Audit History (ประวัติการใช้งาน)** tab displaying real-time usage records from `tt_pdf_watermark_logs`.
+    - Enabled modal access from both initial landing view and active editor view.
+  - **5. Automated Unit Tests & Production Build Verification:**
+    - Expanded `PdfCommitEngine.test.js` with tests verifying underlay watermark layering and `{PAGE}` of `{TOTAL_PAGES}` dynamic tag resolution. 11/11 tests pass (100% PASS).
+    - Verified clean production build (`npm run build`) with exit code 0.
+    - Verified live rendering, category filtering, search, and audit history in browser subagent.
+
+- **PDF Hub: Protected / Encrypted PDF (Blank White Page) Resolution (2026-09-22):**
+  - **Root Cause Analysis (`AS81934-C.pdf`):**
+    - `AS81934-C.pdf` is standard aerospace engineering documentation protected with PDF Standard Security (V=1, R=2, 40-bit RC4 permissions protection with empty user password).
+    - In `PDF.js` (`pdfjs-dist`), the document rendered normally because `pdfjs-dist` decrypts Standard Security internally for canvas display.
+    - However, `pdf-lib` does not decrypt stream objects when loaded with `{ ignoreEncryption: true }`. All 18 pages of content streams remained encrypted RC4 ciphertext in memory.
+    - When committing watermarks and calling `doc.save()`, `pdf-lib` dropped `/Encrypt` from the trailer. External PDF readers (Chrome, Adobe Acrobat, Edge) attempted to decompress the ciphertext as Flate streams, throwing `FormatError: Unknown compression method in flate stream` and failing to render the page graphics/text, presenting a completely blank / white page.
+  - **1. Backend Service & Python Unlocker Enhancement (`pdf_unlocker.py`, `pdfToolsService.js`, `server.js`):**
+    - Upgraded `pdf_unlocker.py` to use `writer.clone_document_from_reader(reader)`, preserving outlines/bookmarks, metadata, and form fields while completely decrypting pages into standard unencrypted PDF.
+    - Updated `safeUnlink` in `pdfToolsService.js` to guard with `filePath.includes(os.tmpdir())`, preventing accidental deletion of workspace files.
+    - Whitelisted `/api/engineer/pdf-hub/unlock` and `/api/engineer/pdf-hub/repair` with `optionalVerifyToken` in `server.js` so guests, expired token sessions, and cross-origin calls are never blocked with HTTP 401.
+  - **2. Client-Side Pre-Unlock Pipeline (`usePdfDocument.js`):**
+    - Added automatic encrypted PDF detection (`isEncrypted = testDoc.isEncrypted` with `/Encrypt` trailer scanner fallback) in both `loadPdf` and `loadPdfFromBytes`.
+    - Automatically sends encrypted files to `/api/engineer/pdf-hub/unlock` before rendering, updating `pdfBytes` to the decrypted byte stream and ensuring all downstream operations (Canvas, Watermarking, Auto-save drafts, Export) execute on 100% clean data.
+  - **3. Commit Engine Defensive Auto-Unlock (`commitEngine.js`):**
+    - Added secondary defensive tier in `commitAllToPdf`: if `doc.isEncrypted` is detected on `pdfBytes` at commit time, it automatically decrypts via the backend unlock API before overlaying annotations.
+  - **4. Unit Tests & Production Build Verification:**
+    - Added comprehensive regression test in `PdfCommitEngine.test.js` validating that `AS81934-C.pdf` is auto-detected, unlocked, and committed without stream errors (11/11 tests pass in 5.04s).
+    - Verified clean production build (`npm run build`) with exit code 0.
+
+- **PDF Hub: Watermark Engine & Auto-Save Draft Resumption Stability (2026-09-21):**
+  - **1. Watermark Failure & Font Loading Optimization (`commitHelpers.js`, `commitEngine.js`):**
+    - **Document Font Caching:** Implemented `doc._fontCache = doc._fontCache || new Map()` ensuring fonts are embedded once per document rather than 600+ times during tiled repeat mode, eliminating memory exhaustion, fontkit subset crashes, and cdn.jsdelivr.net network timeouts.
+    - **Instant Standard Font Embedding:** Updated `getFont(doc, family, weight, style, sampleText)` to check for non-ASCII characters. Pure ASCII text embeds standard PDF fonts (Helvetica, Times, Courier) in 0ms with zero network requests. Unicode/Thai falls back to local `/fonts/sarabun/tahoma.ttf`.
+    - **NaN Coordinate & Dimension Sanitizer:** Introduced `safeNum(val, fallback)` preventing `NaN` and `undefined` values from polluting PDF operator streams (`NaN Tf`, `NaN NaN Td`), which caused PDF corruption ("Failed to load PDF document").
+    - **Defensive Hex Color Parsing:** Upgraded `hexToRgb` to safely extract hex values from Ant Design ColorPicker objects without throwing `.startsWith is not a function`.
+    - **Object Streams Compatibility:** Added `useObjectStreams: false` on `doc.save()` for universal PDF reader compatibility, and `throwOnInvalidObject: false` on `PDFDocument.load()` to open non-standard/malformed PDFs.
+  - **2. Page Font Size Discrepancy & Scaling Synchronization (`WatermarkManagerModal.jsx`, `PdfEditorTool.jsx`):**
+    - **Root Cause:** Active page canvas had `fc.width = baseW * zoom`. Watermark was added with `fontSize = wm.font_size`, which `commitEngine` divided by `zoom` (shrinking Page 1 in PDF). Unrendered pages had no canvas, falling back to unzoomed A4 (`595.28 x 841.89`), committing at full size. On screen, navigating to page 2 multiplied it by `zoom` again, creating wild discrepancies.
+    - **Resolution:**
+      - Preserved base font size `fontSize: wm.font_size` (e.g. 48) so Shape Properties and Watermark Manager display the exact same number, carrying visual canvas zoom via `scaleX: currentZoom` and `scaleY: currentZoom`.
+      - On unrendered pages, set unzoomed dimensions and explicit `width: approxTextWidth` and `height: approxTextHeight`.
+      - Added "Clear Watermarks" button with `<Popconfirm>` allowing 1-click removal of watermark objects across selected pages.
+      - In `ShapesPanel.jsx`, bound Font Size input to `store.selectedObjectProps?.fontSize ?? currentSettings.fontSize` with `max={200}`.
+  - **3. Auto-Save Draft Page 1 Shrinking & Coordinate Shift (`usePdfDocument.js`, `PdfEditorTool.jsx`, `EditorCanvas.jsx`):**
+    - **Root Cause:** `handleFileUpload` called `setZoom(1.0)` and `usePdfDocument.js` wrapped `setZoom(fitZoom)` in `requestAnimationFrame`. When resuming a draft, Page 1 mounted at `zoom = 1.0` while `pageAnnotations[1]._canvasWidth` was saved at `fitZoom` (e.g. 840px). Fabric's `loadFromJSON` scaled Page 1 annotations down by `595 / 840 = 0.70`, shifting them towards (0,0) before `requestAnimationFrame` could update the zoom.
+    - **Resolution:**
+      - Removed `setZoom(1.0)` wipe from `handleFileUpload` in `PdfEditorTool.jsx`.
+      - In `usePdfDocument.js` (`loadPdf` and `loadPdfFromBytes`), computed `fitZoom` immediately and called `setZoom(fitZoom)` synchronously before resolving.
+      - In `EditorCanvas.jsx`, added `!isLoadingJsonRef.current` guard in `initCanvasSizeAndRender` to prevent scaling objects during rehydration, and synchronized `_canvasWidth` and `_canvasHeight` to `canvasSize` upon completion.
+  - **4. Unit Tests & Production Build Verification:**
+    - Expanded `PdfCommitEngine.test.js` with 10 comprehensive tests covering tiled watermark stress (120 objects in <50ms), NaN coordinate resilience, and multi-page portrait/landscape watermarks. 100% PASS.
+    - Verified clean production build (`npm run build`) with exit code 0.
+
+- **New Product Engineering: Centralized Document Control & Auto-Numbering System (2026-09-21):**
+  - **1. Database Schema & Concurrency Lock (`dms_document_types`, `dms_documents`):**
+    - Created relational tables in PostgreSQL (`engPool` on port 6543) with row-level transaction locking (`SELECT ... FOR UPDATE`) in `documentService.js` guaranteeing zero race conditions or duplicate document numbers during parallel requests.
+    - Added indexes: `idx_dms_docs_no`, `idx_dms_docs_type`, `idx_dms_docs_prefix`, `idx_dms_docs_category`, `idx_dms_docs_part`, `idx_dms_docs_title`, `idx_dms_docs_deleted`.
+    - Added user audit tracking: `created_by`, `created_at`, `updated_by`, `updated_at`, `deleted_by`, `deleted_at`.
+  - **2. Full Excel Migration (86 Documents) & Admin Munk Attribution:**
+    - Built and executed `apps/ENG-Backend/db_migrations/20260921_create_dms_tables_and_migrate.js` importing all 86 historical documents from `DOCUMENTS.xlsx` across 5 sheets:
+      - `PID`: 2 documents (`PID-000001` - `PID-000002`, max #2)
+      - `PDR`: 10 documents (`PDR-000001` - `PDR-000010`, max #10)
+      - `PFD`: 25 documents (`PFD-00001` - `PFD-00025`, max #25)
+      - `PFMEA`: 25 documents (`PFMEA-00001` - `PFMEA-00025`, max #25)
+      - `CP` (Control Plan): 24 documents (`CP-00001` - `CP-00024`, max #24)
+    - Updated `created_by` for all 86 existing migrated documents to Admin Munk's employee code (`admin`).
+    - Captured and preserved Aras Innovator PLM URLs (`Link_Innovator`) and Sequence Numbers (`Seq No.`).
+  - **3. User-Specified Numbering Scheme (6-Digit `000000-999999` then `A00000-ZZZZZZ`):**
+    - Implemented formatting and reverse parsing algorithm:
+      - Numbers 0 to 999,999: formatted as zero-padded 6-digit decimal (e.g. `CP-000025`).
+      - Numbers >= 1,000,000: seamlessly transitions to alphanumeric base-36 `A00000` through `ZZZZZZ` (supporting up to 1.57+ billion documents per prefix).
+  - **4. Backend Architecture & Routing (`apps/ENG-Backend`):**
+    - `documentConstants.js`, `documentService.js`, `documentController.js`, and `documentRoutes.js`.
+    - Registered at `/api/engineer/new_prod/dms` in `server.js`.
+    - Whitelisted GET endpoints under `/engineer/new_prod/dms` with `optionalVerifyToken` for public company-wide read access while protecting mutations (`POST`, `PUT`, `DELETE`) with `verifyToken`.
+  - **5. Frontend React UI Dashboard (`DocumentManagementDashboard.jsx`):**
+    - High-density Ant Design v5 layout matching corporate aesthetics.
+    - KPI stat cards for Total Documents, PID, PDR, PFD, PFMEA, and CP with interactive filtering on click.
+    - Multi-criteria filter bar: search input (Doc No, Title, Note, Seq No), Type dropdown, Part dropdown (`Comp.`, `Assy.`, `Finish`), and File Link filter (`Has Link`, `No Link`).
+    - One-click copy for Document Numbers, direct links to Google Drive/Sheets and Aras Innovator PLM.
+    - "Issue Document Number" modal with live auto-running preview banner (`หมายเลขเอกสารถัดไปที่จะออกให้: CP-000025`).
+    - "Document Types Configuration" modal allowing dynamic addition of custom prefixes (e.g. `MEMO`, `WI`, `SOP`) without code changes.
+    - Client-side Excel export using `xlsx`.
+  - **6. Navigation & Portal Integration:**
+    - Added route `/eng/newprod_eng/documents` in `App.jsx`.
+    - Added "Document Management" menu entry in `menu_sidebar.jsx`.
+    - Added "Document Control & Auto-Numbering" tool card to New Product Engineering Portal (`home_newprod.jsx`).
+    - Updated constants in both `constance.js` and `constance_prod.js`.
+  - **8. DMS UI/UX Enhancements & Workflow Refinements (2026-09-21):**
+    - **Pagination Padding Fix:** Resolved pagination sticking/hugging to the card container corners. Added `.dms-table-card .ant-table-pagination { margin: 20px 24px 18px 24px !important; }` and bottom card padding, creating balanced 24px margins.
+    - **Executive Document Details Modal:** Redesigned into an executive inspection view featuring prefix-themed hero headers, 26px monospace document number display, 1-click clipboard copy, registration/update audit chips with avatars, and direct links to Google Drive and Aras Innovator.
+    - **Double-Click Row Action:** Added `onRow={(record) => ({ onDoubleClick: () => openDocumentDetails(record, false) })}` on `<Table>` with interactive hover state (`cursor: pointer`).
+    - **Auto-Popup Upon Issue:** `handleIssueSubmit` now automatically triggers `openDocumentDetails(issuedDoc, true)` with a green congratulatory banner, immediately showing the user the newly issued document number (e.g. `CP-000025`).
+  - **9. Complete 6-Digit Document Number Standardization (2026-09-21):**
+    - Scanned database and identified 74 historical records across `PFD` (25), `PFMEA` (25), and `CP` (24) that originally used 5-digit notation in `DOCUMENTS.xlsx` (e.g. `PFD-00001` - `PFD-00025`, `CP-00001` - `CP-00024`).
+    - Created and executed migration `apps/ENG-Backend/db_migrations/20260921_standardize_dms_doc_numbers_to_6_digits.js` converting all 74 records to 6-digit zero-padded numbers (`PFD-000001` - `PFD-000025`, `PFMEA-000001` - `PFMEA-000025`, `CP-000001` - `CP-000024`).
+    - Audit tracked update: marked with `updated_by = 'System Standardization (6-Digit)'`.
+    - Verified 100% of all 87 records across all 5 types (PID, PDR, PFD, PFMEA, CP) in database are strictly 6 digits (0 records with 5 digits remaining).
+    - Verified live rendering via browser subagent across all category filters.
+
 
 - **ECNT V2 10-Point UI/UX & Workflow Platform Perfection (2026-09-18):**
   - **1. Dashboard Controlled Pagination Fix (`EcntDashboardView.jsx`):**

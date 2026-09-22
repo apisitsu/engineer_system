@@ -278,7 +278,7 @@ const EditorCanvas = ({
                 setCanvasSize({ width: displayW, height: displayH });
 
                 const fc = fabricCanvasRefs.current[pageNum];
-                if (fc) {
+                if (fc && !isLoadingJsonRef.current) {
                     const oldW = fc.width || displayW;
                     const scaleX = displayW / oldW;
                     const scaleY = displayH / (fc.height || displayH);
@@ -296,6 +296,8 @@ const EditorCanvas = ({
                         });
                     }
                     fc.renderAll();
+                } else if (fc && isLoadingJsonRef.current) {
+                    fc.setDimensions({ width: displayW, height: displayH });
                 }
 
                 const textLayerDiv = textLayerRef.current;
@@ -412,6 +414,10 @@ const EditorCanvas = ({
                     obj.setCoords();
                 });
             }
+            // Sync canvas dimensions into pageAnnotations to prevent duplicate scaling
+            pageAnnotations[pageNum]._canvasWidth = canvasSize.width;
+            pageAnnotations[pageNum]._canvasHeight = canvasSize.height;
+
             fc.renderAll();
             usePdfEditorStore.getState().setCanvasObjectCount(pageNum, fc.getObjects().length);
         }).catch(e => {

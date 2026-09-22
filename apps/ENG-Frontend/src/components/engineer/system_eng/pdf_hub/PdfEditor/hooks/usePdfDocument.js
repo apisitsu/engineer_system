@@ -31,6 +31,40 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
             let libDoc = null;
             let finalBytes = bytes;
 
+            // ── Auto-Detect & Unlock Encrypted / Protected PDF First ──
+            // Note: Standard Security (empty password / permissions) parses in PDF.js without error,
+            // but causes corrupted ciphertext streams in pdf-lib if not decrypted beforehand!
+            let isEncrypted = false;
+            try {
+                const testDoc = await PDFDocument.load(bytes, { ignoreEncryption: true, throwOnInvalidObject: false });
+                isEncrypted = testDoc.isEncrypted;
+            } catch (e) {
+                try {
+                    const tail = new TextDecoder('latin1').decode(bytes.slice(-16384));
+                    isEncrypted = tail.includes('/Encrypt');
+                } catch {}
+            }
+
+            if (isEncrypted) {
+                console.log('Protected/encrypted PDF detected. Auto-unlocking via backend...');
+                try {
+                    const formData = new FormData();
+                    formData.append('pdf', new Blob([bytes], { type: 'application/pdf' }), file.name || 'document.pdf');
+                    const token = localStorage.getItem('token');
+                    const res = await axios.post(server.PDF_UNLOCK, formData, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        proxy: false,
+                        responseType: 'arraybuffer'
+                    });
+                    if (res.data && res.data.byteLength > 0) {
+                        finalBytes = new Uint8Array(res.data);
+                        console.log('PDF auto-unlocked successfully before rendering!');
+                    }
+                } catch (unlockErr) {
+                    console.warn('Backend auto-unlock failed, continuing with original bytes:', unlockErr);
+                }
+            }
+
             // ── Fast Direct Parse with PDF.js Worker (0ms main thread blocking) ──
             try {
                 doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
@@ -110,13 +144,21 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                 const vp = page.getViewport({ scale: 1.0 });
                 setPageSize({ width: vp.width, height: vp.height });
 
-                requestAnimationFrame(() => {
-                    if (canvasWrapperRef.current && setZoom) {
+                const applyFitZoom = () => {
+                    if (canvasWrapperRef.current && setZoom && vp.width > 0) {
                         const wrapperW = canvasWrapperRef.current.clientWidth - 60;
-                        const fitZoom = Math.min(wrapperW / vp.width, 1.5);
-                        setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                        if (wrapperW > 100) {
+                            const fitZoom = Math.min(wrapperW / vp.width, 1.5);
+                            setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                            return true;
+                        }
                     }
-                });
+                    return false;
+                };
+
+                if (!applyFitZoom()) {
+                    requestAnimationFrame(applyFitZoom);
+                }
                 message.success(`Loaded: ${file.name} (${doc.numPages} pages)`);
             }
         } catch (err) {
@@ -131,10 +173,44 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
         setPdfLoading(true);
         try {
             const uint8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-            setPdfBytes(uint8);
+            let finalBytes = uint8;
+
+            // ── Auto-Detect & Unlock Encrypted PDF Bytes ──
+            let isEncrypted = false;
+            try {
+                const testDoc = await PDFDocument.load(finalBytes, { ignoreEncryption: true, throwOnInvalidObject: false });
+                isEncrypted = testDoc.isEncrypted;
+            } catch (e) {
+                try {
+                    const tail = new TextDecoder('latin1').decode(finalBytes.slice(-16384));
+                    isEncrypted = tail.includes('/Encrypt');
+                } catch {}
+            }
+
+            if (isEncrypted) {
+                console.log('Protected/encrypted PDF bytes detected. Auto-unlocking via backend...');
+                try {
+                    const formData = new FormData();
+                    formData.append('pdf', new Blob([finalBytes], { type: 'application/pdf' }), filename);
+                    const token = localStorage.getItem('token');
+                    const res = await axios.post(server.PDF_UNLOCK, formData, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        proxy: false,
+                        responseType: 'arraybuffer'
+                    });
+                    if (res.data && res.data.byteLength > 0) {
+                        finalBytes = new Uint8Array(res.data);
+                        console.log('PDF bytes auto-unlocked successfully before rendering!');
+                    }
+                } catch (unlockErr) {
+                    console.warn('Backend auto-unlock failed for bytes:', unlockErr);
+                }
+            }
+
+            setPdfBytes(finalBytes);
 
             // Fast PDF.js parse via Web Worker
-            const doc = await pdfjsLib.getDocument({ data: uint8.slice(0) }).promise;
+            const doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
             if (!doc) throw new Error('Failed to parse PDF pages with PDF.js');
 
             setPdfDoc(doc);
@@ -154,13 +230,21 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
             const vp = page.getViewport({ scale: 1.0 });
             setPageSize({ width: vp.width, height: vp.height });
 
-            requestAnimationFrame(() => {
-                if (canvasWrapperRef.current && setZoom) {
+            const applyFitZoom = () => {
+                if (canvasWrapperRef.current && setZoom && vp.width > 0) {
                     const wrapperW = canvasWrapperRef.current.clientWidth - 60;
-                    const fitZoom = Math.min(wrapperW / vp.width, 1.5);
-                    setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                    if (wrapperW > 100) {
+                        const fitZoom = Math.min(wrapperW / vp.width, 1.5);
+                        setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                        return true;
+                    }
                 }
-            });
+                return false;
+            };
+
+            if (!applyFitZoom()) {
+                requestAnimationFrame(applyFitZoom);
+            }
             message.success(`Loaded: ${filename} (${doc.numPages} pages)`);
         } catch (err) {
             console.error('Failed to load bytes:', err);

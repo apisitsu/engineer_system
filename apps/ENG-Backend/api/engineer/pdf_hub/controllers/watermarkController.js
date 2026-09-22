@@ -2,24 +2,45 @@
  * watermarkController.js — HTTP handlers for watermark template endpoints.
  *
  * Validates input, delegates to watermarkService, formats HTTP responses.
+ * Enhanced with unified token extraction and role-based permissions.
  */
 const jwt = require('jsonwebtoken');
 const watermarkService = require('../services/watermarkService');
+
+/**
+ * Helper to safely extract user identity & role from request or token
+ */
+function getRequesterInfo(req) {
+    if (req.user) {
+        return {
+            empno: req.user.empno || req.user.u_code || null,
+            role: req.user.role || req.user.u_role || '',
+            name: req.user.name || req.user.u_name || ''
+        };
+    }
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1] || req.query.token;
+    if (token) {
+        try {
+            const decoded = jwt.decode(token);
+            return {
+                empno: decoded?.empno || decoded?.u_code || null,
+                role: decoded?.role || decoded?.u_role || '',
+                name: decoded?.name || decoded?.u_name || ''
+            };
+        } catch {
+            return { empno: null, role: '', name: '' };
+        }
+    }
+    return { empno: null, role: '', name: '' };
+}
 
 /**
  * GET /watermarks — List all watermarks accessible to the user
  */
 async function getWatermarks(req, res) {
     try {
-        // Extract empno from JWT token for ownership/sharing filtering
-        const token = req.headers.authorization?.split(' ')[1];
-        let empno = null;
-        if (token) {
-            const decoded = jwt.decode(token);
-            empno = decoded?.empno;
-        }
-
-        const data = await watermarkService.getWatermarks(empno);
+        const { empno, role } = getRequesterInfo(req);
+        const data = await watermarkService.getWatermarks(empno, role);
         res.json({ result: 'true', data });
     } catch (err) {
         console.error('pdfHub getWatermarks error:', err.message);
@@ -32,7 +53,9 @@ async function getWatermarks(req, res) {
  */
 async function createWatermark(req, res) {
     try {
-        const data = await watermarkService.createWatermark(req.body);
+        const { empno } = getRequesterInfo(req);
+        const owner = empno || req.body.owner_empno || 'GUEST';
+        const data = await watermarkService.createWatermark({ ...req.body, owner_empno: owner });
         res.json({ result: 'true', data });
     } catch (err) {
         console.error('pdfHub createWatermark error:', err.message);
@@ -46,15 +69,13 @@ async function createWatermark(req, res) {
 async function updateWatermark(req, res) {
     try {
         const { id } = req.params;
-        const token = req.headers.authorization?.split(' ')[1];
-        let empno = null;
-        if (token) {
-            const decoded = jwt.decode(token);
-            empno = decoded?.empno;
+        const { empno, role } = getRequesterInfo(req);
+        const effectiveEmpno = empno || req.body.owner_empno || req.body.empno;
+        if (!effectiveEmpno && role !== 'AD') {
+            return res.status(401).json({ result: 'false', message: 'Authentication required to update watermark' });
         }
-        if (!empno) return res.status(400).json({ result: 'false', message: 'Missing empno' });
         
-        const data = await watermarkService.updateWatermark(id, { ...req.body, owner_empno: empno });
+        const data = await watermarkService.updateWatermark(id, { ...req.body, owner_empno: effectiveEmpno }, role);
         res.json({ result: 'true', data });
     } catch (err) {
         console.error('pdfHub updateWatermark error:', err.message);
@@ -68,9 +89,12 @@ async function updateWatermark(req, res) {
 async function deleteWatermark(req, res) {
     try {
         const { id } = req.params;
-        const empno = req.query.empno;
-        if (!empno) return res.status(400).json({ result: 'false', message: 'Missing empno' });
-        await watermarkService.deleteWatermark(id, empno);
+        const { empno, role } = getRequesterInfo(req);
+        const effectiveEmpno = empno || req.query.empno;
+        if (!effectiveEmpno && role !== 'AD') {
+            return res.status(401).json({ result: 'false', message: 'Authentication required to delete watermark' });
+        }
+        await watermarkService.deleteWatermark(id, effectiveEmpno, role);
         res.json({ result: 'true', message: 'Deleted' });
     } catch (err) {
         console.error('pdfHub deleteWatermark error:', err.message);
@@ -98,7 +122,13 @@ async function shareWatermark(req, res) {
  */
 async function logWatermarkUsage(req, res) {
     try {
-        await watermarkService.logWatermarkUsage(req.body);
+        const { empno, name } = getRequesterInfo(req);
+        const payload = {
+            ...req.body,
+            empno: req.body.empno || empno || 'GUEST',
+            user_name: req.body.user_name || name || 'Guest User',
+        };
+        await watermarkService.logWatermarkUsage(payload);
         res.json({ result: 'true', message: 'Watermark log recorded successfully' });
     } catch (err) {
         console.error('pdfHub watermark-log error:', err.message);

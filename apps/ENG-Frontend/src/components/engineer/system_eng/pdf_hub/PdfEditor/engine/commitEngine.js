@@ -1,5 +1,7 @@
 import { PDFDocument, rgb, degrees, BlendMode } from 'pdf-lib';
-import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize, visualToRawPdfCoords, visualToRawSize, getRawPlacement } from './commitHelpers';
+import axios from 'axios';
+import { server } from '../../../../../../constance/constance.js';
+import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize, visualToRawPdfCoords, visualToRawSize, getRawPlacement, safeNum } from './commitHelpers.js';
 
 /**
  * commitEngine.js — Serializes Fabric.js canvas objects into pdf-lib operations.
@@ -18,7 +20,32 @@ import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize, vis
  * @returns {Promise<Uint8Array>} - Modified PDF bytes
  */
 export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = null, pageHighlights = null) {
-    const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    let doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true, throwOnInvalidObject: false });
+
+    // Defensive Guard: If PDF is encrypted/permissions-protected, pdf-lib cannot decrypt streams
+    // and saving it will output corrupted/blank ciphertext pages. Auto-unlock via backend before commit!
+    if (doc.isEncrypted) {
+        console.warn('commitAllToPdf: Encrypted PDF detected. Auto-unlocking before committing annotations...');
+        try {
+            const formData = new FormData();
+            formData.append('pdf', new Blob([pdfBytes], { type: 'application/pdf' }), 'document.pdf');
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+            const unlockUrl = (typeof server !== 'undefined' && server?.PDF_UNLOCK) ? server.PDF_UNLOCK : '/api/engineer/pdf-hub/unlock';
+            const res = await axios.post(unlockUrl, formData, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                proxy: false,
+                responseType: 'arraybuffer'
+            });
+            if (res.data && res.data.byteLength > 0) {
+                pdfBytes = new Uint8Array(res.data);
+                doc = await PDFDocument.load(pdfBytes, { throwOnInvalidObject: false });
+                console.log('commitAllToPdf: Successfully auto-unlocked document before commit!');
+            }
+        } catch (unlockErr) {
+            console.error('commitAllToPdf: Auto-unlock failed, proceeding with original doc:', unlockErr);
+        }
+    }
+
     const pages = doc.getPages();
 
     // ── Commit highlights per page (drawn first so text stays on top) ──
@@ -80,9 +107,31 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
 
         if (!fabricData.objects) continue;
 
+        // Partition into underlay (background watermark) vs normal/overlay objects
+        const underlayObjects = [];
+        const normalAndOverlayObjects = [];
+
         for (const obj of fabricData.objects) {
+            if (obj.customData?.type === 'watermark' && obj.customData?.layer === 'underlay') {
+                underlayObjects.push(obj);
+            } else {
+                normalAndOverlayObjects.push(obj);
+            }
+        }
+
+        // 1. Commit Underlay Watermarks first (drawn behind drawings & annotations)
+        for (const obj of underlayObjects) {
             try {
-                await commitObject(doc, page, obj, cW, cH, effW, effH, rotation);
+                await commitObject(doc, page, obj, cW, cH, effW, effH, rotation, pageIdx + 1, pages.length);
+            } catch (err) {
+                console.warn('Commit underlay object error:', err, obj);
+            }
+        }
+
+        // 2. Commit Normal Annotations & Overlay Watermarks
+        for (const obj of normalAndOverlayObjects) {
+            try {
+                await commitObject(doc, page, obj, cW, cH, effW, effH, rotation, pageIdx + 1, pages.length);
             } catch (err) {
                 console.warn('Commit object error:', err, obj);
             }
@@ -110,7 +159,7 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
         }
     }
 
-    return await doc.save();
+    return await doc.save({ useObjectStreams: false });
 }
 
 /**
@@ -202,7 +251,7 @@ export function wrapTextToWidth(text, font, fontSize, maxWidth) {
 /**
  * Commit a single Fabric.js object into a PDF page.
  */
-async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
+async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0, pageNumber = 1, totalPages = 1) {
     if (!obj) return;
     // eslint-disable-next-line no-unused-vars
     const type = obj.customData?.type || obj.type;
@@ -345,6 +394,10 @@ async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
         case 'textbox':
         case 'text': {
             if (!obj.text) break;
+
+            let textContent = String(obj.text);
+            if (pageNumber) textContent = textContent.replace(/\{PAGE\}/g, String(pageNumber));
+            if (totalPages) textContent = textContent.replace(/\{TOTAL_PAGES\}/g, String(totalPages));
             
             if (obj.backgroundColor) {
                 const bgBl = rotatePoint(leftEdge, topEdge + objH);
@@ -363,14 +416,16 @@ async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
                 }
             }
             
-            const font = await getFont(doc, obj.fontFamily, obj.fontWeight, obj.fontStyle);
-            const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, effH);
-            const boxWidthPdf = toPdf(objW, cW, effW);
+            const font = await getFont(doc, obj.fontFamily, obj.fontWeight, obj.fontStyle, textContent);
+            const size = safeNum(toPdf((obj.fontSize || 14) * scaleObjY, cH, effH), 12);
+            const boxWidthPdf = safeNum(toPdf(objW, cW, effW), 0);
 
             const lines = [];
             if (obj.textLines && Array.isArray(obj.textLines) && obj.textLines.length > 0) {
                 obj.textLines.forEach(l => {
-                    const str = typeof l === 'string' ? l : (l?.text || '');
+                    let str = typeof l === 'string' ? l : (l?.text || '');
+                    if (pageNumber) str = str.replace(/\{PAGE\}/g, String(pageNumber));
+                    if (totalPages) str = str.replace(/\{TOTAL_PAGES\}/g, String(totalPages));
                     let w = 0;
                     try { w = font.widthOfTextAtSize(str, size); } catch { w = 0; }
                     if (boxWidthPdf > 0 && w > boxWidthPdf * 1.05) {
@@ -379,11 +434,11 @@ async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
                         lines.push(str);
                     }
                 });
-            } else if (obj.text) {
+            } else if (textContent) {
                 if ((fabricType === 'textbox' || fabricType === 'text') && boxWidthPdf > 0) {
-                    lines.push(...wrapTextToWidth(obj.text, font, size, boxWidthPdf));
+                    lines.push(...wrapTextToWidth(textContent, font, size, boxWidthPdf));
                 } else {
-                    lines.push(...obj.text.split('\n'));
+                    lines.push(...textContent.split('\n'));
                 }
             }
 
@@ -396,12 +451,15 @@ async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
                 } catch {
                     textWidthPdf = lineText.length * size * 0.6;
                 }
+                textWidthPdf = safeNum(textWidthPdf, 0);
 
                 let alignOffsetPdf = 0;
                 if (obj.textAlign === 'center') {
-                    alignOffsetPdf = (boxWidthPdf - textWidthPdf) / 2;
+                    alignOffsetPdf = boxWidthPdf > 0 ? (boxWidthPdf - textWidthPdf) / 2 : -textWidthPdf / 2;
                 } else if (obj.textAlign === 'right') {
-                    alignOffsetPdf = boxWidthPdf - textWidthPdf;
+                    alignOffsetPdf = boxWidthPdf > 0 ? (boxWidthPdf - textWidthPdf) : -textWidthPdf;
+                } else if (obj.originX === 'center' && boxWidthPdf <= 0) {
+                    alignOffsetPdf = -textWidthPdf / 2;
                 }
 
                 const lineBaseY = topEdge + ((obj.fontSize || 14) * scaleObjY) + (i * ((obj.fontSize || 14) * scaleObjY * lineSpacingMult));
@@ -414,25 +472,28 @@ async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
                 const finalVisY = yPdf - alignOffsetPdf * Math.sin(rad);
                 const rawTextPt = visualToRawPdfCoords(finalVisX, finalVisY, effW, effH, rotation);
 
+                const finalX = safeNum(rawTextPt.rawX, 0);
+                const finalY = safeNum(rawTextPt.rawY, 0);
+
                 if (lineText) {
                     try {
                         page.drawText(lineText, {
-                            x: rawTextPt.rawX, 
-                            y: rawTextPt.rawY,
+                            x: finalX, 
+                            y: finalY,
                             size, font,
                             color: hexToRgb(obj.fill) || rgb(0, 0, 0),
-                            opacity: obj.opacity ?? 1,
+                            opacity: safeNum(obj.opacity, 1),
                             rotate: degrees(rotation - (obj.angle || 0)),
                         });
                     } catch (fontErr) {
                         // eslint-disable-next-line no-control-regex
                         const sanitized = lineText.replace(/[^\x00-\x7F]/g, '?');
                         page.drawText(sanitized, {
-                            x: rawTextPt.rawX, 
-                            y: rawTextPt.rawY,
+                            x: finalX, 
+                            y: finalY,
                             size, font,
                             color: hexToRgb(obj.fill) || rgb(0, 0, 0),
-                            opacity: obj.opacity ?? 1,
+                            opacity: safeNum(obj.opacity, 1),
                             rotate: degrees(rotation - (obj.angle || 0)),
                         });
                     }

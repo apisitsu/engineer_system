@@ -32,21 +32,35 @@ export function base64ToUtf8(b64) {
     return new TextDecoder().decode(bytes);
 }
 
+// ── Safe number guard to prevent NaN / Infinity in PDF byte streams ──
+export function safeNum(val, fallback = 0) {
+    return Number.isFinite(val) ? val : fallback;
+}
+
 // ── Color conversion ──
 export function hexToRgb(color) {
     if (!color || color === 'transparent') return null;
     
+    let c = color;
+    if (typeof c !== 'string') {
+        if (typeof c.toHexString === 'function') c = c.toHexString();
+        else if (typeof c.toRgbString === 'function') c = c.toRgbString();
+        else return null;
+    }
+    if (typeof c !== 'string') return null;
+    c = c.trim();
+    
     // Handle rgb() and rgba()
-    if (color.startsWith('rgb')) {
-        const matches = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (c.startsWith('rgb')) {
+        const matches = c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
         if (matches) {
             return rgb(parseInt(matches[1], 10) / 255, parseInt(matches[2], 10) / 255, parseInt(matches[3], 10) / 255);
         }
     }
     
     // Handle hex
-    let hex = color.replace('#', '');
-    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    let hex = c.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(ch => ch + ch).join('');
     if (hex.length === 8) hex = hex.substring(0, 6); // Strip alpha
     
     if (hex.length === 6) {
@@ -61,11 +75,17 @@ export function hexToRgb(color) {
 
 // ── Coordinate conversion: Fabric.js → PDF ──
 export function toPdf(val, canvasSize, pdfSize) {
-    return val * (pdfSize / canvasSize);
+    const cSize = safeNum(canvasSize, 0);
+    const pSize = safeNum(pdfSize, 0);
+    if (cSize <= 0) return safeNum(val, 0);
+    return safeNum(val * (pSize / cSize), 0);
 }
 
 export function toPdfY(val, canvasH, pdfH) {
-    return pdfH - val * (pdfH / canvasH);
+    const cH = safeNum(canvasH, 0);
+    const pH = safeNum(pdfH, 0);
+    if (cH <= 0) return safeNum(val, 0);
+    return safeNum(pH - val * (pH / cH), 0);
 }
 
 // ── Map font family to pdf-lib StandardFonts ──
@@ -80,52 +100,116 @@ export const FONT_MAP = {
     'monospace': StandardFonts.Courier,
 };
 
-const fontCache = {};
+// Global memory buffer cache for raw TTF array buffers across documents
+const rawFontBufferCache = {};
 
-export async function getFont(doc, fontFamily, fontWeight, fontStyle) {
-    if (!doc.defaultFontLoaded) {
-        doc.registerFontkit(fontkit);
-        doc.defaultFontLoaded = true;
+/**
+ * Get or embed font into document.
+ * Implements single-instance caching per PDFDocument so fonts are embedded
+ * at most once per document, preventing memory bloat and corrupted xref tables.
+ */
+export async function getFont(doc, fontFamily, fontWeight, fontStyle, sampleText = '') {
+    if (!doc._fontCache) {
+        doc._fontCache = new Map();
     }
 
-    let fontName = 'Sarabun-Regular.ttf';
     const isBold = fontWeight === 'bold' || fontWeight >= 700;
     const isItalic = fontStyle === 'italic';
 
-    if (isBold && isItalic) fontName = 'Sarabun-BoldItalic.ttf';
-    else if (isBold) fontName = 'Sarabun-Bold.ttf';
-    else if (isItalic) fontName = 'Sarabun-Italic.ttf';
+    // Check if sample text contains non-ASCII characters (e.g. Thai, Unicode)
+    // eslint-disable-next-line no-control-regex
+    const isPureAscii = !sampleText || /^[\x00-\x7F]*$/.test(sampleText);
 
-    const cacheKey = fontName;
+    // 1. Standard Fonts Path (0ms, 0 network requests, pure standard PDF)
+    if (isPureAscii) {
+        const familyKey = (fontFamily || 'Helvetica').toLowerCase();
+        let stdFontKey = StandardFonts.Helvetica;
+
+        if (familyKey.includes('times') || familyKey.includes('georgia')) {
+            if (isBold && isItalic) stdFontKey = StandardFonts.TimesRomanBoldItalic;
+            else if (isBold) stdFontKey = StandardFonts.TimesRomanBold;
+            else if (isItalic) stdFontKey = StandardFonts.TimesRomanItalic;
+            else stdFontKey = StandardFonts.TimesRoman;
+        } else if (familyKey.includes('courier') || familyKey.includes('mono')) {
+            if (isBold && isItalic) stdFontKey = StandardFonts.CourierBoldOblique;
+            else if (isBold) stdFontKey = StandardFonts.CourierBold;
+            else if (isItalic) stdFontKey = StandardFonts.CourierOblique;
+            else stdFontKey = StandardFonts.Courier;
+        } else {
+            // Default Helvetica / Arial
+            if (isBold && isItalic) stdFontKey = StandardFonts.HelveticaBoldOblique;
+            else if (isBold) stdFontKey = StandardFonts.HelveticaBold;
+            else if (isItalic) stdFontKey = StandardFonts.HelveticaOblique;
+            else stdFontKey = StandardFonts.Helvetica;
+        }
+
+        const cacheKey = `std_${stdFontKey}`;
+        if (doc._fontCache.has(cacheKey)) {
+            return doc._fontCache.get(cacheKey);
+        }
+
+        const embedded = await doc.embedFont(stdFontKey);
+        doc._fontCache.set(cacheKey, embedded);
+        return embedded;
+    }
+
+    // 2. Unicode / Thai Font Path
+    const ttfCacheKey = `ttf_${isBold ? 'b' : 'n'}_${isItalic ? 'i' : 'n'}`;
+    if (doc._fontCache.has(ttfCacheKey)) {
+        return doc._fontCache.get(ttfCacheKey);
+    }
+
+    if (!doc.defaultFontLoaded) {
+        try {
+            doc.registerFontkit(fontkit);
+            doc.defaultFontLoaded = true;
+        } catch (fkErr) {
+            console.warn('[commitHelpers] Failed to register fontkit:', fkErr);
+        }
+    }
 
     try {
-        if (!fontCache[cacheKey]) {
+        if (!rawFontBufferCache['tahoma']) {
             let res = null;
-            // 1. Try local/intranet static assets first
+            // First check local static assets in public/fonts/sarabun/
             try {
                 if (typeof window !== 'undefined' && window.location?.origin) {
-                    const localRes = await fetch(`/fonts/sarabun/${fontName}`);
+                    const localRes = await fetch('/fonts/sarabun/tahoma.ttf');
                     if (localRes.ok) res = localRes;
                 }
             } catch {
-                // Ignore local fetch error, try CDN fallback
+                // Ignore local fetch error, proceed to fallback
             }
 
-            // 2. Fallback to public CDN
+            // Secondary intranet fallback
             if (!res) {
-                const fontUrl = `https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/sarabun/${fontName}`;
-                res = await fetch(fontUrl);
+                try {
+                    const altRes = await fetch('/fonts/sarabun/Sarabun-Regular.ttf');
+                    if (altRes.ok) res = altRes;
+                } catch {
+                    // Ignore
+                }
             }
 
-            if (!res || !res.ok) throw new Error('Font fetch failed');
-            fontCache[cacheKey] = await res.arrayBuffer();
+            if (res && res.ok) {
+                rawFontBufferCache['tahoma'] = await res.arrayBuffer();
+            }
         }
-        return await doc.embedFont(fontCache[cacheKey]);
+
+        if (rawFontBufferCache['tahoma']) {
+            const customFont = await doc.embedFont(rawFontBufferCache['tahoma']);
+            doc._fontCache.set(ttfCacheKey, customFont);
+            return customFont;
+        }
     } catch (e) {
-        console.warn('Failed to load custom font, falling back to StandardFonts', e);
-        const stdFont = FONT_MAP[fontFamily] || StandardFonts.Helvetica;
-        return await doc.embedFont(stdFont);
+        console.warn('[commitHelpers] Custom font loading failed, falling back to StandardFonts:', e.message);
     }
+
+    // Fallback to StandardFonts
+    const fallbackFontKey = isBold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica;
+    const fallbackStd = await doc.embedFont(fallbackFontKey);
+    doc._fontCache.set(ttfCacheKey, fallbackStd);
+    return fallbackStd;
 }
 
 // ── Embed image (handles data URLs, blob URLs, and HTTP URLs; tries PNG first, then JPG) ──
