@@ -715,6 +715,7 @@ const TurningToolImagesTab = ({ theme }) => {
   };
 
   const photoBySlot = Object.fromEntries(photoSlots.map(r => [r.slot, r]));
+  const layoutPhoto = photoBySlot.layout || {};
   const rows = Array.from({ length: TURNING_TOOL_SLOT_COUNT }, (_, i) => {
     const slot = i + 1;
     const photo = photoBySlot[slot] || {};
@@ -786,6 +787,41 @@ const TurningToolImagesTab = ({ theme }) => {
       </Card>
 
       {machine && (
+        <Card
+          size="small"
+          style={{ marginBottom: 16, background: theme.colors.cardBackground }}
+          title="Turning Cutting Layout"
+          extra={(
+            <Space>
+              <Button size="small" icon={<UploadOutlined />} onClick={() => openPhotoModal('layout')}>
+                {layoutPhoto.has_image ? 'Replace' : 'Upload'}
+              </Button>
+              {layoutPhoto.has_image && (
+                <Popconfirm title="Delete the layout picture?" onConfirm={() => handleDeletePhoto('layout')} okText="Delete" okButtonProps={{ danger: true }}>
+                  <Button size="small" danger icon={<DeleteOutlined />} />
+                </Popconfirm>
+              )}
+            </Space>
+          )}
+        >
+          <Space align="start">
+            {layoutPhoto.has_image ? (
+              <Image
+                width={120}
+                style={{ objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+                src={`${server.MTC_SDS_V2_IMAGES_TOOLING}/${encodeURIComponent(layoutPhoto.key)}?token=${localStorage.getItem('token')}`}
+                fallback="/image_m.png"
+              />
+            ) : <Text type="secondary">No image</Text>}
+            <Text type="secondary">
+              One picture per machine, printed in the tall strip on the right of the sheet
+              (under the "TURNING CUTTING LAYOUT" heading, cells AK15:AT58).
+            </Text>
+          </Space>
+        </Card>
+      )}
+
+      {machine && (
         <Table
           loading={loading}
           dataSource={rows}
@@ -796,7 +832,7 @@ const TurningToolImagesTab = ({ theme }) => {
       )}
 
       <Modal
-        title={`Tool ${photoModalSlot} photo — ${machine}`}
+        title={photoModalSlot === 'layout' ? `Turning Cutting Layout — ${machine}` : `Tool ${photoModalSlot} photo — ${machine}`}
         open={photoModalSlot != null}
         onCancel={closePhotoModal}
         onOk={handleSavePhoto}

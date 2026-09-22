@@ -358,9 +358,11 @@ const RequestDetailsPage = ({ visible, onClose, request, isEditing, onSave, onDe
   const fetchWCCodes = async () => {
     setWCLoading(true);
     try {
-      console.log('🔄 Fetching Work Centers from:', server.MASTER_WC);
-      const { data } = await axios.get(server.MASTER_WC);
-      console.log('✅ Work Centers received:', data.data);
+      // Read from rodpc.m_workcenter (the factory floor's own master), not the local
+      // work_centers table other MTC features use — that one is a stale, hand-typed,
+      // Fac-4-only partial copy missing Fac 11 entirely. See mtcConstants notes /
+      // 2026-09-22 investigation.
+      const { data } = await axios.get(server.MTC_TOOL_REQUEST_WORK_CENTERS);
       setWCCodes(data.data || []);
     } catch (error) {
       console.error('❌ Error fetching WC codes:', error);
@@ -395,10 +397,24 @@ const RequestDetailsPage = ({ visible, onClose, request, isEditing, onSave, onDe
   };
 
   const onWCChange = (value) => {
-    const selectedWC = wcCodes.find(wc => wc.code === value);
+    const selectedWC = wcCodes.find(wc => wc.code === value && wc.factory === selectedFactory);
     if (selectedWC) {
-      form.setFieldsValue({ work_center_name: selectedWC.department || '' });
+      form.setFieldsValue({ work_center_name: selectedWC.name || '' });
     }
+  };
+
+  // Work centers never share a code between factories, but a factory must still be
+  // picked first — otherwise the list could show two "43"s etc. with no way to tell
+  // which plant either belongs to.
+  const selectedFactory = Form.useWatch('factory', form);
+  const wcOptionsForFactory = selectedFactory ? wcCodes.filter(wc => wc.factory === selectedFactory) : [];
+  const factoryOptions = [...new Set(wcCodes.map(wc => wc.factory))]
+    .sort()
+    .map(f => ({ value: f, label: `Fac ${f}` }));
+
+  const onFactoryChange = () => {
+    // A work center from the old factory means nothing under the new one.
+    form.setFieldsValue({ work_center: undefined, work_center_name: '' });
   };
 
   const handleAction = async ({ decision, ...extra }) => {
@@ -550,26 +566,37 @@ const RequestDetailsPage = ({ visible, onClose, request, isEditing, onSave, onDe
           </Col>
         </Row>
         <Row gutter={16}>
-          <Col span={8}>
+          <Col span={6}>
             <Form.Item label="Department" name="department" rules={[{ required: true }]}>
               <Input readOnly />
             </Form.Item>
           </Col>
-          <Col span={8}>
+          <Col span={6}>
+            <Form.Item label="Factory" name="factory" rules={[{ required: true }]}>
+              <Select
+                placeholder="Select Factory"
+                options={factoryOptions}
+                loading={wcLoading}
+                onChange={onFactoryChange}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={6}>
             <Form.Item label="Work Center" name="work_center" rules={[{ required: true }]}>
               <Select
-                placeholder="Select Work Center"
+                placeholder={selectedFactory ? 'Select Work Center' : 'Select a Factory first'}
                 showSearch
                 onChange={onWCChange}
                 loading={wcLoading}
+                disabled={!selectedFactory}
               >
-                {wcCodes.map(wc => (
-                  <Option key={wc.code} value={wc.code}>{wc.description}</Option>
+                {wcOptionsForFactory.map(wc => (
+                  <Option key={wc.code} value={wc.code}>{wc.code} - {wc.name}</Option>
                 ))}
               </Select>
             </Form.Item>
           </Col>
-          <Col span={8}>
+          <Col span={6}>
             <Form.Item label="Work Center Name" name="work_center_name">
               <Input readOnly placeholder="Auto-filled" />
             </Form.Item>
@@ -667,6 +694,7 @@ const RequestDetailsPage = ({ visible, onClose, request, isEditing, onSave, onDe
           </Descriptions.Item>
           <Descriptions.Item label="Requester">{request.requester}</Descriptions.Item>
           <Descriptions.Item label="Department">{request.department}</Descriptions.Item>
+          <Descriptions.Item label="Factory">{request.factory ? `Fac ${request.factory}` : '-'}</Descriptions.Item>
           <Descriptions.Item label="Work Center">{request.work_center} {request.work_center_name ? `(${request.work_center_name})` : ''}</Descriptions.Item>
           <Descriptions.Item label="Due Date">
             <Text type={moment(request.req_due_date).isBefore(moment()) && !isDone ? 'danger' : undefined}>

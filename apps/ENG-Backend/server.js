@@ -374,12 +374,14 @@ const toolReq = require('./api/engineer/mtc/controllers/toolRequestController');
 
 // Import middleware for enhanced security
 const { verifyToken: mtcVerifyToken, optionalAuth } = require('./api/engineer/mtc/utils/toolRequestAuth');
-const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
+const { hasFeature } = require('./middleware/mtcAuth');
+const mtcEmailAdmin = hasFeature('general_dwg_admin'); // full AD, or this one granted feature
 const { validateFileUpload } = require('./api/engineer/mtc/utils/fileUpload');
 
 // Public endpoints (no authentication required - viewing only)
 app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
+app.get('/api/engineer/mtc/tool-requests/work-centers', mtcVerifyToken, toolReq.getFactoryWorkCenters);
 app.get('/api/engineer/mtc/tool-requests/permissions', mtcVerifyToken, toolReq.getStagePermissions);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
 
@@ -407,16 +409,18 @@ app.delete('/api/engineer/mtc/tool-requests/:id',
   toolReq.deleteToolRequest
 );
 
-// Email Configuration Management — admin only. This table doubles as the list of who
-// may act on each stage (submitAction's permission check), so a write by any signed-in
-// user would be a self-service grant of approval rights; the guard is enforced here,
-// not just by the page hiding itself.
-app.get('/api/engineer/mtc/email-config', mtcVerifyToken, mtcIsAdmin, toolReq.getEmailConfigs);
-app.get('/api/engineer/mtc/email-config/users', mtcVerifyToken, mtcIsAdmin, toolReq.getEmailConfigUsers);
-app.put('/api/engineer/mtc/email-config/members/:u_code', mtcVerifyToken, mtcIsAdmin, toolReq.setMemberEmail);
-app.post('/api/engineer/mtc/email-config', mtcVerifyToken, mtcIsAdmin, toolReq.createEmailConfig);
-app.put('/api/engineer/mtc/email-config/:id', mtcVerifyToken, mtcIsAdmin, toolReq.updateEmailConfig);
-app.delete('/api/engineer/mtc/email-config/:id', mtcVerifyToken, mtcIsAdmin, toolReq.deleteEmailConfig);
+// Email Configuration Management — full AD, or the 'general_dwg_admin' feature perm
+// (granted to specific non-AD people who own this workflow, e.g. Chairat/Pattanapong/
+// Teerapol — see db_migrations/20260922_grant_general_dwg_admin.js). This table doubles
+// as the list of who may act on each stage (submitAction's permission check), so a
+// write by any signed-in user would be a self-service grant of approval rights; the
+// guard is enforced here, not just by the page hiding itself.
+app.get('/api/engineer/mtc/email-config', mtcVerifyToken, mtcEmailAdmin, toolReq.getEmailConfigs);
+app.get('/api/engineer/mtc/email-config/users', mtcVerifyToken, mtcEmailAdmin, toolReq.getEmailConfigUsers);
+app.put('/api/engineer/mtc/email-config/members/:u_code', mtcVerifyToken, mtcEmailAdmin, toolReq.setMemberEmail);
+app.post('/api/engineer/mtc/email-config', mtcVerifyToken, mtcEmailAdmin, toolReq.createEmailConfig);
+app.put('/api/engineer/mtc/email-config/:id', mtcVerifyToken, mtcEmailAdmin, toolReq.updateEmailConfig);
+app.delete('/api/engineer/mtc/email-config/:id', mtcVerifyToken, mtcEmailAdmin, toolReq.deleteEmailConfig);
 
 // Note: For production deployment, enable authentication by:
 // 1. Uncomment the middleware imports above

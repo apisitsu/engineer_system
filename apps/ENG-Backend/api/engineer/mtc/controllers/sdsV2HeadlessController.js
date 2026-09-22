@@ -941,6 +941,19 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     }
   }
 
+  // Turning Cutting Layout picture — one static image per machine, linked by the internal
+  // `Turning_Layout_Photo_Key` param (written by POST /images/turning-tool with slot 'layout').
+  // Placed only on the Turning template, in the strip the Standard sheet gives its Grinding Area.
+  if (rawParams['Turning_Layout_Photo_Key']) {
+    const layoutRow = await engPool.query(
+      `SELECT image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = $1`,
+      [rawParams['Turning_Layout_Photo_Key']]
+    );
+    if (layoutRow.rows[0]) {
+      map['_turningLayoutImage'] = `data:${layoutRow.rows[0].mime_type};base64,${layoutRow.rows[0].image_data.toString('base64')}`;
+    }
+  }
+
   const grindMatch = (map['process_name'] || '').match(/^(.*?)\s*grind/i);
   map['grinding_area_label'] = grindMatch ? `${grindMatch[1].trim().toUpperCase()} GRINDING AREA` : 'GRINDING AREA';
 
@@ -1364,6 +1377,12 @@ const IMAGE_EXTENTS = {
   turning_tool_image_2: { tl: 'H28', br: 'K35' }, turning_tool_image_6: { tl: 'T28', br: 'W35' },
   turning_tool_image_3: { tl: 'H39', br: 'K46' }, turning_tool_image_7: { tl: 'T39', br: 'W46' },
   turning_tool_image_4: { tl: 'H50', br: 'K57' }, turning_tool_image_8: { tl: 'T50', br: 'W57' },
+  // "TURNING CUTTING LAYOUT" (title at AL14): the framed box is AL15:AT58 (left divider =
+  // AK's right border, right frame = AT's right border, bottom = row 58). Same job as the
+  // Standard sheet's grinding_layout_image (AO26:AU45), but the whole box. It must NOT start
+  // at AK — that column belongs to the fixture section (F02/F04/F06/F08 photos end there), so
+  // an image starting at AK paints over the divider and the fixture photos.
+  turning_layout_image: { tl: 'AL15', br: 'AT58' },
   // Turning template's F01-F08 jig/fixture photo boxes (2026-09-16) — the CURRENT
   // 8-tool + fixture-section layout, added once the template grew a dedicated photo
   // area for each fixture (it had none before, which is why tool_image_T01..T08 is
@@ -1611,6 +1630,7 @@ function applyDataToGrid(grid, valueMap, mappings) {
   // 4b) Turning-style per-tool photos (Holder_Info_N-keyed) — see buildValueMap.
   const turningImgs = valueMap._turningToolImages || {};
   for (const [n, dataUri] of Object.entries(turningImgs)) placeImage(`turning_tool_image_${n}`, dataUri);
+  placeImage('turning_layout_image', valueMap._turningLayoutImage);
 
   return { ...grid, cells, fills, merges: [...(grid.merges || []), ...newMerges] };
 }

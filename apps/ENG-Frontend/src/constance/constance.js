@@ -51,6 +51,7 @@ export const server = {
   MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
+  MTC_TOOL_REQUEST_WORK_CENTERS: `${apiUrl}api/engineer/mtc/tool-requests/work-centers`,
   MTC_EMAIL_CONFIG: `${apiUrl}api/engineer/mtc/email-config`,
   MTC_EMAIL_CONFIG_USERS: `${apiUrl}api/engineer/mtc/email-config/users`,
   MTC_EMAIL_CONFIG_MEMBERS: `${apiUrl}api/engineer/mtc/email-config/members`, // append /:u_code

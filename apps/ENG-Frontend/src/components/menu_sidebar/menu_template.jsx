@@ -17,17 +17,23 @@ const menuItemsMap = {
 
 export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys, selectedKeys }) => {
     const [collapsed, setCollapsed] = useState(false);
-    const { userRole, userDepartment } = useAuthStore();
+    const { userRole, userDepartment, userSection } = useAuthStore();
     const location = useLocation();
 
     const isAdmin = userRole === 'AD' || userDepartment === 'AD';
+    // userSection actually holds the user's user_group (e.g. "MTC") — see sign_in.jsx.
+    const isMtcSection = isAdmin || userSection === 'MTC';
 
     const baseItems = menuItemsMap[type];
     if (!baseItems) return null;
 
     let currentItems = baseItems;
-    if (type === 'MTC' && !isAdmin) {
-        currentItems = baseItems.filter(item => item.key !== 'admin-config');
+    if (type === 'MTC') {
+        currentItems = baseItems.filter(item => {
+            if (item.key === 'admin-config' && !isAdmin) return false;
+            if ((item.key === 'tooling-select' || item.key === 'master-data') && !isMtcSection) return false;
+            return true;
+        });
     } else if (type === 'Process' && !isAdmin) {
         currentItems = baseItems.filter(item => item.key !== 'ecnt_v2' && item.key !== 'ecnt');
     }
