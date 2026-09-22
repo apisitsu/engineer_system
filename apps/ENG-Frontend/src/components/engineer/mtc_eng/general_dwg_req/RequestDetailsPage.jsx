@@ -591,7 +591,7 @@ const RequestDetailsPage = ({ visible, onClose, request, isEditing, onSave, onDe
                 disabled={!selectedFactory}
               >
                 {wcOptionsForFactory.map(wc => (
-                  <Option key={wc.code} value={wc.code}>{wc.name}</Option>
+                  <Option key={wc.code} value={wc.code}>{wc.code} - {wc.name}</Option>
                 ))}
               </Select>
             </Form.Item>
