@@ -26,6 +26,11 @@ const splitEmails = (v) => (v ? v.split(',').map(e => e.trim()).filter(Boolean) 
 const EmailConfigManager = () => {
     const { theme } = useTheme();
     const userDepartment = useAuthStore(state => state.userDepartment);
+    const userRole = useAuthStore(state => state.userRole);
+    const userPerms = useAuthStore(state => state.userPerms);
+    // Must match ToolRequest.jsx's isAdmin — otherwise the "Setting" button and this
+    // page's own guard disagree about who is let in.
+    const canManage = userDepartment === 'AD' || userRole === 'AD' || (userPerms || []).includes('general_dwg_admin');
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState([]);
     const [modalVisible, setModalVisible] = useState(false);
@@ -58,14 +63,15 @@ const EmailConfigManager = () => {
     };
 
     useEffect(() => {
-        if (userDepartment === 'AD') {
+        if (canManage) {
             fetchConfigs();
             fetchUsers();
         }
-    }, [userDepartment]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canManage]);
 
     // Check permissions
-    if (userDepartment !== 'AD') {
+    if (!canManage) {
         return (
             <div style={{ padding: 50, textAlign: 'center' }}>
                 <Title level={3} type="danger">Access Denied</Title>
