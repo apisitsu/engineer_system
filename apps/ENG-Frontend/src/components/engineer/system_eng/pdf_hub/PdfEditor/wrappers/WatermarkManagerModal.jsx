@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     Modal, Form, Input, Button, List, Spin, Space, Popconfirm, Select, Slider,
-    message, ColorPicker, Row, Col, Badge, Tooltip, InputNumber, Switch,
+    message, ColorPicker, Row, Col, Tooltip, InputNumber, Switch,
     Segmented, Tag, Radio, Table, Empty
 } from 'antd';
 import {
@@ -9,8 +9,7 @@ import {
     EditOutlined, BoldOutlined, ItalicOutlined, BorderOuterOutlined,
     VerticalAlignTopOutlined, VerticalAlignBottomOutlined, VerticalAlignMiddleOutlined,
     ColumnHeightOutlined, ClearOutlined, SearchOutlined, HistoryOutlined,
-    SafetyCertificateOutlined, CheckCircleOutlined, UserOutlined, TeamOutlined,
-    GlobalOutlined, LayersOutlined, CopyOutlined
+    SafetyCertificateOutlined, UserOutlined, TeamOutlined, CopyOutlined
 } from '@ant-design/icons';
 import * as fabric from 'fabric';
 import { useAuthStore } from '../../../../../../stores/authStore';
