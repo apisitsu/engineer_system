@@ -9,10 +9,18 @@
 
 - **PDF Hub: Watermark Manager UX/UI Redesign & Template Recovery (2026-09-22):**
   - **1. UI/UX Clutter & Component Overflow Elimination (`WatermarkManagerModal.jsx`):**
-    - Expanded modal width to `1020px` (`maxWidth: '96vw'`).
-    - Aligned search input, category segmented filter (`All`, `System`, `My`, `Shared`), `Clear Watermarks`, and `+ Create New` onto a single, non-wrapping row.
+    - Expanded modal width to `1160px` (`maxWidth: '96vw'`).
+    - Aligned search input, category segmented filter (`My` default, `All`, `System`, `Shared`), `Clear Watermarks` icon button, and `+ Create New` icon button onto a single, non-wrapping row.
     - Set `overflowX: 'hidden'` on the template grid, removing inner horizontal scrollbars.
     - Replaced the cramped vertical list with a **2-Column Responsive Card Grid** with clear status and layer tags (`SYSTEM`, `MINE`, `SHARED`, `UNDERLAY`, `OVERLAY`).
+    - Audit History restricted to Admin (`role === 'AD'`) only. 100% English interface with zero Thai characters.
+  - **2. Realistic Paper Live Visual Preview (`RealisticPaperPreview`):**
+    - Pinned firmly in place on the left column (`height: 520px`, `position: 'sticky'`), never scrolling away when scrolling settings.
+    - Sized to exact ISO A4 aspect ratios: Portrait `255 × 360 px` (1 : 1.414) and Landscape `360 × 255 px` (1.414 : 1), fitting comfortably without vertical or horizontal scrollbars.
+  - **3. Independent Form Scrolling & Typography Refinement:**
+    - Right settings card has independent vertical scroll (`overflowY: 'auto'`) with generous bottom padding (`24px`), ensuring action buttons (`Cancel` and `Update Template`) are 100% visible and never clipped.
+    - Widened `Font Size` numeric input to `100px` (addon `"px"` fully readable, no squishing or clipping).
+    - Reorganized Typography row into balanced 3 columns: `Color` (7 cols), `Font Family` (10 cols), and `Font Style` (7 cols, clean `B` and `I` icon toggle buttons).
   - **2. Realistic Paper Live Visual Preview (`RealisticPaperPreview`):**
     - Eliminated canvas horizontal stretching/squishing (which previously distorted CAD lines).
     - Enforced strict ISO A4 aspect ratios: Portrait `1 : 1.414` (270×382px) and Landscape `1.414 : 1` (360×254px).

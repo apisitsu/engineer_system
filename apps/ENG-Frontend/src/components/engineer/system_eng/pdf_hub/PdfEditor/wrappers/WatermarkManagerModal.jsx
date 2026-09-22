@@ -117,13 +117,13 @@ const RealisticPaperPreview = ({ formValues, pdfFileName, userName }) => {
     const [orientation, setOrientation] = useState('portrait'); // 'portrait' | 'landscape'
 
     // Real A4 Aspect Ratios:
-    // Portrait: 210 x 297 mm -> Aspect 1 : 1.414 -> e.g. 270 x 382 px
-    // Landscape: 297 x 210 mm -> Aspect 1.414 : 1 -> e.g. 360 x 254 px
+    // Portrait: 210 x 297 mm -> Aspect 1 : 1.414 -> e.g. 255 x 360 px
+    // Landscape: 297 x 210 mm -> Aspect 1.414 : 1 -> e.g. 360 x 255 px
     const previewDims = useMemo(() => {
         if (orientation === 'portrait') {
-            return { width: 270, height: 382 };
+            return { width: 255, height: 360 };
         }
-        return { width: 360, height: 254 };
+        return { width: 360, height: 255 };
     }, [orientation]);
 
     useEffect(() => {
@@ -152,11 +152,11 @@ const RealisticPaperPreview = ({ formValues, pdfFileName, userName }) => {
             ctx.save();
             ctx.strokeStyle = '#94a3b8';
             ctx.lineWidth = 1.2;
-            
+
             // Outer drawing boundary & title block
             const pad = 16;
             ctx.strokeRect(pad, pad, W - pad * 2, H - pad * 2);
-            
+
             // Title block box (bottom right)
             const tbW = Math.min(125, W * 0.44);
             const tbH = 32;
@@ -316,9 +316,10 @@ const RealisticPaperPreview = ({ formValues, pdfFileName, userName }) => {
             border: '1px solid #e2e8f0',
             borderRadius: 10,
             padding: '12px 14px',
-            height: 560,
-            minHeight: 560,
-            justifyContent: 'space-between'
+            height: 520,
+            maxHeight: 'calc(88vh - 130px)',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box'
         }}>
             {/* Header controls for preview */}
             <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -441,7 +442,7 @@ const WatermarkManagerModal = ({
             setViewMode('templates');
             setCategoryFilter('my');
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     const loadWatermarkData = async () => {
@@ -969,9 +970,9 @@ const WatermarkManagerModal = ({
 
         const rangeLabel = pageRangeMode === 'all' ? 'all pages'
             : pageRangeMode === 'current' ? `page ${currentPage}`
-            : pageRangeMode === 'odd' ? 'odd pages'
-            : pageRangeMode === 'even' ? 'even pages'
-            : `pages: ${customPageRange}`;
+                : pageRangeMode === 'odd' ? 'odd pages'
+                    : pageRangeMode === 'even' ? 'even pages'
+                        : `pages: ${customPageRange}`;
         message.success(`Applied "${getDisplayName(wm.name)}" to ${rangeLabel} (${targetPages.length} page${targetPages.length > 1 ? 's' : ''})`);
         onClose();
     };
@@ -1011,7 +1012,7 @@ const WatermarkManagerModal = ({
             styles={{
                 body: {
                     padding: '16px 20px',
-                    maxHeight: isCreate ? 'calc(92vh - 50px)' : 'calc(90vh - 70px)',
+                    maxHeight: isCreate ? 'calc(92vh - 40px)' : 'calc(90vh - 70px)',
                     overflowY: isCreate ? 'hidden' : 'auto',
                     overflowX: 'hidden'
                 }
@@ -1276,7 +1277,7 @@ const WatermarkManagerModal = ({
 
                                 <Row gutter={20} align="top">
                                     {/* ── LEFT COLUMN: REALISTIC PAPER PREVIEW ── */}
-                                    <Col xs={24} md={9} lg={9}>
+                                    <Col xs={24} md={10} lg={10}>
                                         <RealisticPaperPreview
                                             formValues={previewValues}
                                             pdfFileName={pdfFile?.name}
@@ -1284,16 +1285,18 @@ const WatermarkManagerModal = ({
                                         />
                                     </Col>
 
-                                    {/* ── RIGHT COLUMN: SETTINGS FORM ── */}
-                                    <Col xs={24} md={15} lg={15}>
+                                    {/* ── RIGHT COLUMN: SETTINGS FORM (INDEPENDENT SCROLL) ── */}
+                                    <Col xs={24} md={14} lg={14}>
                                         <div style={{
                                             background: '#ffffff',
                                             border: '1px solid #e2e8f0',
                                             borderRadius: 10,
-                                            padding: '16px 20px',
-                                            height: 560,
-                                            maxHeight: 560,
-                                            overflowY: 'auto'
+                                            padding: '16px 20px 24px 20px',
+                                            height: 520,
+                                            maxHeight: 'calc(88vh - 130px)',
+                                            overflowY: 'auto',
+                                            overflowX: 'hidden',
+                                            boxSizing: 'border-box'
                                         }}>
                                             <Form
                                                 form={form}
@@ -1308,6 +1311,14 @@ const WatermarkManagerModal = ({
                                                     layer: 'overlay', category: 'General', is_public: true
                                                 }}
                                             >
+                                                {/* Hidden fields for Font Style tracking */}
+                                                <Form.Item name="font_weight" hidden>
+                                                    <Input />
+                                                </Form.Item>
+                                                <Form.Item name="font_style" hidden>
+                                                    <Input />
+                                                </Form.Item>
+
                                                 {/* 1. Name & Layer */}
                                                 <Row gutter={12}>
                                                     <Col span={14}>
@@ -1364,40 +1375,70 @@ const WatermarkManagerModal = ({
                                                     </div>
                                                 </Form.Item>
 
-                                                {/* 3. Typography & Appearance */}
-                                                <Row gutter={12} align="middle">
+                                                {/* 3. Typography & Appearance: Color, Font Family, Font Style */}
+                                                <Row gutter={12} align="top">
                                                     <Col span={7}>
                                                         <Form.Item name="color" label={<span style={{ fontSize: 12, fontWeight: 600 }}>Color</span>} style={{ marginBottom: 12 }}>
-                                                            <ColorPicker format="hex" showText presets={COLOR_PRESETS} />
+                                                            <ColorPicker format="hex" showText presets={COLOR_PRESETS} style={{ width: '100%', paddingBottom: '7px', paddingTop: '7px' }} />
                                                         </Form.Item>
                                                     </Col>
                                                     <Col span={10}>
                                                         <Form.Item name="font_family" label={<span style={{ fontSize: 12, fontWeight: 600 }}>Font Family</span>} style={{ marginBottom: 12 }}>
-                                                            <Select options={FONT_OPTIONS} style={{ borderRadius: 6 }} />
+                                                            <Select options={FONT_OPTIONS} style={{ borderRadius: 6, width: '100%' }} />
                                                         </Form.Item>
                                                     </Col>
                                                     <Col span={7}>
                                                         <Form.Item label={<span style={{ fontSize: 12, fontWeight: 600 }}>Font Style</span>} style={{ marginBottom: 12 }}>
-                                                            <div style={{ display: 'flex', gap: 6 }}>
-                                                                <Form.Item name="font_weight" noStyle>
-                                                                    <Segmented
-                                                                        size="small"
-                                                                        options={[
-                                                                            { value: 'normal', label: 'Regular' },
-                                                                            { value: 'bold', label: <BoldOutlined /> },
-                                                                        ]}
-                                                                    />
-                                                                </Form.Item>
-                                                                <Form.Item name="font_style" noStyle>
-                                                                    <Segmented
-                                                                        size="small"
-                                                                        options={[
-                                                                            { value: 'normal', label: 'Upright' },
-                                                                            { value: 'italic', label: <ItalicOutlined /> },
-                                                                        ]}
-                                                                    />
-                                                                </Form.Item>
-                                                            </div>
+                                                            <Form.Item noStyle shouldUpdate={(prev, cur) => prev.font_weight !== cur.font_weight || prev.font_style !== cur.font_style}>
+                                                                {({ getFieldValue }) => {
+                                                                    const isBold = getFieldValue('font_weight') === 'bold';
+                                                                    const isItalic = getFieldValue('font_style') === 'italic';
+                                                                    return (
+                                                                        <Space.Compact style={{ width: '100%' }}>
+                                                                            <Tooltip title="Bold font">
+                                                                                <Button
+                                                                                    type={isBold ? 'primary' : 'default'}
+                                                                                    style={{
+                                                                                        flex: 1,
+                                                                                        fontWeight: 'bold',
+                                                                                        borderRadius: '6px 0 0 6px',
+                                                                                        background: isBold ? '#2563eb' : undefined,
+                                                                                        borderColor: isBold ? '#2563eb' : '#d9d9d9',
+                                                                                        color: isBold ? '#ffffff' : '#334155'
+                                                                                    }}
+                                                                                    icon={<BoldOutlined />}
+                                                                                    onClick={() => {
+                                                                                        form.setFieldsValue({ font_weight: isBold ? 'normal' : 'bold' });
+                                                                                        updatePreview();
+                                                                                    }}
+                                                                                >
+                                                                                    {/* Bold */}
+                                                                                </Button>
+                                                                            </Tooltip>
+                                                                            <Tooltip title="Italic font">
+                                                                                <Button
+                                                                                    type={isItalic ? 'primary' : 'default'}
+                                                                                    style={{
+                                                                                        flex: 1,
+                                                                                        fontStyle: 'italic',
+                                                                                        borderRadius: '0 6px 6px 0',
+                                                                                        background: isItalic ? '#2563eb' : undefined,
+                                                                                        borderColor: isItalic ? '#2563eb' : '#d9d9d9',
+                                                                                        color: isItalic ? '#ffffff' : '#334155'
+                                                                                    }}
+                                                                                    icon={<ItalicOutlined />}
+                                                                                    onClick={() => {
+                                                                                        form.setFieldsValue({ font_style: isItalic ? 'normal' : 'italic' });
+                                                                                        updatePreview();
+                                                                                    }}
+                                                                                >
+                                                                                    {/* Italic */}
+                                                                                </Button>
+                                                                            </Tooltip>
+                                                                        </Space.Compact>
+                                                                    );
+                                                                }}
+                                                            </Form.Item>
                                                         </Form.Item>
                                                     </Col>
                                                 </Row>
@@ -1412,9 +1453,9 @@ const WatermarkManagerModal = ({
                                                                         <Slider min={8} max={200} />
                                                                     </Form.Item>
                                                                 </Col>
-                                                                <Col flex="68px">
+                                                                <Col flex="100px">
                                                                     <Form.Item name="font_size" noStyle>
-                                                                        <InputNumber min={8} max={200} style={{ width: 68 }} addonAfter="px" />
+                                                                        <InputNumber min={8} max={200} style={{ width: 100 }} addonAfter="px" />
                                                                     </Form.Item>
                                                                 </Col>
                                                             </Row>
@@ -1428,9 +1469,9 @@ const WatermarkManagerModal = ({
                                                                         <Slider min={0.05} max={1} step={0.05} />
                                                                     </Form.Item>
                                                                 </Col>
-                                                                <Col flex="64px">
+                                                                <Col flex="76px">
                                                                     <Form.Item name="opacity" noStyle>
-                                                                        <InputNumber min={0.05} max={1} step={0.05} style={{ width: 64 }} />
+                                                                        <InputNumber min={0.05} max={1} step={0.05} style={{ width: 76 }} />
                                                                     </Form.Item>
                                                                 </Col>
                                                             </Row>
@@ -1446,9 +1487,9 @@ const WatermarkManagerModal = ({
                                                                 <Slider min={-90} max={90} marks={{ '-45': '-45°', 0: '0°', 45: '45°' }} />
                                                             </Form.Item>
                                                         </Col>
-                                                        <Col flex="72px">
+                                                        <Col flex="88px">
                                                             <Form.Item name="angle" noStyle>
-                                                                <InputNumber min={-90} max={90} style={{ width: 72 }} addonAfter="°" />
+                                                                <InputNumber min={-90} max={90} style={{ width: 88 }} addonAfter="°" />
                                                             </Form.Item>
                                                         </Col>
                                                     </Row>
@@ -1532,7 +1573,7 @@ const WatermarkManagerModal = ({
                                                         <Col span={10}>
                                                             <Form.Item name="repeat_mode" label={<span style={{ fontSize: 12, fontWeight: 600 }}>Tile Mode (Repeat)</span>} valuePropName="checked" style={{ marginBottom: 0 }}>
                                                                 <Switch checkedChildren="ON" unCheckedChildren="OFF" />
-                              </Form.Item>
+                                                            </Form.Item>
                                                         </Col>
                                                         <Col span={14}>
                                                             <Form.Item noStyle shouldUpdate={(prev, cur) => prev.repeat_mode !== cur.repeat_mode}>
@@ -1559,14 +1600,22 @@ const WatermarkManagerModal = ({
                                                 </div>
 
                                                 {/* Form Footer Action Buttons */}
-                                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
+                                                <div style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'flex-end',
+                                                    gap: 10,
+                                                    paddingTop: 14,
+                                                    marginTop: 14,
+                                                    borderTop: '1px solid #f1f5f9',
+                                                    marginBottom: 8
+                                                }}>
                                                     <Button onClick={() => {
                                                         setIsCreate(false);
                                                         setEditingId(null);
-                                                    }} style={{ borderRadius: 6 }}>
+                                                    }} style={{ borderRadius: 6, minWidth: 80 }}>
                                                         Cancel
                                                     </Button>
-                                                    <Button type="primary" htmlType="submit" style={{ borderRadius: 6, background: '#2563eb' }}>
+                                                    <Button type="primary" htmlType="submit" style={{ borderRadius: 6, background: '#2563eb', minWidth: 120 }}>
                                                         {editingId ? 'Update Template' : 'Save Template'}
                                                     </Button>
                                                 </div>
