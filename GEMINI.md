@@ -5,7 +5,33 @@
 
 ## Current Project Status
 - **Last Update:** 2026-09-23
-- **Active Goal:** ECNT V2 Block 4 Approval Loop & Multi-State Workflow Transition 100% Resolved; Historical Database Records Migrated; Production Build Passed with Zero Errors; Live Browser Visual Verification Complete.
+- **Active Goal:** ECNT V2 Dashboard Table Layout & Stage Management 100% Resolved; Zero Column Overlapping or Clipping; Interactive KPI Metrics and Functional Pagination Clamping Deployed; Production Build Passed with Zero Warnings; Live Browser Visual Verification Complete.
+
+- **ECNT V2: Dashboard Executive Pipeline Table & State Management Engine Overhaul (2026-09-23):**
+  - **Root Cause Analysis:**
+    - In `EcntDashboardView.jsx` `pipelineColumns`, the `process_status` column was set to `width: 120`. Status tags such as `PENDING CONCERN APPROVAL` and `REQUIRE MORE DETAIL` span ~170-200px. The status badge overflowed into the adjacent sticky `Action` column (`fixed: 'right'`, `width: 80`). Because `.ant-table-cell-fix-right` had transparent/inherited background in AntD, the overflowing badge sliced through and rendered directly behind the action buttons (`PENDING CO [button] [button] OVAL`).
+    - `title_of_change` column lacked an explicit `width`, resulting in unpredictable flex compression.
+    - When filters (search, department, scope, category) narrowed records, `pagination.current` stayed on previous page numbers, causing an empty table view when pages reduced.
+    - In `getStageAndPicInfo`, `stage_flow` was evaluated before checking if an ECR was transferred or linked to an ECN, improperly showing obsolete Block stages rather than `ECN Issued (ECN0110024)`.
+    - In Rework state (`Require More Detail`), PIC was hardcoded to `Requester` even for ECN revisions where the Lead Engineer is responsible.
+    - KPI cards 3 and 4 were static and not clickable as filters.
+  - **1. Table Column Layout & Sticky Action Column Hardening (`EcntDashboardView.jsx`):**
+    - Set `title_of_change` width to `320px` (`maxWidth: 300` on title text with ellipsis).
+    - Expanded `process_status` column to `width: 210, align: 'center'` with flex centering, guaranteeing badges never overflow.
+    - Expanded `action` column to `width: 96, fixed: 'right', align: 'center'`, with explicit solid background (`#ffffff` / `#fafafa` on hover) and drop shadow (`-4px 0 8px rgba(0, 0, 0, 0.05)`).
+    - Set table `scroll={{ x: 1200 }}` and added scoped CSS for `.ecnt-pipeline-table .ant-table-cell-fix-right` and `.ant-table-cell-fix-left`.
+  - **2. React Pagination State Auto-Clamping:**
+    - Implemented auto-clamping `useEffect` using functional state updater: automatically clamps `pagination.current` when filtered record counts decrease below the current page threshold.
+  - **3. Stage Management & PIC Precision (`getStageAndPicInfo`, `getMyActionReason`):**
+    - Reordered evaluation: prioritized terminal and transferred states (`transferred to ecn` / `doc.linked_ecn_id`) before `stage_flow` assignees, ensuring `ECN Issued ({linked_ecn_no})` is prominently shown.
+    - Corrected ECN rework PIC attribution to Lead Engineer (`engineer_assigned`), and restricted requester rework alerts to `isEcr`.
+    - Added interactive `onClick` cross-linking on `🔗 Ref {record.ecr_no}` in both Pipeline Table and Kanban cards to open source ECRs.
+  - **4. Interactive KPI Cards & Search Filter Expansion:**
+    - Made all 4 KPI cards interactive: Card 1 (All Active), Card 2 (My Tasks), Card 3 (In Clarification / Rework), and Card 4 (Closed & Effective) with dynamic border highlighting, background tints, and instant table filtering.
+    - Expanded search query matching to include `linked_ecn_no`, `part_name`, `part_number`, `department`, and `process_status`.
+  - **5. Production Build & Live Visual Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully).
+    - Browser subagent verified live on `http://localhost:3000/eng/process_eng/ecnt_v2?view=dashboard`: verified wide Status column, crisp sticky Action column with zero overlapping, and interactive KPI filtering.
 
 - **ECNT V2: Block 4 Approval Loop & Multi-State Workflow Engine Perfection (2026-09-23):**
   - **Root Cause Analysis:**

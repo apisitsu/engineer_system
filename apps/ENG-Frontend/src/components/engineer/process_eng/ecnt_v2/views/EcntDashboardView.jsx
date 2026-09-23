@@ -48,7 +48,15 @@ export default function EcntDashboardView({
     const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
     const combinedDocs = [
-        ...ecrData.map(d => ({ ...d, doc_type: 'ECR' })),
+        ...ecrData.map(d => {
+            const linkedEcn = ecnData.find(e => e.id === d.linked_ecn_id || e.ecr_id === d.id);
+            return {
+                ...d,
+                doc_type: 'ECR',
+                linked_ecn_no: d.linked_ecn_no || linkedEcn?.ecn_no || null,
+                linked_ecn_id: d.linked_ecn_id || linkedEcn?.id || null
+            };
+        }),
         ...ecnData.map(d => ({ ...d, doc_type: 'ECN' }))
     ];
 
@@ -78,8 +86,30 @@ export default function EcntDashboardView({
             return {
                 stageTag: 'Rework / Clarification',
                 color: 'volcano',
-                pics: [{ name: doc.request_by_name || doc.request_by || 'Requester' }]
+                pics: [{ 
+                    name: isEcr 
+                        ? (doc.request_by_name || doc.request_by || 'Requester')
+                        : (doc.engineer_assigned_name || doc.assigned_to || doc.engineer_assigned || 'Lead Engineer')
+                }]
             };
+        }
+
+        // Priority ECR Terminal / Issued State Checks (must precede generic stage_flow check)
+        if (isEcr) {
+            if (st === 'transferred to ecn' || doc.linked_ecn_id) {
+                return {
+                    stageTag: doc.linked_ecn_no ? `ECN Issued (${doc.linked_ecn_no})` : (doc.linked_ecn_id ? `ECN Issued (#${doc.linked_ecn_id})` : 'ECN Issued'),
+                    color: 'default',
+                    pics: [{ name: 'ECN Formulated' }]
+                };
+            }
+            if (st === 'issued ecn' || blk === 5 || stage === 'STAGE_4') {
+                return {
+                    stageTag: `Block 5: Issue ECN`,
+                    color: 'blue',
+                    pics: [{ name: doc.assigned_to || doc.engineer_assigned || 'Lead Engineer' }]
+                };
+            }
         }
 
         // Check stage_flow
@@ -89,6 +119,7 @@ export default function EcntDashboardView({
             if (blk === 1 || blk === 2) stageKey = 'STAGE_1';
             else if (blk === 3) stageKey = 'STAGE_2';
             else if (blk === 4) stageKey = 'STAGE_3';
+            else if (blk === 5) stageKey = 'STAGE_4';
         } else {
             if (blk === 5) stageKey = 'STAGE_4';
             else if (blk === 6) stageKey = 'STAGE_5';
@@ -111,20 +142,6 @@ export default function EcntDashboardView({
 
         // Standard fallbacks based on Block
         if (isEcr) {
-            if (st === 'transferred to ecn' || doc.linked_ecn_id) {
-                return {
-                    stageTag: doc.linked_ecn_id ? `ECN Issued (#${doc.linked_ecn_id})` : 'ECN Issued',
-                    color: 'default',
-                    pics: [{ name: 'ECN Formulated' }]
-                };
-            }
-            if (st === 'issued ecn' || blk === 5 || stage === 'STAGE_4') {
-                return {
-                    stageTag: `Block 5: Issue ECN`,
-                    color: 'blue',
-                    pics: [{ name: doc.assigned_to || doc.engineer_assigned || 'Lead Engineer' }]
-                };
-            }
             if (blk <= 2) {
                 return {
                     stageTag: `Block 1-2: ECR Draft`,
@@ -220,14 +237,15 @@ export default function EcntDashboardView({
         const stage = doc.current_stage_code || '';
         const isRework = st === 'require more detail' || stage.includes('_R');
 
-        // 1. Rework / Clarification -> Requester is responsible
+        // 1. Rework / Clarification -> Requester is responsible for ECR; Lead Engineer for ECN
         if (isRework) {
-            if (doc.request_by === empNo || doc.request_by_name === userName || (!doc.request_by && userRole === 'AD')) {
+            if (isEcr && (doc.request_by === empNo || doc.request_by_name === userName || (!doc.request_by && userRole === 'AD'))) {
                 return 'Revision Required (Requester)';
             }
-            if (isEcn && (doc.engineer_assigned === empNo || userDepartment === 'ENG' || userRole === 'AD')) {
+            if (isEcn && (doc.engineer_assigned === empNo || doc.assigned_to === empNo || userDepartment === 'ENG' || userRole === 'AD')) {
                 return 'ECN Revision Required';
             }
+            return null;
         }
 
         // 2. ECR Block 3: Dept Mgr Review
@@ -255,14 +273,14 @@ export default function EcntDashboardView({
         }
 
         // 4. ECR Block 4 approved -> Issue ECN (Block 5)
-        if (isEcr && (st === 'issued ecn' || stage === 'STAGE_4') && !doc.linked_ecn_id) {
-            if (doc.engineer_assigned === empNo || userDepartment === 'ENG' || userRole === 'AD') {
+        if (isEcr && (st === 'issued ecn' || stage === 'STAGE_4' || blk === 5) && !doc.linked_ecn_id) {
+            if (doc.engineer_assigned === empNo || doc.assigned_to === empNo || userDepartment === 'ENG' || userRole === 'AD') {
                 return 'ECN Formulation Required';
             }
         }
 
         // 5. ECN Block 5: Formulation
-        if (isEcn && blk === 5 && (doc.engineer_assigned === empNo || userDepartment === 'ENG' || userRole === 'AD')) {
+        if (isEcn && blk === 5 && (doc.engineer_assigned === empNo || doc.assigned_to === empNo || userDepartment === 'ENG' || userRole === 'AD')) {
             return 'ECN Formulation Required';
         }
 
@@ -290,7 +308,7 @@ export default function EcntDashboardView({
 
         // 8. ECN Block 9: Concern setup
         if (isEcn && blk === 9) {
-            if (doc.engineer_assigned === empNo || userDepartment === 'ENG' || userRole === 'AD') {
+            if (doc.engineer_assigned === empNo || doc.assigned_to === empNo || userDepartment === 'ENG' || userRole === 'AD') {
                 return 'Concern Setup Required';
             }
         }
@@ -323,12 +341,18 @@ export default function EcntDashboardView({
 
     // Filter documents
     const filteredDocs = combinedDocs.filter(d => {
-        const textMatch = !searchText || 
-            (d.ecr_no && d.ecr_no.toLowerCase().includes(searchText.toLowerCase())) ||
-            (d.ecn_no && d.ecn_no.toLowerCase().includes(searchText.toLowerCase())) ||
-            (d.title_of_change && d.title_of_change.toLowerCase().includes(searchText.toLowerCase())) ||
-            (d.request_by_name && d.request_by_name.toLowerCase().includes(searchText.toLowerCase())) ||
-            (d.customer_name && d.customer_name.toLowerCase().includes(searchText.toLowerCase()));
+        const query = (searchText || '').trim().toLowerCase();
+        const textMatch = !query || 
+            (d.ecr_no && d.ecr_no.toLowerCase().includes(query)) ||
+            (d.ecn_no && d.ecn_no.toLowerCase().includes(query)) ||
+            (d.linked_ecn_no && d.linked_ecn_no.toLowerCase().includes(query)) ||
+            (d.title_of_change && d.title_of_change.toLowerCase().includes(query)) ||
+            (d.request_by_name && d.request_by_name.toLowerCase().includes(query)) ||
+            (d.customer_name && d.customer_name.toLowerCase().includes(query)) ||
+            (d.part_name && d.part_name.toLowerCase().includes(query)) ||
+            (d.part_number && d.part_number.toLowerCase().includes(query)) ||
+            (d.department && d.department.toLowerCase().includes(query)) ||
+            (d.process_status && d.process_status.toLowerCase().includes(query));
 
         const deptMatch = filterDept === 'ALL' || d.department === filterDept;
         const myActionMatch = scopeFilter === 'ALL' || getMyActionReason(d) !== null;
@@ -347,6 +371,17 @@ export default function EcntDashboardView({
 
         return textMatch && deptMatch && myActionMatch && categoryMatch;
     });
+
+    // Auto-clamp pagination when filtering reduces available pages
+    React.useEffect(() => {
+        setPagination(prev => {
+            const maxPage = Math.max(1, Math.ceil(filteredDocs.length / prev.pageSize));
+            if (prev.current > maxPage) {
+                return { ...prev, current: 1 };
+            }
+            return prev;
+        });
+    }, [filteredDocs.length]);
 
     // Classify into Kanban columns
     const getDocColumn = (doc) => {
@@ -434,13 +469,29 @@ export default function EcntDashboardView({
                         {/* Line 2: Date & Optional Linked Reference */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11, color: '#8c8c8c' }}>
                             <span>📅 {moment(record.created_at).format('DD-MMM-YYYY')}</span>
-                            {isEcr && record.linked_ecn_id && (
-                                <Tag color="geekblue" style={{ margin: 0, fontSize: 10, borderRadius: 4, padding: '0 4px' }}>
-                                    🔗 ECN #{record.linked_ecn_id}
+                            {isEcr && (record.linked_ecn_no || record.linked_ecn_id) && (
+                                <Tag 
+                                    color="geekblue" 
+                                    style={{ margin: 0, fontSize: 10, borderRadius: 4, padding: '0 4px', cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (record.linked_ecn_id) onOpenDoc(record.linked_ecn_id, 'ECN');
+                                    }}
+                                >
+                                    🔗 {record.linked_ecn_no || `ECN #${record.linked_ecn_id}`}
                                 </Tag>
                             )}
                             {!isEcr && record.ecr_no && (
-                                <Tag color="blue" style={{ margin: 0, fontSize: 10, borderRadius: 4, padding: '0 4px' }}>
+                                <Tag 
+                                    color="blue" 
+                                    style={{ margin: 0, fontSize: 10, borderRadius: 4, padding: '0 4px', cursor: record.ecr_id ? 'pointer' : 'default' }}
+                                    onClick={(e) => {
+                                        if (record.ecr_id) {
+                                            e.stopPropagation();
+                                            onOpenDoc(record.ecr_id, 'ECR');
+                                        }
+                                    }}
+                                >
                                     🔗 Ref {record.ecr_no}
                                 </Tag>
                             )}
@@ -453,6 +504,7 @@ export default function EcntDashboardView({
             title: 'Title of Change & Technical Details',
             dataIndex: 'title_of_change',
             key: 'title_of_change',
+            width: 320,
             render: (text, record) => {
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -460,7 +512,7 @@ export default function EcntDashboardView({
                         <Text 
                             strong 
                             ellipsis 
-                            style={{ fontSize: 13, color: '#1f1f1f', maxWidth: 360, display: 'block' }} 
+                            style={{ fontSize: 13, color: '#1f1f1f', maxWidth: 300, display: 'block' }} 
                             title={text}
                         >
                             {text || 'No title specified'}
@@ -603,50 +655,71 @@ export default function EcntDashboardView({
             title: 'Status',
             dataIndex: 'process_status',
             key: 'process_status',
-            width: 120,
-            render: (status) => <StatusBadge status={status} />
+            width: 210,
+            align: 'center',
+            render: (status) => (
+                <div style={{ display: 'flex', justifyContent: 'center', width: '100%', overflow: 'hidden' }}>
+                    <StatusBadge status={status} />
+                </div>
+            )
         },
         {
             title: 'Action',
             key: 'action',
-            width: 80,
+            width: 96,
             fixed: 'right',
             align: 'center',
+            onCell: () => ({
+                style: {
+                    background: '#ffffff',
+                    boxShadow: '-4px 0 8px rgba(0, 0, 0, 0.05)',
+                    zIndex: 3
+                }
+            }),
+            onHeaderCell: () => ({
+                style: {
+                    background: '#fafafa',
+                    boxShadow: '-4px 0 8px rgba(0, 0, 0, 0.05)',
+                    zIndex: 3
+                }
+            }),
             render: (_, record) => {
                 const actionReason = getMyActionReason(record);
                 return (
-                    <Space size={4} style={{ padding: '0 4px' }}>
-                        <Tooltip title={actionReason ? `Action Required: ${actionReason}` : 'Open Workspace'}>
-                            <Button 
-                                type={actionReason ? "primary" : "default"}
-                                shape="circle"
-                                size="small"
-                                icon={<ArrowRightOutlined style={{ fontSize: 12 }} />}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onOpenDoc(record.id, record.doc_type);
-                                }}
-                                style={{ 
-                                    width: 28,
-                                    height: 28,
-                                    minWidth: 28,
-                                    background: actionReason ? '#fa8c16' : '#1677ff',
-                                    borderColor: actionReason ? '#fa8c16' : '#1677ff',
-                                    color: '#ffffff',
-                                    boxShadow: actionReason ? '0 1px 4px rgba(250, 140, 22, 0.35)' : '0 1px 4px rgba(22, 119, 255, 0.25)'
-                                }}
-                            />
-                        </Tooltip>
-                        <Tooltip title="Share Direct Link">
-                            <Button 
-                                shape="circle"
-                                size="small"
-                                icon={<CopyOutlined style={{ fontSize: 11 }} />}
-                                onClick={(e) => handleCopyLink(e, record)}
-                                style={{ width: 28, height: 28, minWidth: 28 }}
-                            />
-                        </Tooltip>
-                    </Space>
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <Space size={6}>
+                            <Tooltip title={actionReason ? `Action Required: ${actionReason}` : 'Open Workspace'}>
+                                <Button 
+                                    type={actionReason ? "primary" : "default"}
+                                    shape="circle"
+                                    size="small"
+                                    icon={<ArrowRightOutlined style={{ fontSize: 12 }} />}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenDoc(record.id, record.doc_type);
+                                    }}
+                                    style={{ 
+                                        width: 28,
+                                        height: 28,
+                                        minWidth: 28,
+                                        background: actionReason ? '#fa8c16' : '#1677ff',
+                                        borderColor: actionReason ? '#fa8c16' : '#1677ff',
+                                        color: '#ffffff',
+                                        boxShadow: actionReason ? '0 1px 4px rgba(250, 140, 22, 0.35)' : '0 1px 4px rgba(22, 119, 255, 0.25)'
+                                    }}
+                                />
+                            </Tooltip>
+                            <Tooltip title="Share Direct Link">
+                                <Button 
+                                    shape="circle"
+                                    size="small"
+                                    icon={<CopyOutlined style={{ fontSize: 11 }} />}
+                                    onClick={(e) => handleCopyLink(e, record)}
+                                    style={{ width: 28, height: 28, minWidth: 28 }}
+                                />
+                            </Tooltip>
+                        </Space>
+                    </div>
                 );
             }
         }
@@ -654,16 +727,48 @@ export default function EcntDashboardView({
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Scoped CSS for Sticky Columns and Smooth Layout */}
+            <style>{`
+                .ecnt-pipeline-table .ant-table-cell-fix-right {
+                    background: #ffffff !important;
+                }
+                .ecnt-pipeline-table .ant-table-row:hover .ant-table-cell-fix-right {
+                    background: #fbfbfb !important;
+                }
+                .ecnt-pipeline-table .ant-table-thead .ant-table-cell-fix-right {
+                    background: #fafafa !important;
+                }
+                .ecnt-pipeline-table .ant-table-cell-fix-right-first {
+                    box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05) !important;
+                }
+                .ecnt-pipeline-table .ant-table-cell-fix-left {
+                    background: #ffffff !important;
+                }
+                .ecnt-pipeline-table .ant-table-row:hover .ant-table-cell-fix-left {
+                    background: #fbfbfb !important;
+                }
+                .ecnt-pipeline-table .ant-table-thead .ant-table-cell-fix-left {
+                    background: #fafafa !important;
+                }
+                .ecnt-pipeline-table .ant-table-cell-fix-left-last {
+                    box-shadow: 4px 0 8px rgba(0, 0, 0, 0.05) !important;
+                }
+            `}</style>
             
             {/* 1. Executive Metrics & KPI Bar */}
             <Row gutter={[16, 16]}>
                 <Col xs={24} sm={12} md={6}>
                     <Card 
                         hoverable 
-                        onClick={() => setScopeFilter('ALL')}
+                        onClick={() => {
+                            setScopeFilter('ALL');
+                            setCategoryFilter('ALL');
+                            setPagination(prev => ({ ...prev, current: 1 }));
+                        }}
                         style={{ 
                             borderRadius: 12, 
-                            border: scopeFilter === 'ALL' ? '2px solid #1890ff' : '1px solid #e8e8e8', 
+                            border: scopeFilter === 'ALL' && categoryFilter === 'ALL' ? '2px solid #1890ff' : '1px solid #e8e8e8', 
+                            background: scopeFilter === 'ALL' && categoryFilter === 'ALL' ? '#f0f9ff' : '#ffffff',
                             boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                             cursor: 'pointer'
                         }}
@@ -683,11 +788,15 @@ export default function EcntDashboardView({
                 <Col xs={24} sm={12} md={6}>
                     <Card 
                         hoverable 
-                        onClick={() => setScopeFilter('MY_ACTIONS')}
+                        onClick={() => {
+                            setScopeFilter('MY_ACTIONS');
+                            setCategoryFilter('ALL');
+                            setPagination(prev => ({ ...prev, current: 1 }));
+                        }}
                         style={{ 
                             borderRadius: 12, 
                             border: scopeFilter === 'MY_ACTIONS' ? '2px solid #fa8c16' : '1px solid #ffd591', 
-                            background: myActionableCount > 0 ? '#fffbe6' : '#fff', 
+                            background: scopeFilter === 'MY_ACTIONS' ? '#fff7e6' : (myActionableCount > 0 ? '#fffbe6' : '#fff'), 
                             boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                             cursor: 'pointer'
                         }}
@@ -708,7 +817,21 @@ export default function EcntDashboardView({
                 </Col>
 
                 <Col xs={24} sm={12} md={6}>
-                    <Card style={{ borderRadius: 12, border: '1px solid #e8e8e8', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <Card 
+                        hoverable
+                        onClick={() => {
+                            setScopeFilter('ALL');
+                            setCategoryFilter('REWORK');
+                            setPagination(prev => ({ ...prev, current: 1 }));
+                        }}
+                        style={{ 
+                            borderRadius: 12, 
+                            border: categoryFilter === 'REWORK' ? '2px solid #fa541c' : '1px solid #e8e8e8', 
+                            background: categoryFilter === 'REWORK' ? '#fff2e8' : '#ffffff',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                            cursor: 'pointer'
+                        }}
+                    >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <Text type="secondary" style={{ fontSize: 13 }}>In Clarification / Rework</Text>
@@ -722,7 +845,21 @@ export default function EcntDashboardView({
                 </Col>
 
                 <Col xs={24} sm={12} md={6}>
-                    <Card style={{ borderRadius: 12, border: '1px solid #e8e8e8', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <Card 
+                        hoverable
+                        onClick={() => {
+                            setScopeFilter('ALL');
+                            setCategoryFilter('EFFECTIVE');
+                            setPagination(prev => ({ ...prev, current: 1 }));
+                        }}
+                        style={{ 
+                            borderRadius: 12, 
+                            border: categoryFilter === 'EFFECTIVE' ? '2px solid #52c41a' : '1px solid #e8e8e8', 
+                            background: categoryFilter === 'EFFECTIVE' ? '#f6ffed' : '#ffffff',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                            cursor: 'pointer'
+                        }}
+                    >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <Text type="secondary" style={{ fontSize: 13 }}>Closed & Effective</Text>
@@ -944,10 +1081,11 @@ export default function EcntDashboardView({
                         style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e8e8e8', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
                     >
                         <Table 
+                            className="ecnt-pipeline-table"
                             columns={pipelineColumns} 
                             dataSource={filteredDocs} 
                             rowKey={r => `${r.doc_type}_${r.id}`}
-                            scroll={{ x: 1080 }}
+                            scroll={{ x: 1200 }}
                             pagination={{ 
                                 current: pagination.current,
                                 pageSize: pagination.pageSize,
@@ -1093,6 +1231,38 @@ export default function EcntDashboardView({
                                                     </span>
                                                     <span>{moment(doc.created_at).format('DD-MMM')}</span>
                                                 </div>
+
+                                                {/* Linked ECN or Ref ECR on Kanban Card */}
+                                                {((doc.doc_type === 'ECR' && (doc.linked_ecn_no || doc.linked_ecn_id)) || (doc.doc_type === 'ECN' && doc.ecr_no)) && (
+                                                    <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                                        {doc.doc_type === 'ECR' && (
+                                                            <Tag 
+                                                                color="geekblue" 
+                                                                style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'pointer' }}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (doc.linked_ecn_id) onOpenDoc(doc.linked_ecn_id, 'ECN');
+                                                                }}
+                                                            >
+                                                                🔗 {doc.linked_ecn_no || `ECN #${doc.linked_ecn_id}`}
+                                                            </Tag>
+                                                        )}
+                                                        {doc.doc_type === 'ECN' && doc.ecr_no && (
+                                                            <Tag 
+                                                                color="blue" 
+                                                                style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: doc.ecr_id ? 'pointer' : 'default' }}
+                                                                onClick={(e) => {
+                                                                    if (doc.ecr_id) {
+                                                                        e.stopPropagation();
+                                                                        onOpenDoc(doc.ecr_id, 'ECR');
+                                                                    }
+                                                                }}
+                                                            >
+                                                                🔗 Ref {doc.ecr_no}
+                                                            </Tag>
+                                                        )}
+                                                    </div>
+                                                )}
 
                                                 {/* Direct Link Share Footer */}
                                                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6, paddingTop: 4 }}>

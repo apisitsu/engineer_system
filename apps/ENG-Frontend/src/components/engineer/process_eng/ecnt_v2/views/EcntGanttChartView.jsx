@@ -101,7 +101,7 @@ export default function EcntGanttChartView({
                         >
                             {combinedDocs.map(d => (
                                 <Option key={d.key} value={d.key}>
-                                    [{d.doc_type}] {d.ecr_no || d.ecn_no || `#${d.id}`} - {d.title_of_change?.slice(0, 30) || 'Untitled'}
+                                    [{d.doc_type}] {d.doc_type === 'ECR' ? (d.ecr_no || `#${d.id}`) : (d.ecn_no || `#${d.id}`)} - {d.title_of_change?.slice(0, 30) || 'Untitled'}
                                 </Option>
                             ))}
                         </Select>
@@ -126,7 +126,7 @@ export default function EcntGanttChartView({
                         <Card size="small" style={{ borderRadius: 10, background: '#fafafa', border: '1px solid #f0f0f0' }}>
                             <Text type="secondary" style={{ fontSize: 12 }}>Workflow Number & Status</Text>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                                <Text strong style={{ fontSize: 16 }}>{docDetails.ecr_no || docDetails.ecn_no || `#${docDetails.id}`}</Text>
+                                <Text strong style={{ fontSize: 16 }}>{selectedKey.startsWith('ECR') ? (docDetails.ecr_no || `#${docDetails.id}`) : (docDetails.ecn_no || `#${docDetails.id}`)}</Text>
                                 <Tag color="blue">{docDetails.process_status}</Tag>
                             </div>
                         </Card>

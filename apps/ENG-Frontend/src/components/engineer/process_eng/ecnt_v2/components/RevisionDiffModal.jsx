@@ -170,7 +170,7 @@ export default function RevisionDiffModal({
                     <Row gutter={[16, 8]}>
                         <Col span={6}>
                             <Text type="secondary">Document:</Text>{' '}
-                            <Text strong>{docData?.ecr_no || docData?.ecn_no || `#${docData?.id}`}</Text>
+                            <Text strong>{(docData?.doc_type === 'ECN' || docData?.ecn_no) ? (docData?.ecn_no || `#${docData?.id}`) : (docData?.ecr_no || `#${docData?.id}`)}</Text>
                         </Col>
                         <Col span={6}>
                             <Text type="secondary">Revision Cycle:</Text>{' '}

@@ -215,6 +215,13 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
 
             // Block 10: Concern Multi-Dept Sign-off
             if (blockNumber === 10) {
+                if (extra.action === 'CONFIRM_DWG_ENABLE') {
+                    const isAssignedEng = (ecn.engineer_assigned || '').toLowerCase() === empno || 
+                                          (ecn.engineer_assigned || '').toLowerCase() === name || 
+                                          dept === 'ENG' || role === 'AD';
+                    if (isAssignedEng) return { authorized: true, roleLabel: 'Assigned Engineer / ENG Dept' };
+                    return { authorized: false, reason: "Only the Assigned Engineer or Engineering Department can confirm DWG Enable." };
+                }
                 const taskId = extra.task_id;
                 if (!taskId) return { authorized: false, reason: "task_id is required for Block 10 concern sign-off." };
                 const taskRes = await clientOrPool.query(`SELECT * FROM ecnt2_concern_task WHERE id = $1 AND ecn_id = $2`, [taskId, docId]);
@@ -488,6 +495,7 @@ const getEcrList = async (req, res) => {
         const result = await engPool.query(`
             SELECT e.*, 
                    (SELECT id FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_id,
+                   (SELECT ecn_no FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_no,
                    (SELECT count(*) FROM ecnt2_discussion WHERE document_type = 'ECR' AND document_id = e.id) as discussion_count
             FROM ecnt2_ecr e 
             ORDER BY e.created_at DESC
@@ -504,7 +512,8 @@ const getEcrById = async (req, res) => {
     try {
         const ecrResult = await engPool.query(`
             SELECT e.*, 
-                   (SELECT id FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_id
+                   (SELECT id FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_id,
+                   (SELECT ecn_no FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_no
             FROM ecnt2_ecr e 
             WHERE e.id = $1
         `, [id]);
@@ -926,7 +935,10 @@ const actionEcn = async (req, res) => {
         await client.query('BEGIN');
 
         // Permission check: Validate stage ownership
-        const perm = await checkWorkflowPermission(client, 'ECN', id, block_number, req.user, { task_id: req.body.task_id });
+        const perm = await checkWorkflowPermission(client, 'ECN', id, block_number, req.user, { 
+            task_id: req.body.task_id || req.body.details?.task_id,
+            action: action
+        });
         if (!perm.authorized) {
             await client.query('ROLLBACK');
             return res.status(403).json({ error: perm.reason });
@@ -1073,7 +1085,23 @@ const actionEcn = async (req, res) => {
                 }
             }
 
+            // Update dwg_enabled on ECN if provided in Block 9
+            if (summary?.dwg_enabled !== undefined) {
+                await client.query(`UPDATE ecnt2_ecn SET dwg_enabled = $1 WHERE id = $2`, [!!summary.dwg_enabled, id]);
+            }
+
             await transitionStage(client, 'ECN', id, nextStageCode, 'APPROVE', userEmpno, userName, comment || 'Configured concern tasks');
+        }
+        // Direct Action: Confirm & Save DWG Enable in Innovator
+        else if (action === 'CONFIRM_DWG_ENABLE') {
+            const isEnabled = req.body.details?.dwg_enabled !== undefined ? !!req.body.details.dwg_enabled : true;
+            await client.query(`UPDATE ecnt2_ecn SET dwg_enabled = $1, updated_at = NOW() WHERE id = $2`, [isEnabled, id]);
+            await client.query(`
+                INSERT INTO ecnt2_approval_log (document_type, document_id, block_number, step_label, action, action_by, action_by_name, action_role, comment)
+                VALUES ('ECN', $1, $2, 'Confirm DWG. Enable', 'CONFIRM_DWG_ENABLE', $3, $4, $5, 'Engineer confirmed drawing active status in Innovator')
+            `, [id, block_number || 9, userEmpno, userName, userRole]);
+            await client.query('COMMIT');
+            return res.json({ message: "DWG Enable Status Confirmed & Saved", dwg_enabled: isEnabled });
         }
         // Block 10 (Multi-Dept Acknowledge)
         else if (block_number === 10 && action === 'ACKNOWLEDGE') {

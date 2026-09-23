@@ -196,8 +196,16 @@ export default function ECNDetailModal({ open, documentId, documentType, onClose
                             {/* Panel 1: Document Overview */}
                             <Collapse.Panel header={<Text strong style={{ color: '#1890ff' }}>1. Document Overview & Header</Text>} key="overview_section">
                                 <Row gutter={[16, 12]}>
-                                    <Col span={8}><Text type="secondary">Document Type:</Text> <Tag color="blue">{documentType}</Tag></Col>
-                                    <Col span={8}><Text type="secondary">Number:</Text> <Text strong>{docData.ecr_no || docData.ecn_no || 'Pending'}</Text></Col>
+                                    <Col span={8}><Text type="secondary">Document Type:</Text> <Tag color={documentType === 'ECR' ? 'blue' : 'purple'}>{documentType}</Tag></Col>
+                                    <Col span={8}>
+                                        <Text type="secondary">{documentType === 'ECN' ? 'ECN Number:' : 'ECR Number:'}</Text>{' '}
+                                        <Text strong>{documentType === 'ECR' ? (docData.ecr_no || 'Pending') : (docData.ecn_no || 'Pending')}</Text>
+                                        {documentType === 'ECN' && docData.ecr_no && (
+                                            <span style={{ marginLeft: 8 }}>
+                                                (<Text type="secondary">Ref ECR: </Text><Text strong>{docData.ecr_no}</Text>)
+                                            </span>
+                                        )}
+                                    </Col>
                                     <Col span={8}><Text type="secondary">Current Status:</Text> <StatusBadge status={docData.process_status} /></Col>
                                     
                                     <Col span={8}><Text type="secondary">Requester:</Text> <Text strong>{docData.request_by_name || docData.request_by}</Text></Col>

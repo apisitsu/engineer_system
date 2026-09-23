@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Input, Form, Alert, Select, Radio, Checkbox, Row, Col, Table, Tag, Typography, Tooltip, Space } from 'antd';
+import { Card, Button, Input, Form, Alert, Select, Radio, Checkbox, Row, Col, Table, Tag, Typography, Tooltip, Space, Modal } from 'antd';
 import { App } from 'antd';
 import axios from 'axios';
 import moment from 'moment';
@@ -8,7 +8,7 @@ import { useAuthStore } from '../../../../../stores/authStore';
 import { 
     CheckCircleOutlined, ClockCircleOutlined, LockOutlined, 
     RollbackOutlined, CloseCircleOutlined, PlusCircleOutlined,
-    ArrowRightOutlined, EditOutlined
+    ArrowRightOutlined, EditOutlined, ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { dispatchStageWorkflowEmail } from '../../../../../services/ecntEmailService';
 import AttachableField from './AttachableField';
@@ -251,6 +251,26 @@ export default function WorkflowActionCard({
     const handleSubmit = async (selectedAction, extraDetails = {}) => {
         try {
             const values = await form.validateFields();
+
+            // Block 9 submission guard: DWG Enable confirmation check
+            if (currentBlock === 9 && selectedAction === 'APPROVE') {
+                const isDwgConfirmed = docData?.dwg_enabled || values.details?.dwg_enabled || extraDetails?.dwg_enabled;
+                if (!isDwgConfirmed) {
+                    Modal.confirm({
+                        title: 'Confirm DWG. Enable in Innovator',
+                        icon: <ExclamationCircleOutlined style={{ color: '#faad14' }} />,
+                        content: 'Drawing active status has not been confirmed in Aras Innovator. To ensure drawing readiness before multi-department review, would you like to confirm DWG Enable now and submit to Concern Approvals?',
+                        okText: 'Confirm DWG & Submit',
+                        cancelText: 'Cancel',
+                        onOk: () => {
+                            form.setFieldsValue({ details: { ...(form.getFieldValue('details') || {}), dwg_enabled: true } });
+                            handleSubmit('APPROVE', { ...extraDetails, dwg_enabled: true });
+                        }
+                    });
+                    return;
+                }
+            }
+
             setLoading(true);
 
             const allAttachments = [...commentAttachments, ...rmdAttachments];
@@ -272,9 +292,10 @@ export default function WorkflowActionCard({
                 }
             };
 
-            // For Block 9, include tasks setup
+            // For Block 9, include tasks setup and dwg_enabled
             if (currentBlock === 9 && selectedAction === 'APPROVE') {
                 payload.details.tasks = deptTasks;
+                payload.details.dwg_enabled = docData?.dwg_enabled || values.details?.dwg_enabled || extraDetails?.dwg_enabled || true;
             }
 
             const endpoint = documentType === 'ECR' 
@@ -337,8 +358,33 @@ export default function WorkflowActionCard({
     const handleAcknowledgeTask = (taskId) => {
         handleSubmit('ACKNOWLEDGE', { 
             task_id: taskId,
-            dwg_enabled: form.getFieldValue(['details', 'dwg_enabled']) 
+            dwg_enabled: docData?.dwg_enabled || form.getFieldValue(['details', 'dwg_enabled']) 
         });
+    };
+
+    const handleConfirmDwgEnable = async () => {
+        try {
+            setLoading(true);
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const token = localStorage.getItem("token");
+            await axios.put(`${baseUrl}/api/ecnt/ecn/${documentId}/action`, {
+                block_number: currentBlock || 9,
+                action: 'CONFIRM_DWG_ENABLE',
+                details: { dwg_enabled: true }
+            }, { 
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                withCredentials: true 
+            });
+            antdMessage.success("DWG. Enable status confirmed and saved in Innovator!");
+            if (docData) docData.dwg_enabled = true;
+            form.setFieldsValue({ details: { ...(form.getFieldValue('details') || {}), dwg_enabled: true } });
+            if (onSuccess) onSuccess();
+        } catch (err) {
+            console.error("Failed to confirm DWG enable:", err);
+            antdMessage.error(err?.response?.data?.error || "Failed to save DWG Enable status");
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Render Forms per block
@@ -349,7 +395,7 @@ export default function WorkflowActionCard({
                 return (
                     <div style={{ marginBottom: 16 }}>
                         <Alert 
-                            message={`ECR Approved & Official ECN Issued (#${docData.linked_ecn_id})`}
+                            message={`ECR Approved & Official ECN Issued (${docData.linked_ecn_no || `ECN #${docData.linked_ecn_id}`})`}
                             description="This change request has successfully completed Block 4 and transferred to the official ECN workflow."
                             type="success" 
                             showIcon 
@@ -362,7 +408,7 @@ export default function WorkflowActionCard({
                             onClick={() => onNavigateToEcn && onNavigateToEcn(docData.linked_ecn_id)}
                             style={{ width: '100%', height: 42, borderRadius: 8, fontWeight: 600, background: '#1677ff' }}
                         >
-                            Open Linked ECN Workspace (#{docData.linked_ecn_id})
+                            Open Linked ECN Workspace ({docData.linked_ecn_no || `ECN #${docData.linked_ecn_id}`})
                         </Button>
                     </div>
                 );
@@ -629,6 +675,54 @@ export default function WorkflowActionCard({
                                 <Checkbox style={{ fontWeight: 600 }}>Confirm FAI Approved if Required (Check to confirm upon receiving passing FAI results)</Checkbox>
                             </Form.Item>
                         </Col>
+                        <Col span={24}>
+                            <div style={{ 
+                                marginBottom: 14, 
+                                background: (docData?.dwg_enabled || form.getFieldValue(['details', 'dwg_enabled'])) ? '#f6ffed' : '#e6f7ff', 
+                                padding: '12px 16px', 
+                                borderRadius: 8, 
+                                border: `1px solid ${(docData?.dwg_enabled || form.getFieldValue(['details', 'dwg_enabled'])) ? '#b7eb8f' : '#91d5ff'}` 
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <Form.Item name={['details', 'dwg_enabled']} valuePropName="checked" noStyle initialValue={docData?.dwg_enabled || false}>
+                                                <Checkbox 
+                                                    style={{ fontWeight: 600, color: '#096dd9', fontSize: 13 }}
+                                                    onChange={e => {
+                                                        form.setFieldsValue({ details: { ...(form.getFieldValue('details') || {}), dwg_enabled: e.target.checked } });
+                                                    }}
+                                                >
+                                                    Confirm DWG. Enable (Engineer Assigned confirms drawing active status in Innovator)
+                                                </Checkbox>
+                                            </Form.Item>
+                                            {(docData?.dwg_enabled || form.getFieldValue(['details', 'dwg_enabled'])) ? (
+                                                <Tag color="success" icon={<CheckCircleOutlined />}>CONFIRMED</Tag>
+                                            ) : (
+                                                <Tag color="warning" icon={<ClockCircleOutlined />}>ACTION REQUIRED</Tag>
+                                            )}
+                                        </div>
+                                        <div style={{ fontSize: 12, color: '#595959', marginTop: 4, paddingLeft: 24 }}>
+                                            Confirm that drawing has been enabled and activated in Aras Innovator PLM before releasing to Multi-Department Concern Approvals.
+                                        </div>
+                                    </div>
+
+                                    {/* Direct Action Button to Confirm & Save immediately */}
+                                    {!(docData?.dwg_enabled) && (
+                                        <Button 
+                                            type="primary"
+                                            size="middle"
+                                            icon={<CheckCircleOutlined />}
+                                            loading={loading}
+                                            onClick={handleConfirmDwgEnable}
+                                            style={{ background: '#52c41a', borderColor: '#52c41a', borderRadius: 6, fontWeight: 600 }}
+                                        >
+                                            Confirm & Save DWG. Enable
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </Col>
                         <Col span={12}>
                             <Form.Item name={['details', 'fai_lot_no']} label="FAI Lot No.">
                                 <Input placeholder="Lot number used in FAI..." />
@@ -696,13 +790,49 @@ export default function WorkflowActionCard({
                         style={{ marginBottom: 16 }}
                     />
 
-                    <div style={{ marginBottom: 14, background: '#e6f7ff', padding: '10px 14px', borderRadius: 6, border: '1px solid #91d5ff' }}>
-                        <Form.Item name={['details', 'dwg_enabled']} valuePropName="checked" noStyle>
-                            <Checkbox style={{ fontWeight: 600, color: '#096dd9' }}>
-                                Confirm DWG. Enable (Engineer Assigned confirms drawing active status in Innovator)
-                            </Checkbox>
-                        </Form.Item>
-                    </div>
+                    {/* DWG Enable Confirmation Status in Block 10 */}
+                    {docData?.dwg_enabled ? (
+                        <div style={{ marginBottom: 14, background: '#f6ffed', padding: '10px 14px', borderRadius: 6, border: '1px solid #b7eb8f', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Space>
+                                <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 16 }} />
+                                <div>
+                                    <Text strong style={{ color: '#389e0d', fontSize: 13, display: 'block' }}>
+                                        DWG. Enable Confirmed in Innovator
+                                    </Text>
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                        Lead Engineer has confirmed active drawing status in PLM before department review.
+                                    </Text>
+                                </div>
+                            </Space>
+                            <Tag color="success">VERIFIED</Tag>
+                        </div>
+                    ) : (
+                        <div style={{ marginBottom: 14, background: '#fffbe6', padding: '10px 14px', borderRadius: 6, border: '1px solid #ffe58f', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                            <Space>
+                                <ClockCircleOutlined style={{ color: '#fa8c16', fontSize: 16 }} />
+                                <div>
+                                    <Text strong style={{ color: '#d46b08', fontSize: 13, display: 'block' }}>
+                                        Pending DWG. Enable Confirmation
+                                    </Text>
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                        Engineer Assigned confirms drawing active status in Innovator.
+                                    </Text>
+                                </div>
+                            </Space>
+                            {(userDepartment === 'ENG' || userRole === 'AD' || docData?.engineer_assigned === empNo || !docData?.engineer_assigned) && (
+                                <Button 
+                                    type="primary"
+                                    size="small"
+                                    icon={<CheckCircleOutlined />}
+                                    loading={loading}
+                                    onClick={handleConfirmDwgEnable}
+                                    style={{ background: '#52c41a', borderColor: '#52c41a', borderRadius: 6, fontWeight: 600, fontSize: 12 }}
+                                >
+                                    Confirm & Save DWG. Enable
+                                </Button>
+                            )}
+                        </div>
+                    )}
 
                     <div style={{ width: '100%', overflowX: 'auto', border: '1px solid #f0f0f0', borderRadius: 8, marginBottom: 14 }}>
                         <Table 
