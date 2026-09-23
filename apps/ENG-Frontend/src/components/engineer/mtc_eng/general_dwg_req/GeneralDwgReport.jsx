@@ -167,12 +167,22 @@ export default function GeneralDwgReport() {
                     data: onTimeArr,
                     backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.green, 0.7)), hexToRgba(C.green, 0.3)),
                     borderColor: C.green, borderWidth: 1, yAxisID: 'yLeft', order: 2,
+                    datalabels: {
+                        display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
+                        color: '#fff', anchor: 'start', align: 'top', offset: 4,
+                        font: { size: 10, weight: 700 },
+                    },
                 },
                 {
                     type: 'bar', label: 'Delay',
                     data: delayArr,
                     backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.red, 0.7)), hexToRgba(C.red, 0.3)),
                     borderColor: C.red, borderWidth: 1, yAxisID: 'yLeft', order: 2,
+                    datalabels: {
+                        display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
+                        color: '#fff', anchor: 'start', align: 'top', offset: 4,
+                        font: { size: 10, weight: 700 },
+                    },
                 },
                 {
                     // Invisible marker — carries no bar/line of its own, only the "Total"
