@@ -59,7 +59,7 @@ Two tools, both under `.claude/skills/run-engineersystem/`:
 ```bash
 curl -s --noproxy '*' http://localhost:2005/api/health
 
-TOKEN=$(cd apps/ENG-Backend && node "../../.claude/skills/run-engineersystem/mint-token.mjs" LC043 "Phanuwach Thongpradab" HEAD ENG)
+TOKEN=$(cd apps/ENG-Backend && node "../../.claude/skills/run-engineersystem/mint-token.mjs" LE485 "Apisit Suwannakate" STAFF AD)
 
 curl -s --noproxy '*' -H "Authorization: Bearer $TOKEN" http://localhost:2005/api/get-all-users
 curl -s --noproxy '*' -H "Authorization: Bearer $TOKEN" http://localhost:2005/api/tooling-select/machines
@@ -67,9 +67,22 @@ curl -s --noproxy '*' -H "Authorization: Bearer $TOKEN" http://localhost:2005/ap
 ```
 
 `empno`/`name`/`role`/`department` should belong to a **real row** in
-`eng_system.users` (see Gotchas) — `LC043` / `Phanuwach Thongpradab` / `HEAD` / `ENG`
-is a real, verified-working record as of this writing; if it's gone, get another
-one from an unauthenticated-then-authenticated call to `/api/get-all-users`.
+`eng_system.users` (see Gotchas) — `LE485` / `Apisit Suwannakate` / `STAFF` / `AD`
+is a real, verified-working record as of this writing (the user's own account —
+use this one, not a colleague's, so smoke-test writes don't show up as their
+activity in the activity dashboard); if it's gone, get another one from an
+unauthenticated-then-authenticated call to `/api/get-all-users`.
+
+`mint-token.mjs`'s 4th arg is reused for **both** the JWT's `department` and
+`group` claims (real login sets them from `u_department`/`user_group`
+separately — see `middleware/auth.js`). For LE485 those differ
+(`u_department=AD`, `user_group=MTC`), so a page gated on **group** (most MTC
+pages) needs `AD` passed positionally as shown above only for `isAdmin`-style
+department/role checks; if a specific test needs `group==='MTC'` to actually
+render, mint by hand instead:
+```js
+jwt.sign({ empno: 'LE485', name: 'Apisit Suwannakate', department: 'AD', group: 'MTC', role: 'STAFF', perms: [] }, process.env.JWT_SECRET, { expiresIn: '1h' })
+```
 
 ### 2. Frontend — puppeteer driver, screenshots
 
@@ -82,7 +95,7 @@ SHOT_DIR=/tmp/shots node .claude/skills/run-engineersystem/driver.mjs \
 
 # Authenticated view of any protected route (injects a synthetic session)
 SHOT_DIR=/tmp/shots node .claude/skills/run-engineersystem/driver.mjs \
-  login-shot http://localhost:3000/home "$TOKEN" LC043 "Phanuwach Thongpradab" HEAD ENG home.png
+  login-shot http://localhost:3000/home "$TOKEN" LE485 "Apisit Suwannakate" STAFF AD home.png
 ```
 
 `driver.mjs shot <url> <outfile.png>` — plain navigate + screenshot.
@@ -101,7 +114,7 @@ full-page. `login-shot` only proves a route renders; this exercises what the pag
 ```bash
 # Search a C/N on Tooling Select and capture the results
 SHOT_DIR=/tmp/shots node .claude/skills/run-engineersystem/driver.mjs login-do \
-  http://localhost:3000/eng/mtc_eng/tooling-select "$TOKEN" LC043 "Phanuwach Thongpradab" HEAD ENG \
+  http://localhost:3000/eng/mtc_eng/tooling-select "$TOKEN" LE485 "Apisit Suwannakate" STAFF AD \
   'input[placeholder="C/N Number"]' $'412998\n' - - 45000 result.png
 ```
 
