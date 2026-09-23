@@ -143,12 +143,6 @@ export default function GeneralDwgReport() {
             const m = parseInt(r.month?.split('-')[1], 10);
             if (m) byMonth[m] = r;
         });
-        const ontimePct = FYE_MONTH_NUMS.map(num => {
-            const row = byMonth[num];
-            if (!row) return null;
-            const total = (row.onTime || 0) + (row.delay || 0);
-            return total > 0 ? parseFloat(((row.onTime / total) * 100).toFixed(1)) : null;
-        });
         const prev = data?.prevFyeAvg;
         const avgLabel = prev ? `FYE${prev.fye} avg` : 'Prev avg';
         const labels = [avgLabel, ...FYE_MONTH_LABELS];
@@ -161,26 +155,13 @@ export default function GeneralDwgReport() {
                     type: 'bar', label: 'On time',
                     data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.onTime ?? 0), prev?.onTime ?? null),
                     backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.green, 0.7)), hexToRgba(C.green, 0.3)),
-                    borderColor: C.green, borderWidth: 1, stack: 'monthly', yAxisID: 'yLeft', order: 2,
+                    borderColor: C.green, borderWidth: 1, stack: 'monthly',
                 },
                 {
                     type: 'bar', label: 'Delay',
                     data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.delay ?? 0), prev?.delay ?? null),
                     backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.red, 0.7)), hexToRgba(C.red, 0.3)),
-                    borderColor: C.red, borderWidth: 1, stack: 'monthly', yAxisID: 'yLeft', order: 2,
-                },
-                {
-                    type: 'line', label: '% On time',
-                    data: lead(ontimePct, prev?.onTimePct ?? null),
-                    borderColor: C.yellow, backgroundColor: hexToRgba(C.yellow, 0.15),
-                    tension: 0.4, fill: false, pointRadius: 4, borderWidth: 2,
-                    yAxisID: 'yRight', order: 1, spanGaps: true,
-                },
-                {
-                    type: 'line', label: 'Target 95%',
-                    data: labels.map(() => 95),
-                    borderColor: hexToRgba(C.red, 0.85), borderWidth: 1.5, borderDash: [6, 4],
-                    pointRadius: 0, fill: false, yAxisID: 'yRight', order: 0,
+                    borderColor: C.red, borderWidth: 1, stack: 'monthly',
                 },
             ],
         };
@@ -197,19 +178,14 @@ export default function GeneralDwgReport() {
                     label: (ctx) => {
                         const val = ctx.raw;
                         if (val === null || val === undefined) return null;
-                        return ctx.dataset.label.includes('%') ? ` ${ctx.dataset.label}: ${val}%` : ` ${ctx.dataset.label}: ${val}`;
+                        return ` ${ctx.dataset.label}: ${val}`;
                     },
                 },
             },
         },
         scales: {
             x: { ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
-            yLeft: { type: 'linear', position: 'left', stacked: true, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
-            yRight: {
-                type: 'linear', position: 'right', min: 0, max: 115,
-                ticks: { color: C.yellow, font: { size: 10 }, stepSize: 20, callback: (v) => (v > 100 ? '' : `${v}%`) },
-                grid: { drawOnChartArea: false },
-            },
+            y: { type: 'linear', stacked: true, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
         },
     }), [C]);
 
