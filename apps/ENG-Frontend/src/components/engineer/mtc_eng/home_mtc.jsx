@@ -33,6 +33,7 @@ const HomeMTCEng = () => {
   const [sdsKpi, setSdsKpi] = useState(null);
   const [sdsBuilding, setSdsBuilding] = useState(false);
   const [sdsPartTypes, setSdsPartTypes] = useState([]);
+  const [sdsByPartType, setSdsByPartType] = useState({});
 
   const fetchMTCData = async () => {
     setLoading(true);
@@ -69,6 +70,11 @@ const HomeMTCEng = () => {
       // scope.part_types (report config), in config order — which part classes the
       // coverage report is currently scoped to (admin-editable via the Scope modal).
       setSdsPartTypes(res.data?.partTypes || []);
+      // Per-type row count (kpi.byPartType[pt].total — same primary number the full
+      // report's part-type cards lead with), keyed by part_type for the scope tags.
+      const byType = {};
+      for (const pt of res.data?.byPartType || []) byType[pt.part_type] = pt.total;
+      setSdsByPartType(byType);
       setSdsBuilding(false);
     } catch (error) {
       console.error("Fetch SDS Coverage Error:", error);
@@ -269,7 +275,9 @@ const HomeMTCEng = () => {
                     <div>
                       <span style={{ color: theme.colors.textSecondary, marginRight: '8px' }}>Active scope:</span>
                       {sdsPartTypes.map((pt) => (
-                        <Tag key={pt} color={SDS_PART_TYPE_TAG_COLOR[pt] || 'default'}>{sdsPartTypeLabel(pt)}</Tag>
+                        <Tag key={pt} color={SDS_PART_TYPE_TAG_COLOR[pt] || 'default'}>
+                          {sdsPartTypeLabel(pt)} {Number(sdsByPartType[pt] || 0).toLocaleString()}
+                        </Tag>
                       ))}
                     </div>
                   )}
