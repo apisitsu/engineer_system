@@ -613,6 +613,140 @@ async function calculateRequestPerformance(dueDateVal, actualDateVal) {
     }
 }
 
+// ── FYE helper (Apr-Mar) — mirrors legacyMtcController's, kept local rather than
+// shared since it is 4 lines and the two controllers don't otherwise import from
+// each other.
+const fyeToRangeTR = (fye) => ({ start: `${fye + 1999}-04-01`, end: `${fye + 2000}-03-31` });
+const currentFyeTR = () => {
+    const m = moment().month() + 1;
+    const y = moment().year();
+    return m >= 4 ? y - 1999 : y - 2000;
+};
+const TR_STAGE_ORDER = ['eng_check', 'draft_man', 'dwg_check', 'eng_review', 'eng_approve', 'eng_inform'];
+
+/**
+ * GET /api/engineer/mtc/tool-requests/report/fye — FYEs that have completed data
+ */
+const getToolRequestAvailableFYE = async (req, res) => {
+    try {
+        const r = await engPool.query(`
+            SELECT DISTINCT
+                CASE WHEN EXTRACT(MONTH FROM updated_at) >= 4
+                     THEN EXTRACT(YEAR FROM updated_at)::int - 1999
+                     ELSE EXTRACT(YEAR FROM updated_at)::int - 2000 END AS fye
+            FROM ${TABLES.TR_REQUEST}
+            WHERE deleted_at IS NULL AND completion_status IN ('On time', 'Delay')
+            ORDER BY fye DESC
+        `);
+        res.json(r.rows.map(row => Number(row.fye)));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/engineer/mtc/tool-requests/report?fye=
+ * "Report Of General Drawing Job Request" — monthly On time/Delay trend (with a
+ * previous-FYE average baseline, same pattern as ToolingResultDashboard) plus an
+ * average-days-per-stage breakdown, both grouped by the month a request finished
+ * (completion_status is only set once, at the Eng Inform approval, so
+ * tr_request.updated_at at that point IS the completion timestamp).
+ */
+const getToolRequestReport = async (req, res) => {
+    try {
+        const fye = parseInt(req.query.fye) || currentFyeTR();
+        const { start: fyeStart, end: fyeEnd } = fyeToRangeTR(fye);
+        const { start: prevStart, end: prevEnd } = fyeToRangeTR(fye - 1);
+
+        const fetchPeriod = async (start, end) => {
+            const reqRes = await engPool.query(
+                `SELECT id, req_date, completion_status, updated_at FROM ${TABLES.TR_REQUEST}
+                  WHERE deleted_at IS NULL AND completion_status IN ('On time', 'Delay')
+                    AND DATE(updated_at) BETWEEN $1 AND $2`,
+                [start, end]);
+            const ids = reqRes.rows.map(r => r.id);
+            let workflow = [];
+            if (ids.length > 0) {
+                const wfRes = await engPool.query(
+                    `SELECT req_id, stage_name, action_date FROM ${TABLES.TR_WORKFLOW}
+                      WHERE req_id = ANY($1) ORDER BY req_id ASC, step_no ASC`,
+                    [ids]);
+                workflow = wfRes.rows;
+            }
+            return { requests: reqRes.rows, workflow };
+        };
+
+        const buildMonthly = ({ requests }) => {
+            const byMonth = {};
+            requests.forEach(r => {
+                const mk = moment(r.updated_at).format('YYYY-MM');
+                byMonth[mk] ||= { month: mk, onTime: 0, delay: 0 };
+                if (r.completion_status === 'On time') byMonth[mk].onTime++;
+                else byMonth[mk].delay++;
+            });
+            return Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month));
+        };
+
+        // Average calendar days spent in each stage, for requests that finished in a
+        // given month — stage 1 (eng_check) measured from req_date (creation); every
+        // later stage from the previous stage's own action_date.
+        const buildStageAvg = ({ requests, workflow }) => {
+            const stepsByReq = {};
+            workflow.forEach(w => { (stepsByReq[w.req_id] ||= []).push(w); });
+            const reqById = Object.fromEntries(requests.map(r => [String(r.id), r]));
+            const monthAcc = {};
+            Object.entries(stepsByReq).forEach(([reqId, steps]) => {
+                const request = reqById[String(reqId)];
+                if (!request) return;
+                const mk = moment(request.updated_at).format('YYYY-MM');
+                monthAcc[mk] ||= {};
+                let prev = moment(request.req_date);
+                steps.forEach(s => {
+                    const cur = moment(s.action_date);
+                    const days = Math.max(cur.diff(prev, 'hours') / 24, 0);
+                    const acc = (monthAcc[mk][s.stage_name] ||= { sum: 0, n: 0 });
+                    acc.sum += days;
+                    acc.n += 1;
+                    prev = cur;
+                });
+            });
+            return Object.entries(monthAcc).map(([month, stages]) => {
+                const row = { month };
+                TR_STAGE_ORDER.forEach(s => {
+                    row[s] = stages[s] ? parseFloat((stages[s].sum / stages[s].n).toFixed(2)) : 0;
+                });
+                return row;
+            }).sort((a, b) => a.month.localeCompare(b.month));
+        };
+
+        const [curPeriod, prevPeriod] = await Promise.all([
+            fetchPeriod(fyeStart, fyeEnd),
+            fetchPeriod(prevStart, prevEnd),
+        ]);
+
+        const monthlyTrend = buildMonthly(curPeriod);
+        const stageAvg = buildStageAvg(curPeriod);
+
+        const prevMonthly = buildMonthly(prevPeriod);
+        const prevMonths = prevMonthly.length;
+        const prevOnTime = prevMonthly.reduce((s, r) => s + r.onTime, 0);
+        const prevDelay = prevMonthly.reduce((s, r) => s + r.delay, 0);
+        const prevFyeAvg = prevMonths > 0 ? {
+            fye: fye - 1,
+            months: prevMonths,
+            onTime: Math.round(prevOnTime / prevMonths),
+            delay: Math.round(prevDelay / prevMonths),
+            onTimePct: (prevOnTime + prevDelay) > 0
+                ? parseFloat(((prevOnTime / (prevOnTime + prevDelay)) * 100).toFixed(1)) : 0,
+        } : null;
+
+        res.json({ fye, stageOrder: TR_STAGE_ORDER, monthlyTrend, prevFyeAvg, stageAvg });
+    } catch (err) {
+        logger.error('Error building tool request report', { error: err.message });
+        res.status(500).json({ error: err.message });
+    }
+};
+
 /**
  * POST /api/engineer/mtc/tool-requests/:id/action
  */
@@ -948,6 +1082,8 @@ module.exports = {
     updateToolRequest,
     deleteToolRequest,
     getToolRequestDashboard,
+    getToolRequestReport,
+    getToolRequestAvailableFYE,
     getFactoryWorkCenters,
     getStagePermissions,
     submitAction,

@@ -50,6 +50,8 @@ export const server = {
   MTC_TOOL_REQUESTS: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
+  MTC_TOOL_REQUEST_REPORT: `${apiUrl}api/engineer/mtc/tool-requests/report`,
+  MTC_TOOL_REQUEST_REPORT_FYE: `${apiUrl}api/engineer/mtc/tool-requests/report/fye`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
   MTC_TOOL_REQUEST_WORK_CENTERS: `${apiUrl}api/engineer/mtc/tool-requests/work-centers`,
   MTC_EMAIL_CONFIG: `${apiUrl}api/engineer/mtc/email-config`,

@@ -111,6 +111,7 @@ export const mtc = createMenu([
         label: "Report", key: "report",
         children: [
             { label: "Inspection Dashboard", path: MTC_PATHS.TOOLING_RESULT_DASHBOARD, key: "tooling-result-dashboard" },
+            { label: "General DWG Report", path: MTC_PATHS.GENERAL_DWG_REPORT, key: "general-dwg-report" },
             { label: "SDS Coverage Report", path: MTC_PATHS.SDS_COVERAGE_REPORT, key: "sds-coverage-report" },
             { label: "SDS History", path: MTC_PATHS.SDS_HISTORY, key: "sds-history" },
         ]

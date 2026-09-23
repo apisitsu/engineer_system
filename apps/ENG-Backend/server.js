@@ -381,6 +381,8 @@ const { validateFileUpload } = require('./api/engineer/mtc/utils/fileUpload');
 // Public endpoints (no authentication required - viewing only)
 app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
+app.get('/api/engineer/mtc/tool-requests/report', mtcVerifyToken, toolReq.getToolRequestReport);
+app.get('/api/engineer/mtc/tool-requests/report/fye', mtcVerifyToken, toolReq.getToolRequestAvailableFYE);
 app.get('/api/engineer/mtc/tool-requests/work-centers', mtcVerifyToken, toolReq.getFactoryWorkCenters);
 app.get('/api/engineer/mtc/tool-requests/permissions', mtcVerifyToken, toolReq.getStagePermissions);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
