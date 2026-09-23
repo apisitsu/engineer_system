@@ -17,9 +17,10 @@ import {
     Tooltip as ChartTooltip,
     Legend,
 } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Bar } from 'react-chartjs-2';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ChartTitle, ChartTooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ChartTitle, ChartTooltip, Legend, ChartDataLabels);
 
 const { Content } = Layout;
 const { Text } = Typography;
@@ -154,20 +155,37 @@ export default function GeneralDwgReport() {
         const labels = [avgLabel, ...FYE_MONTH_LABELS];
         const lead = (arr, val) => [val, ...arr];
 
+        const onTimeArr = lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.onTime ?? 0), prev?.onTime ?? null);
+        const delayArr = lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.delay ?? 0), prev?.delay ?? null);
+        const totalArr = onTimeArr.map((v, i) => (v === null && delayArr[i] === null) ? null : (v || 0) + (delayArr[i] || 0));
+
         return {
             labels,
             datasets: [
                 {
                     type: 'bar', label: 'On time',
-                    data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.onTime ?? 0), prev?.onTime ?? null),
+                    data: onTimeArr,
                     backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.green, 0.7)), hexToRgba(C.green, 0.3)),
-                    borderColor: C.green, borderWidth: 1, stack: 'monthly', yAxisID: 'yLeft', order: 2,
+                    borderColor: C.green, borderWidth: 1, yAxisID: 'yLeft', order: 2,
                 },
                 {
                     type: 'bar', label: 'Delay',
-                    data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.delay ?? 0), prev?.delay ?? null),
+                    data: delayArr,
                     backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.red, 0.7)), hexToRgba(C.red, 0.3)),
-                    borderColor: C.red, borderWidth: 1, stack: 'monthly', yAxisID: 'yLeft', order: 2,
+                    borderColor: C.red, borderWidth: 1, yAxisID: 'yLeft', order: 2,
+                },
+                {
+                    // Invisible marker — carries no bar/line of its own, only the "Total"
+                    // datalabel floating above the pair of bars for that month.
+                    type: 'line', label: 'Total',
+                    data: totalArr,
+                    borderColor: 'transparent', backgroundColor: 'transparent', pointRadius: 0,
+                    borderWidth: 0, fill: false, yAxisID: 'yLeft', order: 3, spanGaps: true,
+                    datalabels: {
+                        display: true, color: C.textPri, anchor: 'end', align: 'top', offset: 2,
+                        font: { size: 10, weight: 700 },
+                        formatter: (v) => (v === null ? '' : v),
+                    },
                 },
                 {
                     type: 'line', label: '% On time',
@@ -175,12 +193,18 @@ export default function GeneralDwgReport() {
                     borderColor: C.yellow, backgroundColor: hexToRgba(C.yellow, 0.15),
                     tension: 0.4, fill: false, pointRadius: 4, borderWidth: 2,
                     yAxisID: 'yRight', order: 1, spanGaps: true,
+                    datalabels: {
+                        display: true, color: C.yellow, anchor: 'end', align: 'top', offset: 4,
+                        font: { size: 10, weight: 700 },
+                        formatter: (v) => (v === null ? '' : `${v}%`),
+                    },
                 },
                 {
                     type: 'line', label: 'Target 95%',
                     data: labels.map(() => 95),
                     borderColor: hexToRgba(C.red, 0.85), borderWidth: 1.5, borderDash: [6, 4],
                     pointRadius: 0, fill: false, yAxisID: 'yRight', order: 0,
+                    datalabels: { display: false },
                 },
             ],
         };
@@ -189,8 +213,18 @@ export default function GeneralDwgReport() {
     const monthlyChartOpts = useMemo(() => ({
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { top: 20 } },
         plugins: {
-            legend: { position: 'bottom', labels: { color: C.textPri, font: { size: 11 }, boxWidth: 12, padding: 12 } },
+            // Base "off" so any dataset that doesn't set its own `datalabels` stays
+            // silent (the On time/Delay bars); Total and % On time opt back in per-dataset.
+            datalabels: { display: false },
+            legend: {
+                position: 'bottom',
+                labels: {
+                    color: C.textPri, font: { size: 11 }, boxWidth: 12, padding: 12,
+                    filter: (item) => item.text !== 'Total', // marker-only series, not a real legend entry
+                },
+            },
             tooltip: {
                 mode: 'index', intersect: false,
                 callbacks: {
@@ -204,7 +238,7 @@ export default function GeneralDwgReport() {
         },
         scales: {
             x: { ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
-            yLeft: { type: 'linear', position: 'left', stacked: true, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
+            yLeft: { type: 'linear', position: 'left', ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
             yRight: {
                 type: 'linear', position: 'right', min: 0, max: 115,
                 ticks: { color: C.yellow, font: { size: 10 }, stepSize: 20, callback: (v) => (v > 100 ? '' : `${v}%`) },
@@ -238,6 +272,7 @@ export default function GeneralDwgReport() {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
+            datalabels: { display: false },
             legend: { position: 'bottom', labels: { color: C.textPri, font: { size: 11 }, boxWidth: 12, padding: 12 } },
             tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw ?? '-'} day(s)` } },
         },
