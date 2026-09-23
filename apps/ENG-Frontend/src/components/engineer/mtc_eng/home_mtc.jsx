@@ -147,6 +147,14 @@ const HomeMTCEng = () => {
                   <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
                     <AssessmentRoundedIcon sx={{ color: theme.colors.info, fontSize: 50 }} />
                     <a href={MTC_PATHS.TOOLING_INSPECT} style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tooling Inspection Report</a>
+                    <Button
+                      type="primary"
+                      size="small"
+                      style={{ marginLeft: '16px', backgroundColor: theme.colors.info, borderColor: theme.colors.info }}
+                      onClick={() => navigate(MTC_PATHS.TOOLING_RESULT_DASHBOARD)}
+                    >
+                      Full Report
+                    </Button>
                   </h2>
                 </div>
                 <Divider style={{ margin: '0 0 16px 0' }} />
@@ -190,9 +198,17 @@ const HomeMTCEng = () => {
                   <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
                     <AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 50 }} />
                     <a href={MTC_PATHS.TOOL_REQUEST} style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>General DWG Request</a>
+                    <Button
+                      type="primary"
+                      size="small"
+                      style={{ marginLeft: '16px', backgroundColor: theme.colors.success, borderColor: theme.colors.success }}
+                      onClick={() => navigate(MTC_PATHS.GENERAL_DWG_REPORT)}
+                    >
+                      Full Report
+                    </Button>
                   </h2>
-                  <Button 
-                    type="primary" 
+                  <Button
+                    type="primary"
                     size="middle"
                     onClick={() => navigate(`${MTC_PATHS.TOOL_REQUEST}?action=create`)}
                   >
@@ -240,6 +256,14 @@ const HomeMTCEng = () => {
                   <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
                     <AssessmentRoundedIcon sx={{ color: theme.colors.secondary, fontSize: 50 }} />
                     <a href={MTC_PATHS.SDS_COVERAGE_REPORT} style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>SDS Coverage Report</a>
+                    <Button
+                      type="primary"
+                      size="small"
+                      style={{ marginLeft: '16px', backgroundColor: theme.colors.secondary, borderColor: theme.colors.secondary }}
+                      onClick={() => navigate(MTC_PATHS.SDS_COVERAGE_REPORT)}
+                    >
+                      Full Report
+                    </Button>
                   </h2>
                   {sdsPartTypes.length > 0 && (
                     <div>

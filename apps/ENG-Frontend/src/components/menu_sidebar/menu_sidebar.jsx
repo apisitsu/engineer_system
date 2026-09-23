@@ -110,9 +110,9 @@ export const mtc = createMenu([
     {
         label: "Report", key: "report",
         children: [
-            { label: "Inspection Report", path: MTC_PATHS.TOOLING_RESULT_DASHBOARD, key: "tooling-result-dashboard" },
-            { label: "General DWG Report", path: MTC_PATHS.GENERAL_DWG_REPORT, key: "general-dwg-report" },
-            { label: "SDS Coverage Report", path: MTC_PATHS.SDS_COVERAGE_REPORT, key: "sds-coverage-report" },
+            // Inspection Report / General DWG Report / SDS Coverage Report moved to
+            // "Full Report" buttons on their home-page cards (home_mtc.jsx) — SDS
+            // History has no home card, so it stays here as the only way to reach it.
             { label: "SDS History", path: MTC_PATHS.SDS_HISTORY, key: "sds-history" },
         ]
     },
