@@ -111,6 +111,20 @@ export default function EcntDashboardView({
 
         // Standard fallbacks based on Block
         if (isEcr) {
+            if (st === 'transferred to ecn' || doc.linked_ecn_id) {
+                return {
+                    stageTag: doc.linked_ecn_id ? `ECN Issued (#${doc.linked_ecn_id})` : 'ECN Issued',
+                    color: 'default',
+                    pics: [{ name: 'ECN Formulated' }]
+                };
+            }
+            if (st === 'issued ecn' || blk === 5 || stage === 'STAGE_4') {
+                return {
+                    stageTag: `Block 5: Issue ECN`,
+                    color: 'blue',
+                    pics: [{ name: doc.assigned_to || doc.engineer_assigned || 'Lead Engineer' }]
+                };
+            }
             if (blk <= 2) {
                 return {
                     stageTag: `Block 1-2: ECR Draft`,
@@ -320,9 +334,9 @@ export default function EcntDashboardView({
         const myActionMatch = scopeFilter === 'ALL' || getMyActionReason(d) !== null;
 
         const isRework = (d.process_status || '').toLowerCase() === 'require more detail' || (d.current_stage_code || '').includes('_R');
-        const isEffective = d.process_status === 'ECN Effective' || d.process_status === 'ECR Only Closed' || d.process_status === 'Denied';
-        const isEcrPhase = d.doc_type === 'ECR' && (d.current_block || 1) <= 4 && !isEffective;
-        const isEcnPhase = (d.doc_type === 'ECN' || d.process_status === 'Issued ECN') && !isEffective;
+        const isEffective = d.process_status === 'ECN Effective' || d.process_status === 'ECR Only Closed' || d.process_status === 'Denied' || d.process_status === 'Transferred to ECN' || (d.doc_type === 'ECR' && d.linked_ecn_id);
+        const isEcrPhase = d.doc_type === 'ECR' && (d.current_block || 1) <= 4 && d.process_status !== 'Issued ECN' && !isEffective;
+        const isEcnPhase = ((d.doc_type === 'ECN') || (d.doc_type === 'ECR' && (d.current_block || 1) === 5 && !d.linked_ecn_id)) && !isEffective;
 
         const categoryMatch = 
             categoryFilter === 'ALL' ||
@@ -340,25 +354,25 @@ export default function EcntDashboardView({
         const stage = doc.current_stage_code || '';
         const blk = doc.current_block || 1;
 
-        if (st.includes('effective') || st.includes('closed') || st === 'denied') return 'effective';
+        if (st.includes('effective') || st.includes('closed') || st === 'denied' || st === 'transferred to ecn' || (doc.doc_type === 'ECR' && doc.linked_ecn_id)) return 'effective';
         if (st === 'require more detail' || stage.includes('_R')) return 'draft_rmd';
         if (doc.doc_type === 'ECR' && blk === 3) return 'dept_mgr';
-        if (doc.doc_type === 'ECR' && blk === 4) return 'eng_mgr';
-        if (doc.doc_type === 'ECN' && (blk === 5 || blk === 6)) return 'ecn_prep';
+        if (doc.doc_type === 'ECR' && blk === 4 && st !== 'issued ecn') return 'eng_mgr';
+        if ((doc.doc_type === 'ECN' && (blk === 5 || blk === 6)) || (doc.doc_type === 'ECR' && (blk === 5 || st === 'issued ecn'))) return 'ecn_prep';
         if (doc.doc_type === 'ECN' && (blk === 7 || blk === 8)) return 'qc_eval';
         if (doc.doc_type === 'ECN' && (blk === 9 || blk === 10 || blk === 11)) return 'concern_ack';
         return 'draft_rmd';
     };
 
     // Metrics
-    const totalActive = combinedDocs.filter(d => !['ECR Only Closed', 'ECN Effective', 'Denied'].includes(d.process_status)).length;
-    const myActionableCount = combinedDocs.filter(d => !['ECR Only Closed', 'ECN Effective', 'Denied'].includes(d.process_status) && getMyActionReason(d) !== null).length;
+    const totalActive = combinedDocs.filter(d => !['ECR Only Closed', 'ECN Effective', 'Denied', 'Transferred to ECN'].includes(d.process_status) && !(d.doc_type === 'ECR' && d.linked_ecn_id)).length;
+    const myActionableCount = combinedDocs.filter(d => !['ECR Only Closed', 'ECN Effective', 'Denied', 'Transferred to ECN'].includes(d.process_status) && !(d.doc_type === 'ECR' && d.linked_ecn_id) && getMyActionReason(d) !== null).length;
     const inClarification = combinedDocs.filter(d => (d.process_status || '').toLowerCase() === 'require more detail' || (d.current_stage_code || '').includes('_R')).length;
-    const totalEffective = combinedDocs.filter(d => d.process_status === 'ECN Effective' || d.process_status === 'ECR Only Closed').length;
+    const totalEffective = combinedDocs.filter(d => d.process_status === 'ECN Effective' || d.process_status === 'ECR Only Closed' || d.process_status === 'Transferred to ECN' || (d.doc_type === 'ECR' && d.linked_ecn_id)).length;
 
     const countAll = combinedDocs.length;
-    const countEcrPhase = combinedDocs.filter(d => d.doc_type === 'ECR' && (d.current_block || 1) <= 4 && !['ECR Only Closed', 'Denied'].includes(d.process_status)).length;
-    const countEcnPhase = combinedDocs.filter(d => (d.doc_type === 'ECN' || d.process_status === 'Issued ECN') && !['ECN Effective', 'Denied'].includes(d.process_status)).length;
+    const countEcrPhase = combinedDocs.filter(d => d.doc_type === 'ECR' && (d.current_block || 1) <= 4 && d.process_status !== 'Issued ECN' && !['ECR Only Closed', 'Denied', 'Transferred to ECN'].includes(d.process_status) && !d.linked_ecn_id).length;
+    const countEcnPhase = combinedDocs.filter(d => (d.doc_type === 'ECN' || (d.doc_type === 'ECR' && (d.process_status === 'Issued ECN' || (d.current_block || 1) === 5) && !d.linked_ecn_id)) && !['ECN Effective', 'Denied', 'Transferred to ECN'].includes(d.process_status)).length;
 
     // Unique departments
     const departments = Array.from(new Set(combinedDocs.map(d => d.department).filter(Boolean)));
@@ -366,10 +380,11 @@ export default function EcntDashboardView({
     const handleCopyLink = (e, doc) => {
         e.stopPropagation();
         const directUrl = `${window.location.origin}/eng/process_eng/ecnt_v2?docType=${doc.doc_type}&id=${doc.id}&view=workspace`;
+        const docIdentifier = (doc.doc_type === 'ECR' ? doc.ecr_no : doc.ecn_no) || `${doc.doc_type} #${doc.id}`;
         
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(directUrl).then(() => {
-                antdMessage.success(`Link for ${doc.ecr_no || doc.ecn_no || doc.doc_type + ' #' + doc.id} copied! Ready to share.`);
+                antdMessage.success(`Link for ${docIdentifier} copied! Ready to share.`);
             }).catch(() => fallbackCopy(directUrl, doc));
         } else {
             fallbackCopy(directUrl, doc);
@@ -377,6 +392,7 @@ export default function EcntDashboardView({
     };
 
     const fallbackCopy = (text, doc) => {
+        const docIdentifier = (doc.doc_type === 'ECR' ? doc.ecr_no : doc.ecn_no) || `${doc.doc_type} #${doc.id}`;
         try {
             const ta = document.createElement('textarea');
             ta.value = text;
@@ -386,7 +402,7 @@ export default function EcntDashboardView({
             ta.select();
             document.execCommand('copy');
             document.body.removeChild(ta);
-            antdMessage.success(`Link for ${doc.ecr_no || doc.ecn_no || doc.doc_type + ' #' + doc.id} copied! Ready to share.`);
+            antdMessage.success(`Link for ${docIdentifier} copied! Ready to share.`);
         } catch(err) {
             antdMessage.info(`URL: ${text}`);
         }
@@ -401,7 +417,9 @@ export default function EcntDashboardView({
             fixed: 'left',
             render: (_, record) => {
                 const isEcr = record.doc_type === 'ECR';
-                const docNo = record.ecr_no || record.ecn_no || `${record.doc_type} #${record.id}`;
+                const docNo = isEcr 
+                    ? (record.ecr_no || `ECR #${record.id}`) 
+                    : (record.ecn_no || `ECN #${record.id}`);
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                         {/* Line 1: Type Badge & Clickable Doc No */}
@@ -416,9 +434,14 @@ export default function EcntDashboardView({
                         {/* Line 2: Date & Optional Linked Reference */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11, color: '#8c8c8c' }}>
                             <span>📅 {moment(record.created_at).format('DD-MMM-YYYY')}</span>
-                            {record.linked_ecn_id && (
+                            {isEcr && record.linked_ecn_id && (
                                 <Tag color="geekblue" style={{ margin: 0, fontSize: 10, borderRadius: 4, padding: '0 4px' }}>
                                     🔗 ECN #{record.linked_ecn_id}
+                                </Tag>
+                            )}
+                            {!isEcr && record.ecr_no && (
+                                <Tag color="blue" style={{ margin: 0, fontSize: 10, borderRadius: 4, padding: '0 4px' }}>
+                                    🔗 Ref {record.ecr_no}
                                 </Tag>
                             )}
                         </div>
@@ -1028,7 +1051,7 @@ export default function EcntDashboardView({
                                                             {doc.doc_type}
                                                         </Tag>
                                                         <Text strong style={{ fontSize: 13, color: '#1890ff' }}>
-                                                            {doc.ecr_no || doc.ecn_no || `#${doc.id}`}
+                                                            {(doc.doc_type === 'ECR' ? doc.ecr_no : doc.ecn_no) || `#${doc.id}`}
                                                         </Text>
                                                     </Space>
                                                     <StatusBadge status={doc.process_status} />

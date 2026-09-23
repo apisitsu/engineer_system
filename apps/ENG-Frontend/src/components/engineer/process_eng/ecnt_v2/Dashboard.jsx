@@ -125,7 +125,13 @@ export default function Dashboard() {
         setSearchParams(p, { replace: true });
     };
 
-    const handleOpenDoc = (id, type) => {
+    const handleOpenDoc = (idOrDoc, typeParam) => {
+        let id = idOrDoc;
+        let type = typeParam;
+        if (typeof idOrDoc === 'object' && idOrDoc !== null) {
+            id = idOrDoc.id;
+            type = idOrDoc.doc_type || idOrDoc.type;
+        }
         setActiveDocId(id);
         setActiveDocType(type);
         const list = type === 'ECR' ? ecrData : ecnData;
@@ -373,6 +379,7 @@ export default function Dashboard() {
                             onOpenInvestigation={handleOpenInvestigation}
                             onOpenGantt={handleOpenGantt}
                             onEditEcr={handleEditEcr}
+                            onOpenDoc={handleOpenDoc}
                         />
                     ) : (
                         <Card style={{ borderRadius: 12, textAlign: 'center', padding: '60px 20px', margin: '20px 0', border: '1px solid #e8e8e8' }}>

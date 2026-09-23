@@ -138,8 +138,14 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
             // Block 4: Eng Dept Mgr ECR Review & PIC Assignment
             if (blockNumber === 4) {
                 const configuredEngMgr = stageAssignees?.eng_mgr;
-                const isConfiguredEngMgr = configuredEngMgr && (configuredEngMgr.emp_no || '').toLowerCase() === empno;
-                const isEngMgrRole = dept === 'ENG' && (role === 'MGR' || role === 'MANAGER');
+                const isConfiguredEngMgr = configuredEngMgr && (
+                    (configuredEngMgr.emp_no || '').toLowerCase() === empno ||
+                    (configuredEngMgr.name || '').toLowerCase() === name
+                );
+                const isEngMgrRole = dept === 'ENG' && (
+                    role === 'MGR' || role === 'MANAGER' || 
+                    ((user.position || '').toLowerCase().includes('mgr'))
+                );
                 if (isConfiguredEngMgr || isEngMgrRole) return { authorized: true, roleLabel: 'Engineering Department Manager' };
                 return { authorized: false, reason: "Only the Engineering Department Manager is authorized to review Block 4 and assign the lead engineer." };
             }
@@ -177,8 +183,14 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
             // Block 6: Eng Dept Mgr Approve ECN
             if (blockNumber === 6) {
                 const configuredEngMgr = stageAssignees?.eng_mgr;
-                const isConfiguredEngMgr = configuredEngMgr && (configuredEngMgr.emp_no || '').toLowerCase() === empno;
-                const isEngMgrRole = dept === 'ENG' && (role === 'MGR' || role === 'MANAGER');
+                const isConfiguredEngMgr = configuredEngMgr && (
+                    (configuredEngMgr.emp_no || '').toLowerCase() === empno ||
+                    (configuredEngMgr.name || '').toLowerCase() === name
+                );
+                const isEngMgrRole = dept === 'ENG' && (
+                    role === 'MGR' || role === 'MANAGER' || 
+                    ((user.position || '').toLowerCase().includes('mgr'))
+                );
                 if (isConfiguredEngMgr || isEngMgrRole) return { authorized: true, roleLabel: 'Engineering Department Manager' };
                 return { authorized: false, reason: "Only the Engineering Department Manager is authorized to approve Block 6." };
             }
@@ -612,6 +624,7 @@ const actionEcr = async (req, res) => {
                 const isIssueEcn = req.body.details?.is_issue_ecn;
                 nextStatus = isIssueEcn ? 'Issued ECN' : 'ECR Only Closed';
                 nextStageCode = isIssueEcn ? 'STAGE_4' : null;
+                currentBlock = isIssueEcn ? 5 : 4;
                 
                 await transitionStage(client, 'ECR', id, nextStageCode, 'APPROVE', userEmpno, userName, comment);
 
@@ -829,6 +842,16 @@ const createEcn = async (req, res) => {
                 ]);
             }
         }
+
+        // Update linked ECR to 'Transferred to ECN' (ECR phase complete)
+        await client.query(`
+            UPDATE ecnt2_ecr 
+            SET process_status = 'Transferred to ECN',
+                current_block = 5,
+                current_stage_code = 'STAGE_4_DONE',
+                updated_at = NOW()
+            WHERE id = $1
+        `, [data.ecr_id]);
         
         await client.query('COMMIT');
         res.json({ message: "ECN Created Successfully", id: newEcnId });
@@ -961,8 +984,17 @@ const actionEcn = async (req, res) => {
             }
         }
         
+        // Block 5 (Assigned Engineer ECN Rework / Resubmit)
+        if (block_number === 5) {
+            if (action === 'APPROVE' || action === 'RESUBMIT' || action === 'SUBMIT') {
+                nextStatus = 'Pending Eng Mgr ECN';
+                currentBlock = 6;
+                nextStageCode = 'STAGE_5';
+                await transitionStage(client, 'ECN', id, nextStageCode, 'RESUBMIT', userEmpno, userName, comment || 'Resubmitted ECN with revised details');
+            }
+        }
         // Block 6 (Eng Mgr Approve ECN)
-        if (block_number === 6) {
+        else if (block_number === 6) {
             if (action === 'APPROVE') {
                 nextStatus = 'Pending QC MSA';
                 currentBlock = 7;

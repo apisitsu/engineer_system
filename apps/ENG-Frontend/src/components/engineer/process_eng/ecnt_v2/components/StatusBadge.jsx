@@ -23,6 +23,7 @@ const StatusBadge = ({ status }) => {
             break;
         case 'ecr only closed':
         case 'issued ecn':
+        case 'transferred to ecn':
         case 'ecn effective':
             color = 'success';
             icon = <CheckCircleOutlined />;

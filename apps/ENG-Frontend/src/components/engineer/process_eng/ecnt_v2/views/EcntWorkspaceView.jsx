@@ -30,7 +30,8 @@ export default function EcntWorkspaceView({
     onBack, 
     onOpenInvestigation, 
     onOpenGantt, 
-    onEditEcr 
+    onEditEcr,
+    onOpenDoc
 }) {
     const { message: antdMessage } = App.useApp();
     const [loading, setLoading] = useState(false);
@@ -700,7 +701,15 @@ export default function EcntWorkspaceView({
                                 tasksData={tasksData}
                                 systemConfig={systemConfig}
                                 docData={docData}
-                                onSuccess={fetchDetail} 
+                                onSuccess={(opts) => {
+                                    fetchDetail();
+                                    if (opts?.openCreateEcn) {
+                                        setIsCreateEcnOpen(true);
+                                    }
+                                }}
+                                onOpenCreateEcn={() => setIsCreateEcnOpen(true)}
+                                onOpenResubmit={() => onEditEcr && onEditEcr(docData)}
+                                onNavigateToEcn={(ecnId) => onOpenDoc && onOpenDoc({ id: ecnId, doc_type: 'ECN' })}
                             />
                         </Col>
                     </Row>

@@ -4,8 +4,31 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-22
-- **Active Goal:** PDF Hub Watermark Manager Complete UX/UI Redesign Deployed; AS81934-C Blank Page Elimination 100% Resolved (Restored Backend pdfToolsService & Dual-Engine Python Unlocker); 11 Historical User Watermarks Recovered; DMS auto-numbering system deployed.
+- **Last Update:** 2026-09-23
+- **Active Goal:** ECNT V2 Block 4 Approval Loop & Multi-State Workflow Transition 100% Resolved; Historical Database Records Migrated; Production Build Passed with Zero Errors; Live Browser Visual Verification Complete.
+
+- **ECNT V2: Block 4 Approval Loop & Multi-State Workflow Engine Perfection (2026-09-23):**
+  - **Root Cause Analysis:**
+    - In `apps/ENG-Backend/api/engineer/process/eng_ecnt_v2.js`, approving Block 4 (`action_type = 'APPROVE'`) set `process_status = 'Issued ECN'`, but left `current_block = 4` in `ecnt2_ecr`.
+    - In `WorkflowActionCard.jsx`, line 201 checked `currentBlock !== 5`, missing a guard for `process_status !== 'Issued ECN'`. Because `currentBlock` was 4, `renderBlockContent()` re-rendered the Block 4 review form and blue "Approve" button, causing an infinite loop.
+    - Block 5 (Formulate ECN) was only accessible via an obscure header button, lacking a dedicated action card.
+    - In ECR Rework states (`Require More Detail`), the UI rendered generic Approve/Deny buttons, risking invalid status rollbacks to `Draft`.
+    - In ECN Block 5 Rework, backend `actionEcn` lacked a handler for `block_number === 5`.
+  - **1. Backend State Machine & Permission Fallbacks (`eng_ecnt_v2.js`):**
+    - Updated `actionEcr` so that approving Block 4 to issue an ECN sets `currentBlock = 5` (`current_block = 5`, `process_status = 'Issued ECN'`, `current_stage_code = 'STAGE_4'`).
+    - Added user name, email, and position fallback checks (`(user.position || '').toLowerCase().includes('mgr')`) in `checkWorkflowPermission` so configured managers and engineering managers are recognized without hardcoded ID limits.
+    - Added `block_number === 5` handler in `actionEcn` for `action_type = 'RESUBMIT'`, properly routing revised ECNs to `current_block = 6`, `process_status = 'Pending Eng Mgr ECN'`, and `current_stage_code = 'STAGE_5'`.
+  - **2. Database Migration (`20260922_fix_ecnt_block4_states.js`):**
+    - Created and executed migration script advancing historical records (e.g., ECR #30 and #32) from `current_block = 4` to `current_block = 5`.
+  - **3. Frontend Workflow Action Card & Workspace Integration (`WorkflowActionCard.jsx`, `EcntWorkspaceView.jsx`, `EcntDashboardView.jsx`):**
+    - **Dedicated Block 5 Card**: Renders `Workflow Action: Block 5 (Issue ECN)` with clear guidance that Block 4 is approved, displays the designated Lead Engineer, and provides a green `+ Formulate & Issue ECN (Block 5)` button (or direct jump to the official ECN if already issued).
+    - **Dedicated ECR Rework Card**: Replaces Approve/Deny buttons with an exclusive `Edit & Resubmit ECR` action modal when in `Require More Detail` state.
+    - **Dedicated ECN Block 5 Rework Card**: Provides `Resubmit ECN to Eng Dept Manager` action button.
+    - **Dashboard Alignment**: Main table and Kanban classify `Issued ECN` under `Block 5: Issue ECN` / `ecn_prep`, properly displaying the Lead Engineer PIC.
+  - **4. Verification & Production Build:**
+    - `npm run build`: Exit code 0 (Compiled successfully).
+    - Browser subagent verified live on `http://localhost:3000/eng/ecnt2`: confirmed Block 5 stage tags, correct PIC display, elimination of the looping Block 4 buttons on ECR260903, and dedicated rework action card on ECR260902.
+
 
 - **PDF Hub: Protected / Encrypted PDF (AS81934-C.pdf) Blank Page Fix (2026-09-22):**
   - **Root Cause Analysis:**

@@ -29,7 +29,7 @@ const WORKFLOW_STEPS = [
     { title: 'B11', description: 'Effective' },
 ];
 
-export default function ECNDetailModal({ open, documentId, documentType, onClose }) {
+export default function ECNDetailModal({ open, documentId, documentType, onClose, systemConfig = {} }) {
     const { message: antdMessage } = App.useApp();
     const [loading, setLoading] = useState(false);
     const [docData, setDocData] = useState(null);
@@ -521,7 +521,16 @@ export default function ECNDetailModal({ open, documentId, documentType, onClose
                             currentBlock={docData.current_block} 
                             processStatus={docData.process_status} 
                             tasksData={tasksData}
-                            onSuccess={fetchDetail} 
+                            systemConfig={systemConfig}
+                            docData={docData}
+                            onSuccess={(opts) => {
+                                fetchDetail();
+                                if (opts?.openCreateEcn) {
+                                    setIsCreateEcnOpen(true);
+                                }
+                            }}
+                            onOpenCreateEcn={() => setIsCreateEcnOpen(true)}
+                            onOpenResubmit={() => setIsResubmitOpen(true)}
                         />
 
                     </div>
