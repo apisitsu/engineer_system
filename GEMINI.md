@@ -4,8 +4,18 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-23
-- **Active Goal:** ECNT V2 Dashboard Table Layout & Stage Management 100% Resolved; Zero Column Overlapping or Clipping; Interactive KPI Metrics and Functional Pagination Clamping Deployed; Production Build Passed with Zero Warnings; Live Browser Visual Verification Complete.
+- **Last Update:** 2026-09-24
+- **Active Goal:** Environment Automation & Setup Documentation Complete; 1-Click Setup (`setup_machine.cmd`) and Server Sync (`remote_sync_server.cmd`) Fully Verified; Baseline `.env.sample` Templates Generated across Monorepo Workspaces; `SETUP_GUIDE.md` Published.
+
+- **DevOps & Environment: 1-Click Machine Setup, Remote Sync & Complete Guide (2026-09-24):**
+  - **1. Baseline Environment Templates (`.env.sample`):**
+    - Generated `.env.sample` at Monorepo Root (`.env.sample`), Backend (`apps/ENG-Backend/.env.sample`), and Frontend (`apps/ENG-Frontend/.env.sample`) using exact current production values (PostgreSQL `plbmp130:6543`, `plb018:5432`, `plbmp00:5432`, corporate proxy `proxyth.bp.minebea.local:8080`, Gmail OAuth, and JWT secrets) eliminating manual copy-pasting for new machine setups.
+  - **2. 1-Click Automated Machine Setup (`setup_machine.cmd`, `scripts/setup_machine.ps1`):**
+    - Built comprehensive setup script checking prerequisites (Node.js 20/22, npm, Python 3.10+, pip, Git), auto-copying `.env.sample` to `.env` without overwriting custom configs, auto-configuring corporate proxy, running workspace `npm install`, installing Python PDF packages (`pypdf`, `PyMuPDF`), safely configuring `constance.js`, and testing network/database connectivity.
+  - **3. Remote Server Sync & Data Puller (`remote_sync_server.cmd`, `scripts/remote_sync_server.ps1`):**
+    - Configured Git Remote pointing to `ssh://git@plbmp130:2222/LE131/EngineerSystem.git`, testing ports 2222 and 6543, fetching and pulling all branches, auto-restoring missing `.env` files, and updating dependencies when `package.json` changes.
+  - **4. Comprehensive Setup Documentation (`SETUP_GUIDE.md`):**
+    - Authored exhaustive bilingual (Thai/English) manual detailing current baseline specs (`PLBMP129`), 1-click execution, manual step-by-step setup, port matrix, production Docker/PM2 deployment, and common troubleshooting tips.
 
 - **ECNT V2: Dashboard Executive Pipeline Table & State Management Engine Overhaul (2026-09-23):**
   - **Root Cause Analysis:**
