@@ -146,122 +146,13 @@ const HomeMTCEng = () => {
             overflowY: 'auto',
             padding: '15px'
           }}>
-            <div style={{ padding: '24px', background: theme.colors.surface, borderRadius: '12px' }}>
-              {/* Tooling Inspection Report */}
-              <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                  <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
-                    <AssessmentRoundedIcon sx={{ color: theme.colors.info, fontSize: 50 }} />
-                    <a href={MTC_PATHS.TOOLING_INSPECT} style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tooling Inspection Report</a>
-                    <Button
-                      type="primary"
-                      size="small"
-                      style={{ marginLeft: '16px', backgroundColor: theme.colors.info, borderColor: theme.colors.info }}
-                      onClick={() => navigate(MTC_PATHS.TOOLING_RESULT_DASHBOARD)}
-                    >
-                      Full Report
-                    </Button>
-                  </h2>
-                </div>
-                <Divider style={{ margin: '0 0 16px 0' }} />
-                <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
-                  <Col span={18}>
-                    <Row padding={8} gutter={[16, 16]}>
-                      <Col span={6}>
-                        <Card size="small" title="Total Jobs"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalToolingJobs}</h2></Card>
-                      </Col>
-                      <Col span={6}>
-                        <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success }}>{dashboardStats.toolingOnTime}</h2></Card>
-                      </Col>
-                      <Col span={6}>
-                        <Card size="small" title="Delay"><h2 style={{ color: theme.colors.error }}>{dashboardStats.toolingDelay}</h2></Card>
-                      </Col>
-                      <Col span={6}>
-                        <Card size="small" title="Pending"><h2 style={{ color: theme.colors.warning }}>{dashboardStats.toolingPending}</h2></Card>
-                      </Col>
-                    </Row>
-                    <Row padding={8} gutter={[16, 16]} style={{ marginTop: 10 }}>
-                      <Col span={24}>
-                        <Card size="small" title="Performance">
-                          <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
-                        </Card>
-                      </Col>
-                    </Row>
-                  </Col>
-                  <Col span={6}>
-                    <Card size="small" title="Status Overview">
-                      On Time <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
-                      Pending <Progress percent={dashboardStats.toolingPendingPercent} strokeColor={theme.colors.warning} size="small" />
-                      Delay <Progress percent={dashboardStats.toolingDelayPercent} strokeColor={theme.colors.error} size="small" />
-                    </Card>
-                  </Col>
-                </Row>
-              </div>
-
-              {/* General DWG Request */}
-              <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
-                    <AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 50 }} />
-                    <a href={MTC_PATHS.TOOL_REQUEST} style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>General DWG Request</a>
-                    <Button
-                      type="primary"
-                      size="small"
-                      style={{ marginLeft: '16px', backgroundColor: theme.colors.success, borderColor: theme.colors.success }}
-                      onClick={() => navigate(MTC_PATHS.GENERAL_DWG_REPORT)}
-                    >
-                      Full Report
-                    </Button>
-                  </h2>
-                  <Button
-                    type="primary"
-                    size="middle"
-                    onClick={() => navigate(`${MTC_PATHS.TOOL_REQUEST}?action=create`)}
-                  >
-                    + Create New Request
-                  </Button>
-                </div>
-                <Divider style={{ margin: '0 0 16px 0' }} />
-                <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
-                  <Col span={18}>
-                    <Row padding={8} gutter={[16, 16]}>
-                      <Col span={6}>
-                        <Card size="small" title="Total Requests"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalDwgJobs}</h2></Card>
-                      </Col>
-                      <Col span={6}>
-                        <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success }}>{dashboardStats.dwgOnTime}</h2></Card>
-                      </Col>
-                      <Col span={6}>
-                        <Card size="small" title="Delay"><h2 style={{ color: theme.colors.error }}>{dashboardStats.dwgDelay}</h2></Card>
-                      </Col>
-                      <Col span={6}>
-                        <Card size="small" title="In Progress"><h2 style={{ color: theme.colors.primary }}>{dashboardStats.dwgInProgress}</h2></Card>
-                      </Col>
-                    </Row>
-                    <Row padding={8} gutter={[16, 16]} style={{ marginTop: 10 }}>
-                      <Col span={24}>
-                        <Card size="small" title="Performance (Completed Only)">
-                          <Progress percent={dashboardStats.dwgOnTimePercent} strokeColor={theme.colors.success} size="small" />
-                        </Card>
-                      </Col>
-                    </Row>
-                  </Col>
-                  <Col span={6}>
-                    <Card size="small" title="Status Overview">
-                      On Time <Progress percent={dashboardStats.dwgOnTimePercent} strokeColor={theme.colors.success} size="small" />
-                      In Progress <Progress percent={dashboardStats.dwgInProgressPercent} strokeColor={theme.colors.primary} size="small" />
-                      Pending Approval <Progress percent={dashboardStats.dwgPendingPercent} strokeColor={theme.colors.warning} size="small" />
-                    </Card>
-                  </Col>
-                </Row>
-              </div>
-
+            <div style={{ padding: '16px', background: theme.colors.surface, borderRadius: '12px' }}>
               {/* SDS Coverage Report */}
-              <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
-                  <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
-                    <AssessmentRoundedIcon sx={{ color: theme.colors.secondary, fontSize: 50 }} />
-                    <a href={MTC_PATHS.SDS_COVERAGE_REPORT} style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>SDS Coverage Report</a>
+              <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', fontSize: '18px' }}>
+                    <AssessmentRoundedIcon sx={{ color: theme.colors.secondary, fontSize: 28 }} />
+                    <a href={MTC_PATHS.SDS_COVERAGE_REPORT} style={{ color: theme.colors.textPrimary, marginLeft: '10px' }}>SDS Coverage Report</a>
                     <Button
                       type="primary"
                       size="small"
@@ -282,29 +173,29 @@ const HomeMTCEng = () => {
                     </div>
                   )}
                 </div>
-                <Divider style={{ margin: '0 0 16px 0' }} />
+                <Divider style={{ margin: '0 0 12px 0' }} />
                 {sdsBuilding && !sdsKpi ? (
                   <div style={{ textAlign: 'center', padding: '24px', color: theme.colors.textSecondary }}>
                     Building report for the first time — this can take a few minutes. Open the report page to watch progress.
                   </div>
                 ) : (
-                  <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
+                  <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
                     <Col span={18}>
-                      <Row padding={8} gutter={[16, 16]}>
+                      <Row padding={8} gutter={[12, 12]}>
                         <Col span={6}>
-                          <Card size="small" title="Total"><h2 style={{ color: theme.colors.info }}>{dashboardStats.sdsTotal}</h2></Card>
+                          <Card size="small" title="Total"><h2 style={{ color: theme.colors.info, margin: 0, fontSize: '20px' }}>{dashboardStats.sdsTotal}</h2></Card>
                         </Col>
                         <Col span={6}>
-                          <Card size="small" title="Complete"><h2 style={{ color: theme.colors.success }}>{dashboardStats.sdsComplete}</h2></Card>
+                          <Card size="small" title="Complete"><h2 style={{ color: theme.colors.success, margin: 0, fontSize: '20px' }}>{dashboardStats.sdsComplete}</h2></Card>
                         </Col>
                         <Col span={6}>
-                          <Card size="small" title="Pending"><h2 style={{ color: theme.colors.warning }}>{dashboardStats.sdsPending}</h2></Card>
+                          <Card size="small" title="Pending"><h2 style={{ color: theme.colors.warning, margin: 0, fontSize: '20px' }}>{dashboardStats.sdsPending}</h2></Card>
                         </Col>
                         <Col span={6}>
-                          <Card size="small" title="Missing"><h2 style={{ color: theme.colors.error }}>{dashboardStats.sdsMissing}</h2></Card>
+                          <Card size="small" title="Missing"><h2 style={{ color: theme.colors.error, margin: 0, fontSize: '20px' }}>{dashboardStats.sdsMissing}</h2></Card>
                         </Col>
                       </Row>
-                      <Row padding={8} gutter={[16, 16]} style={{ marginTop: 10 }}>
+                      <Row padding={8} gutter={[12, 12]} style={{ marginTop: 8 }}>
                         <Col span={24}>
                           <Card size="small" title="Performance (PDF Ready & Signed)">
                             <Progress percent={dashboardStats.sdsCompletePercent} strokeColor={theme.colors.success} size="small" />
@@ -321,6 +212,115 @@ const HomeMTCEng = () => {
                     </Col>
                   </Row>
                 )}
+              </div>
+
+              {/* Tooling Inspection Report */}
+              <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                  <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', fontSize: '18px' }}>
+                    <AssessmentRoundedIcon sx={{ color: theme.colors.info, fontSize: 28 }} />
+                    <a href={MTC_PATHS.TOOLING_INSPECT} style={{ color: theme.colors.textPrimary, marginLeft: '10px' }}>Tooling Inspection Report</a>
+                    <Button
+                      type="primary"
+                      size="small"
+                      style={{ marginLeft: '16px', backgroundColor: theme.colors.info, borderColor: theme.colors.info }}
+                      onClick={() => navigate(MTC_PATHS.TOOLING_RESULT_DASHBOARD)}
+                    >
+                      Full Report
+                    </Button>
+                  </h2>
+                </div>
+                <Divider style={{ margin: '0 0 12px 0' }} />
+                <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+                  <Col span={18}>
+                    <Row padding={8} gutter={[12, 12]}>
+                      <Col span={6}>
+                        <Card size="small" title="Total Jobs"><h2 style={{ color: theme.colors.info, margin: 0, fontSize: '20px' }}>{dashboardStats.totalToolingJobs}</h2></Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success, margin: 0, fontSize: '20px' }}>{dashboardStats.toolingOnTime}</h2></Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" title="Delay"><h2 style={{ color: theme.colors.error, margin: 0, fontSize: '20px' }}>{dashboardStats.toolingDelay}</h2></Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" title="Pending"><h2 style={{ color: theme.colors.warning, margin: 0, fontSize: '20px' }}>{dashboardStats.toolingPending}</h2></Card>
+                      </Col>
+                    </Row>
+                    <Row padding={8} gutter={[12, 12]} style={{ marginTop: 8 }}>
+                      <Col span={24}>
+                        <Card size="small" title="Performance">
+                          <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
+                        </Card>
+                      </Col>
+                    </Row>
+                  </Col>
+                  <Col span={6}>
+                    <Card size="small" title="Status Overview">
+                      On Time <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
+                      Pending <Progress percent={dashboardStats.toolingPendingPercent} strokeColor={theme.colors.warning} size="small" />
+                      Delay <Progress percent={dashboardStats.toolingDelayPercent} strokeColor={theme.colors.error} size="small" />
+                    </Card>
+                  </Col>
+                </Row>
+              </div>
+
+              {/* General DWG Request */}
+              <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', fontSize: '18px' }}>
+                    <AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 28 }} />
+                    <a href={MTC_PATHS.TOOL_REQUEST} style={{ color: theme.colors.textPrimary, marginLeft: '10px' }}>General DWG Request</a>
+                    <Button
+                      type="primary"
+                      size="small"
+                      style={{ marginLeft: '16px', backgroundColor: theme.colors.success, borderColor: theme.colors.success }}
+                      onClick={() => navigate(MTC_PATHS.GENERAL_DWG_REPORT)}
+                    >
+                      Full Report
+                    </Button>
+                  </h2>
+                  <Button
+                    type="primary"
+                    size="middle"
+                    onClick={() => navigate(`${MTC_PATHS.TOOL_REQUEST}?action=create`)}
+                  >
+                    + Create New Request
+                  </Button>
+                </div>
+                <Divider style={{ margin: '0 0 12px 0' }} />
+                <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+                  <Col span={18}>
+                    <Row padding={8} gutter={[12, 12]}>
+                      <Col span={6}>
+                        <Card size="small" title="Total Requests"><h2 style={{ color: theme.colors.info, margin: 0, fontSize: '20px' }}>{dashboardStats.totalDwgJobs}</h2></Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success, margin: 0, fontSize: '20px' }}>{dashboardStats.dwgOnTime}</h2></Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" title="Delay"><h2 style={{ color: theme.colors.error, margin: 0, fontSize: '20px' }}>{dashboardStats.dwgDelay}</h2></Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" title="In Progress"><h2 style={{ color: theme.colors.primary, margin: 0, fontSize: '20px' }}>{dashboardStats.dwgInProgress}</h2></Card>
+                      </Col>
+                    </Row>
+                    <Row padding={8} gutter={[12, 12]} style={{ marginTop: 8 }}>
+                      <Col span={24}>
+                        <Card size="small" title="Performance (Completed Only)">
+                          <Progress percent={dashboardStats.dwgOnTimePercent} strokeColor={theme.colors.success} size="small" />
+                        </Card>
+                      </Col>
+                    </Row>
+                  </Col>
+                  <Col span={6}>
+                    <Card size="small" title="Status Overview">
+                      On Time <Progress percent={dashboardStats.dwgOnTimePercent} strokeColor={theme.colors.success} size="small" />
+                      In Progress <Progress percent={dashboardStats.dwgInProgressPercent} strokeColor={theme.colors.primary} size="small" />
+                      Pending Approval <Progress percent={dashboardStats.dwgPendingPercent} strokeColor={theme.colors.warning} size="small" />
+                    </Card>
+                  </Col>
+                </Row>
               </div>
             </div>
           </Content>
