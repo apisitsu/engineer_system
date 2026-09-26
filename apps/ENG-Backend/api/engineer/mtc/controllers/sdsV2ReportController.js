@@ -439,6 +439,19 @@ async function buildCoverage() {
       `, [wcArr]).catch(() => ({ rows: [] })),
     ]);
 
+    // The rodpc machine master (query 12) is what turns a floor machine code (IDG-03)
+    // into its machine type (KS-03A). Its `.catch` above degrades to an empty result, and
+    // an empty map does NOT look like a failure downstream: every row simply loses its
+    // machine_type_name, falls out of the (cn, machine, process) dedup — one row per floor
+    // machine instead of per machine type — and lands in NO_TOOL_NO_EXCEL. 2026-09-26: a
+    // build in that state took total 3,687 → 6,428 and Ball pending 49 → 5,103, and it
+    // passed the `total > 0` guard in kickCoverageBuild, so it replaced the good cache.
+    // Throwing here keeps the previous report, and the auto-stamp / backlog steps that run
+    // after a successful build never see the bogus one.
+    if (!rodpcMachineRes.rows.length) {
+      throw new Error('rodpc m_machine returned no rows - refusing to build a degraded coverage report');
+    }
+
     // ── Extra refs for Tooling Select fallback ───────────────────────────────
     //   (machine_type_name → machine_group for matching T-Select grouped results,
     //    and the set of CNs that have a spec row — only those can be searched)
@@ -1102,6 +1115,24 @@ async function buildCoverage() {
       monthlyNewParts,
       monthlyStatus,
       needsAttention,
+      // EVERY evaluated sheet (Complete and Pending), slimmed to what the CN table renders,
+      // tagged with its first-produced month. It rides in the cached / persisted payload so
+      // `GET /coverage/rows?month=` can list a whole production cohort, but it is stripped
+      // from `GET /coverage` itself (see `publicCoverage`) — ~3-4k rows would triple the
+      // payload every dashboard load for a list only a bar click needs.
+      cohortRows: evaluated.map(r => ({
+        cn: r.cn, part_type: r.part_type,
+        machine_type_name: r.machine_type_name, machine_code: r.machine_code,
+        process_code: r.process_code,
+        coverage_level: r.coverage_level, coverage_level_saved: r.coverage_level_saved,
+        pending_reason: r.pending_reason,
+        has_tooling_match: r.has_tooling_match, has_machine_template: r.has_machine_template,
+        tooling_source: r.tooling_source, tooling_not_required: r.tooling_not_required,
+        limit_excluded: r.limit_excluded || false, limit_reason: r.limit_reason || null,
+        first_prod_date: r.first_prod_date, last_prod_date: r.last_prod_date,
+        // Same UTC slice `ym()` uses for the monthly bars, so a bar and its list agree.
+        first_month: r.first_prod_date ? new Date(r.first_prod_date).toISOString().slice(0, 7) : null,
+      })),
       coverageLevelSummary: [
         { level: 'COMPLETE',     count: complete,    label: 'Complete (PDF Ready)' },
         { level: 'PENDING', count: pending, label: 'Pending (needs config)' },
@@ -1110,6 +1141,9 @@ async function buildCoverage() {
 
     return payload;
 }
+
+// The cached payload minus the bulk cohort list — what `GET /coverage` serves.
+const publicCoverage = ({ cohortRows, ...rest }) => rest;
 
 // Start a background build (idempotent — reuses the in-flight build if any),
 // storing the payload in the cache on success.
@@ -1159,7 +1193,7 @@ router.get('/coverage', async (req, res) => {
 
     // Fresh cache → serve immediately
     if (!req.query.refresh && fresh) {
-      return res.json({ ..._coverageCache.data, cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
+      return res.json({ ...publicCoverage(_coverageCache.data), cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // Stale cache → serve stale now, rebuild in background (stale-while-revalidate).
@@ -1169,7 +1203,7 @@ router.get('/coverage', async (req, res) => {
     // "enabled Spherical, still not shown" look like a data bug).
     if (!req.query.refresh && _coverageCache) {
       kickCoverageBuild();
-      return res.json({ ..._coverageCache.data, cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
+      return res.json({ ...publicCoverage(_coverageCache.data), cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // No cache (or ?refresh=1) → ensure a build is running. ?wait=1 awaits it
@@ -1177,11 +1211,35 @@ router.get('/coverage', async (req, res) => {
     const buildPromise = kickCoverageBuild();
     if (req.query.wait) {
       const data = await buildPromise;
-      return res.json({ ...data, cached: false });
+      return res.json({ ...publicCoverage(data), cached: false });
     }
     return res.status(202).json({ building: true });
   } catch (err) {
     console.error('[SDS Report] coverage:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Every evaluated sheet (Complete AND Pending) first produced in one month — the list
+// behind a click on a month bar. Read from the cached payload, never triggers a build:
+// `rows: null` means the cache predates `cohortRows` (or is not built yet) and the
+// dashboard falls back to the pending-only list until the next rebuild.
+router.get('/coverage/rows', async (req, res) => {
+  try {
+    const month = String(req.query.month || '');
+    if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month must be YYYY-MM' });
+    if (!_coverageCache) {
+      const persisted = await loadPersistedCoverage();
+      if (persisted) _coverageCache = persisted;
+    }
+    const all = _coverageCache?.data?.cohortRows;
+    if (!Array.isArray(all)) return res.json({ month, rows: null });
+    const rows = all
+      .filter(r => r.first_month === month)
+      .sort((a, b) => String(a.cn).localeCompare(String(b.cn)));
+    res.json({ month, rows });
+  } catch (err) {
+    console.error('[SDS Report] coverage/rows:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
