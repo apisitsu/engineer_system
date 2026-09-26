@@ -345,6 +345,7 @@ export default function SdsCoverageDashboard() {
   const [filterMonth, setFilterMonth] = useState('');
   const [monthRows, setMonthRows] = useState(null);      // null = not loaded / unavailable
   const [monthRowsLoading, setMonthRowsLoading] = useState(false);
+  const [monthRowsBuilding, setMonthRowsBuilding] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
   const pollRef = useRef(null);
   const attentionRef = useRef(null);
@@ -359,15 +360,28 @@ export default function SdsCoverageDashboard() {
   // The cohort's full sheet list lives behind its own endpoint (the main payload only
   // carries pending rows). A failed / unavailable load leaves `monthRows` null and the
   // table falls back to the pending rows of that month.
+  // When the server answers `building` (its cache predates the cohort list and a rebuild
+  // was just started) keep asking every 15 s while the month stays selected, so the list
+  // and the re-scoped cards arrive by themselves instead of needing a second click.
   useEffect(() => {
-    if (!filterMonth) { setMonthRows(null); return undefined; }
+    setMonthRows(null);
+    setMonthRowsBuilding(false);
+    if (!filterMonth) return undefined;
     let cancelled = false;
-    setMonthRowsLoading(true);
-    axios.get(server.MTC_SDS_V2_REPORT_COVERAGE_ROWS, { params: { month: filterMonth } })
-      .then(res => { if (!cancelled) setMonthRows(Array.isArray(res.data?.rows) ? res.data.rows : null); })
-      .catch(() => { if (!cancelled) setMonthRows(null); })
-      .finally(() => { if (!cancelled) setMonthRowsLoading(false); });
-    return () => { cancelled = true; };
+    let timer = null;
+    const load = (first) => {
+      if (first) setMonthRowsLoading(true);
+      axios.get(server.MTC_SDS_V2_REPORT_COVERAGE_ROWS, { params: { month: filterMonth } })
+        .then(res => {
+          if (cancelled) return;
+          if (Array.isArray(res.data?.rows)) { setMonthRows(res.data.rows); setMonthRowsBuilding(false); }
+          else if (res.data?.building) { setMonthRowsBuilding(true); timer = setTimeout(() => load(false), 15000); }
+        })
+        .catch(() => { /* leave the pending-only fallback in place */ })
+        .finally(() => { if (!cancelled && first) setMonthRowsLoading(false); });
+    };
+    load(true);
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [filterMonth]);
 
   const stopPolling = useCallback(() => {
@@ -1198,8 +1212,10 @@ export default function SdsCoverageDashboard() {
                 {sectionTitle(filterMonth ? `All sheets first produced ${fmtMonth(filterMonth)}` : 'CNs Requiring Action', C)}
                 <Space>
                   {monthListPartial && (
-                    <Tooltip title="The full list for this month is not in the cached report yet (it appears after the next rebuild). Showing only the sheets that still need action.">
-                      <Tag color="warning" style={{ margin: 0 }}>Pending only</Tag>
+                    <Tooltip title={monthRowsBuilding
+                      ? 'The server is rebuilding the report to add this month\'s full list (a few minutes). Showing only the sheets that still need action until then; this updates by itself.'
+                      : 'The full list for this month is not available from the server. Showing only the sheets that still need action.'}>
+                      <Tag color="warning" style={{ margin: 0 }}>{monthRowsBuilding ? 'Pending only — building full list…' : 'Pending only'}</Tag>
                     </Tooltip>
                   )}
                   <Select size="small" value={filterPt} onChange={setFilterPt} style={{ width: 130 }}

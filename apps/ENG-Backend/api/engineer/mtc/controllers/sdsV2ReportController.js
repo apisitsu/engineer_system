@@ -1189,7 +1189,11 @@ router.get('/coverage', async (req, res) => {
       if (persisted) _coverageCache = persisted;
     }
 
-    const fresh = _coverageCache && Date.now() - _coverageCache.at < COVERAGE_TTL_MS;
+    // A cache saved before `cohortRows` existed (e.g. reloaded from the DB after a deploy
+    // or restart) is served but counted stale, so this request kicks the rebuild that adds
+    // it — otherwise month clicks on the dashboard have no list until the TTL runs out.
+    const fresh = _coverageCache && Date.now() - _coverageCache.at < COVERAGE_TTL_MS
+      && Array.isArray(_coverageCache.data?.cohortRows);
 
     // Fresh cache → serve immediately
     if (!req.query.refresh && fresh) {
@@ -1233,7 +1237,12 @@ router.get('/coverage/rows', async (req, res) => {
       if (persisted) _coverageCache = persisted;
     }
     const all = _coverageCache?.data?.cohortRows;
-    if (!Array.isArray(all)) return res.json({ month, rows: null });
+    if (!Array.isArray(all)) {
+      // Old-shape or missing cache: start the build that produces the list (no-op if one
+      // is already running) and tell the client it is coming rather than that it is gone.
+      kickCoverageBuild();
+      return res.json({ month, rows: null, building: true });
+    }
     const rows = all
       .filter(r => r.first_month === month)
       .sort((a, b) => String(a.cn).localeCompare(String(b.cn)));
