@@ -28,10 +28,18 @@
  * number resolved from the plan, the fixture list as rendered, and a SHA-256 of the bytes.
  *
  * `machine` accepts the factory machine_code (the other team's floor code, e.g. 'IDG-09',
- * 'SPG-01', 'VSG-02'). It is resolved via rodpc.m_setup_datasheet.machine_code →
- * machine_name (the SDS-scoped machine list — machine_name IS the machine_type_name),
- * then matched against sds_machine_type_code. A machine_type_name / code / group passed
- * directly is also accepted (takes precedence over the code lookup).
+ * 'SPG-01', 'VSG-02'). It is resolved, in this order, via
+ *   1. sds_machine_code.machine_name       — local override (wins; see resolveMachineTypeName)
+ *   2. rodpc.m_setup_datasheet.machine_name — the factory's SDS machine list
+ *   3. the raw value itself
+ * and the resulting name is matched against sds_machine_type_code (machine_name IS the
+ * machine_type_name). Only `machine_name` is read from sds_machine_code here — its
+ * machine_type_code column is not used by this route. An explicit `machine_type_name`
+ * query param is accepted too and takes precedence over all of the above.
+ *
+ * The SBT-xx turning codes are in NEITHER factory table, so they resolve only through
+ * sds_machine_code (20260924b_/20260924c_). Note /sds/machines below lists
+ * m_setup_datasheet codes only, so those SBT codes work here but do not appear there.
  *
  * Returns the PDF inline (Content-Disposition inline) so a browser tab shows it like the
  * in-app button. No token ever appears in the URL.
