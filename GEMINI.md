@@ -4,8 +4,80 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-22
-- **Active Goal:** PDF Hub Watermark Manager Complete UX/UI Redesign Deployed (Two-Column Designer with True A4 Live Preview, Non-Overflowing Header & 2-Column Card Grid); 11 Historical User Watermarks Recovered & Harmonized; Protected/Encrypted Document Auto-Unlock & Blank Page Elimination Full Resolution; DMS auto-numbering system deployed.
+- **Last Update:** 2026-09-24
+- **Active Goal:** Environment Automation & Setup Documentation Complete; 1-Click Setup (`setup_machine.cmd`) and Server Sync (`remote_sync_server.cmd`) Fully Verified; Baseline `.env.sample` Templates Generated across Monorepo Workspaces; `SETUP_GUIDE.md` Published.
+
+- **DevOps & Environment: 1-Click Machine Setup, Remote Sync & Complete Guide (2026-09-24):**
+  - **1. Baseline Environment Templates (`.env.sample`):**
+    - Generated `.env.sample` at Monorepo Root (`.env.sample`), Backend (`apps/ENG-Backend/.env.sample`), and Frontend (`apps/ENG-Frontend/.env.sample`) using exact current production values (PostgreSQL `plbmp130:6543`, `plb018:5432`, `plbmp00:5432`, corporate proxy `proxyth.bp.minebea.local:8080`, Gmail OAuth, and JWT secrets) eliminating manual copy-pasting for new machine setups.
+  - **2. 1-Click Automated Machine Setup (`setup_machine.cmd`, `scripts/setup_machine.ps1`):**
+    - Built comprehensive setup script checking prerequisites (Node.js 20/22, npm, Python 3.10+, pip, Git), auto-copying `.env.sample` to `.env` without overwriting custom configs, auto-configuring corporate proxy, running workspace `npm install`, installing Python PDF packages (`pypdf`, `PyMuPDF`), safely configuring `constance.js`, and testing network/database connectivity.
+  - **3. Remote Server Sync & Data Puller (`remote_sync_server.cmd`, `scripts/remote_sync_server.ps1`):**
+    - Configured Git Remote pointing to `ssh://git@plbmp130:2222/LE131/EngineerSystem.git`, testing ports 2222 and 6543, fetching and pulling all branches, auto-restoring missing `.env` files, and updating dependencies when `package.json` changes.
+  - **4. Comprehensive Setup Documentation (`SETUP_GUIDE.md`):**
+    - Authored exhaustive bilingual (Thai/English) manual detailing current baseline specs (`PLBMP129`), 1-click execution, manual step-by-step setup, port matrix, production Docker/PM2 deployment, and common troubleshooting tips.
+
+- **ECNT V2: Dashboard Executive Pipeline Table & State Management Engine Overhaul (2026-09-23):**
+  - **Root Cause Analysis:**
+    - In `EcntDashboardView.jsx` `pipelineColumns`, the `process_status` column was set to `width: 120`. Status tags such as `PENDING CONCERN APPROVAL` and `REQUIRE MORE DETAIL` span ~170-200px. The status badge overflowed into the adjacent sticky `Action` column (`fixed: 'right'`, `width: 80`). Because `.ant-table-cell-fix-right` had transparent/inherited background in AntD, the overflowing badge sliced through and rendered directly behind the action buttons (`PENDING CO [button] [button] OVAL`).
+    - `title_of_change` column lacked an explicit `width`, resulting in unpredictable flex compression.
+    - When filters (search, department, scope, category) narrowed records, `pagination.current` stayed on previous page numbers, causing an empty table view when pages reduced.
+    - In `getStageAndPicInfo`, `stage_flow` was evaluated before checking if an ECR was transferred or linked to an ECN, improperly showing obsolete Block stages rather than `ECN Issued (ECN0110024)`.
+    - In Rework state (`Require More Detail`), PIC was hardcoded to `Requester` even for ECN revisions where the Lead Engineer is responsible.
+    - KPI cards 3 and 4 were static and not clickable as filters.
+  - **1. Table Column Layout & Sticky Action Column Hardening (`EcntDashboardView.jsx`):**
+    - Set `title_of_change` width to `320px` (`maxWidth: 300` on title text with ellipsis).
+    - Expanded `process_status` column to `width: 210, align: 'center'` with flex centering, guaranteeing badges never overflow.
+    - Expanded `action` column to `width: 96, fixed: 'right', align: 'center'`, with explicit solid background (`#ffffff` / `#fafafa` on hover) and drop shadow (`-4px 0 8px rgba(0, 0, 0, 0.05)`).
+    - Set table `scroll={{ x: 1200 }}` and added scoped CSS for `.ecnt-pipeline-table .ant-table-cell-fix-right` and `.ant-table-cell-fix-left`.
+  - **2. React Pagination State Auto-Clamping:**
+    - Implemented auto-clamping `useEffect` using functional state updater: automatically clamps `pagination.current` when filtered record counts decrease below the current page threshold.
+  - **3. Stage Management & PIC Precision (`getStageAndPicInfo`, `getMyActionReason`):**
+    - Reordered evaluation: prioritized terminal and transferred states (`transferred to ecn` / `doc.linked_ecn_id`) before `stage_flow` assignees, ensuring `ECN Issued ({linked_ecn_no})` is prominently shown.
+    - Corrected ECN rework PIC attribution to Lead Engineer (`engineer_assigned`), and restricted requester rework alerts to `isEcr`.
+    - Added interactive `onClick` cross-linking on `🔗 Ref {record.ecr_no}` in both Pipeline Table and Kanban cards to open source ECRs.
+  - **4. Interactive KPI Cards & Search Filter Expansion:**
+    - Made all 4 KPI cards interactive: Card 1 (All Active), Card 2 (My Tasks), Card 3 (In Clarification / Rework), and Card 4 (Closed & Effective) with dynamic border highlighting, background tints, and instant table filtering.
+    - Expanded search query matching to include `linked_ecn_no`, `part_name`, `part_number`, `department`, and `process_status`.
+  - **5. Production Build & Live Visual Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully).
+    - Browser subagent verified live on `http://localhost:3000/eng/process_eng/ecnt_v2?view=dashboard`: verified wide Status column, crisp sticky Action column with zero overlapping, and interactive KPI filtering.
+
+- **ECNT V2: Block 4 Approval Loop & Multi-State Workflow Engine Perfection (2026-09-23):**
+  - **Root Cause Analysis:**
+    - In `apps/ENG-Backend/api/engineer/process/eng_ecnt_v2.js`, approving Block 4 (`action_type = 'APPROVE'`) set `process_status = 'Issued ECN'`, but left `current_block = 4` in `ecnt2_ecr`.
+    - In `WorkflowActionCard.jsx`, line 201 checked `currentBlock !== 5`, missing a guard for `process_status !== 'Issued ECN'`. Because `currentBlock` was 4, `renderBlockContent()` re-rendered the Block 4 review form and blue "Approve" button, causing an infinite loop.
+    - Block 5 (Formulate ECN) was only accessible via an obscure header button, lacking a dedicated action card.
+    - In ECR Rework states (`Require More Detail`), the UI rendered generic Approve/Deny buttons, risking invalid status rollbacks to `Draft`.
+    - In ECN Block 5 Rework, backend `actionEcn` lacked a handler for `block_number === 5`.
+  - **1. Backend State Machine & Permission Fallbacks (`eng_ecnt_v2.js`):**
+    - Updated `actionEcr` so that approving Block 4 to issue an ECN sets `currentBlock = 5` (`current_block = 5`, `process_status = 'Issued ECN'`, `current_stage_code = 'STAGE_4'`).
+    - Added user name, email, and position fallback checks (`(user.position || '').toLowerCase().includes('mgr')`) in `checkWorkflowPermission` so configured managers and engineering managers are recognized without hardcoded ID limits.
+    - Added `block_number === 5` handler in `actionEcn` for `action_type = 'RESUBMIT'`, properly routing revised ECNs to `current_block = 6`, `process_status = 'Pending Eng Mgr ECN'`, and `current_stage_code = 'STAGE_5'`.
+  - **2. Database Migration (`20260922_fix_ecnt_block4_states.js`):**
+    - Created and executed migration script advancing historical records (e.g., ECR #30 and #32) from `current_block = 4` to `current_block = 5`.
+  - **3. Frontend Workflow Action Card & Workspace Integration (`WorkflowActionCard.jsx`, `EcntWorkspaceView.jsx`, `EcntDashboardView.jsx`):**
+    - **Dedicated Block 5 Card**: Renders `Workflow Action: Block 5 (Issue ECN)` with clear guidance that Block 4 is approved, displays the designated Lead Engineer, and provides a green `+ Formulate & Issue ECN (Block 5)` button (or direct jump to the official ECN if already issued).
+    - **Dedicated ECR Rework Card**: Replaces Approve/Deny buttons with an exclusive `Edit & Resubmit ECR` action modal when in `Require More Detail` state.
+    - **Dedicated ECN Block 5 Rework Card**: Provides `Resubmit ECN to Eng Dept Manager` action button.
+    - **Dashboard Alignment**: Main table and Kanban classify `Issued ECN` under `Block 5: Issue ECN` / `ecn_prep`, properly displaying the Lead Engineer PIC.
+  - **4. Verification & Production Build:**
+    - `npm run build`: Exit code 0 (Compiled successfully).
+    - Browser subagent verified live on `http://localhost:3000/eng/ecnt2`: confirmed Block 5 stage tags, correct PIC display, elimination of the looping Block 4 buttons on ECR260903, and dedicated rework action card on ECR260902.
+
+
+- **PDF Hub: Protected / Encrypted PDF (AS81934-C.pdf) Blank Page Fix (2026-09-22):**
+  - **Root Cause Analysis:**
+    - `apps/ENG-Backend/api/engineer/pdf_hub/services/pdfToolsService.js` and `apps/ENG-Backend/api/engineer/pdf_hub/scripts/pdf_unlocker.py` were accidentally truncated to 0 bytes during a previous commit.
+    - When `AS81934-C.pdf` (standard 40-bit RC4 permissions protection) was loaded or committed, calls to `/api/engineer/pdf-hub/unlock` failed with HTTP 500 (`Failed to unlock PDF`).
+    - The frontend caught the error and fell back to original encrypted bytes. In `pdf-lib`, saving stripped the `/Encrypt` trailer while streams remained ciphertext, causing external PDF readers (Adobe, Chrome, Edge, PyMuPDF) to throw `zlib error: incorrect header check` and render 100% blank white pages.
+  - **Resolution Deployed:**
+    - Recreated `apps/ENG-Backend/api/engineer/pdf_hub/scripts/pdf_unlocker.py` with a robust **dual-engine architecture**: PyMuPDF (`fitz`) first for ultra-fast, clean decompression and stream rebuilding, with fallback to `pypdf`.
+    - Restored `apps/ENG-Backend/api/engineer/pdf_hub/services/pdfToolsService.js` with proper temp file lifecycle management and `safeUnlink`.
+    - Restored legacy `apps/ENG-Backend/api/engineer/system/pdf_unlocker.py`.
+    - Updated `usePdfDocument.js` and `commitEngine.js` with redundant encryption detection (checking `doc.isEncrypted` + scanner fallback for `/Encrypt` trailer) and immediate `setPdfBytes(finalBytes)` synchronization upon unlock.
+    - Added automated unit test in `PdfCommitEngine.test.js` validating that `AS81934-C.pdf` is auto-unlocked and all 18 pages retain complete text and graphics without blank pages. 12/12 unit tests pass (100% PASS).
+    - Verified clean production build (`npm run build`) with exit code 0.
 
 - **PDF Hub: Watermark Manager UX/UI Redesign & Template Recovery (2026-09-22):**
   - **1. UI/UX Clutter & Component Overflow Elimination (`WatermarkManagerModal.jsx`):**

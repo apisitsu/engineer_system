@@ -22,9 +22,15 @@ import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize, vis
 export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = null, pageHighlights = null) {
     let doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true, throwOnInvalidObject: false });
 
-    // Defensive Guard: If PDF is encrypted/permissions-protected, pdf-lib cannot decrypt streams
-    // and saving it will output corrupted/blank ciphertext pages. Auto-unlock via backend before commit!
-    if (doc.isEncrypted) {
+    let isEncrypted = doc.isEncrypted;
+    if (!isEncrypted) {
+        try {
+            const tail = new TextDecoder('latin1').decode(pdfBytes.slice(-16384));
+            if (tail.includes('/Encrypt')) isEncrypted = true;
+        } catch {}
+    }
+
+    if (isEncrypted) {
         console.warn('commitAllToPdf: Encrypted PDF detected. Auto-unlocking before committing annotations...');
         try {
             const formData = new FormData();

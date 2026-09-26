@@ -37,11 +37,14 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
             let isEncrypted = false;
             try {
                 const testDoc = await PDFDocument.load(bytes, { ignoreEncryption: true, throwOnInvalidObject: false });
-                isEncrypted = testDoc.isEncrypted;
+                isEncrypted = !!testDoc.isEncrypted;
             } catch (e) {
+                isEncrypted = true;
+            }
+            if (!isEncrypted) {
                 try {
                     const tail = new TextDecoder('latin1').decode(bytes.slice(-16384));
-                    isEncrypted = tail.includes('/Encrypt');
+                    if (tail.includes('/Encrypt')) isEncrypted = true;
                 } catch {}
             }
 
@@ -58,6 +61,7 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                     });
                     if (res.data && res.data.byteLength > 0) {
                         finalBytes = new Uint8Array(res.data);
+                        setPdfBytes(finalBytes);
                         console.log('PDF auto-unlocked successfully before rendering!');
                     }
                 } catch (unlockErr) {
@@ -179,11 +183,14 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
             let isEncrypted = false;
             try {
                 const testDoc = await PDFDocument.load(finalBytes, { ignoreEncryption: true, throwOnInvalidObject: false });
-                isEncrypted = testDoc.isEncrypted;
+                isEncrypted = !!testDoc.isEncrypted;
             } catch (e) {
+                isEncrypted = true;
+            }
+            if (!isEncrypted) {
                 try {
                     const tail = new TextDecoder('latin1').decode(finalBytes.slice(-16384));
-                    isEncrypted = tail.includes('/Encrypt');
+                    if (tail.includes('/Encrypt')) isEncrypted = true;
                 } catch {}
             }
 
@@ -200,6 +207,7 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                     });
                     if (res.data && res.data.byteLength > 0) {
                         finalBytes = new Uint8Array(res.data);
+                        setPdfBytes(finalBytes);
                         console.log('PDF bytes auto-unlocked successfully before rendering!');
                     }
                 } catch (unlockErr) {

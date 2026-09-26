@@ -279,11 +279,45 @@ const DocumentManagementDashboard = () => {
         }
     };
 
-    // Copy to clipboard helper
-    const copyToClipboard = (text, label) => {
+    // Copy to clipboard helper (Supports both Secure HTTPS and Insecure HTTP intranet)
+    const copyToClipboard = async (text, label) => {
         if (!text) return;
-        navigator.clipboard.writeText(text);
-        message.success(`Copied ${label || 'text'} to clipboard!`);
+        const targetLabel = label || 'text';
+        let copied = false;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                copied = true;
+            } catch (clipErr) {
+                console.warn('navigator.clipboard.writeText failed, using fallback:', clipErr);
+            }
+        }
+
+        if (!copied) {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                ta.style.top = '-9999px';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                ta.setSelectionRange(0, 99999);
+                copied = document.execCommand('copy');
+                document.body.removeChild(ta);
+            } catch (fallbackErr) {
+                console.error('execCommand copy fallback failed:', fallbackErr);
+            }
+        }
+
+        if (copied) {
+            message.success(`Copied ${targetLabel} to clipboard!`);
+        } else {
+            message.info(`${targetLabel}: ${text}`);
+        }
     };
 
     // Export to Excel
@@ -300,9 +334,9 @@ const DocumentManagementDashboard = () => {
                 'Seq No.': d.seq_no || '',
                 'Note': d.note || '',
                 'Created By': d.created_by || '',
-                'Created At': d.created_at ? new Date(d.created_at).toLocaleString('th-TH') : '',
+                'Created At': d.created_at ? new Date(d.created_at).toLocaleString('en-GB') : '',
                 'Updated By': d.updated_by || '',
-                'Updated At': d.updated_at ? new Date(d.updated_at).toLocaleString('th-TH') : ''
+                'Updated At': d.updated_at ? new Date(d.updated_at).toLocaleString('en-GB') : ''
             }));
 
             const ws = xlsx.utils.json_to_sheet(exportData);
@@ -467,10 +501,10 @@ const DocumentManagementDashboard = () => {
                         </Text>
                     </div>
                     <Text type="secondary" style={{ fontSize: 11, marginLeft: 2 }}>
-                        {record.created_at ? new Date(record.created_at).toLocaleDateString('th-TH') : '-'}
+                        {record.created_at ? new Date(record.created_at).toLocaleDateString('en-GB') : '-'}
                     </Text>
                     {record.updated_by && (
-                        <Tooltip title={`Last updated: ${record.updated_at ? new Date(record.updated_at).toLocaleString('th-TH') : '-'}`}>
+                        <Tooltip title={`Last updated: ${record.updated_at ? new Date(record.updated_at).toLocaleString('en-GB') : '-'}`}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                                 <Tag color="orange" style={{ margin: 0, fontSize: 9, borderRadius: 4, padding: '0 4px', fontWeight: 600 }}>
                                     Edit
@@ -491,7 +525,7 @@ const DocumentManagementDashboard = () => {
             align: 'center',
             render: (_, record) => (
                 <Space size={4} onClick={(e) => e.stopPropagation()}>
-                    <Tooltip title="View / Edit Document Details (ดับเบิ้ลคลิกแถวเพื่อเปิด)">
+                    <Tooltip title="View / Edit Document Details (Double-click row to open)">
                         <Button
                             type="text"
                             size="small"
@@ -822,7 +856,7 @@ const DocumentManagementDashboard = () => {
                         title={
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                 <PlusOutlined style={{ color: theme.colors.primary }} />
-                                <span>Issue New Document Number (ออกเลขเอกสารใหม่)</span>
+                                <span>Issue New Document Number</span>
                             </div>
                         }
                         open={issueModalVisible}
@@ -845,7 +879,7 @@ const DocumentManagementDashboard = () => {
                                 <Col span={12}>
                                     <Form.Item
                                         name="type_id"
-                                        label="Document Type (ประเภทเอกสาร)"
+                                        label="Document Type"
                                         rules={[{ required: true, message: 'Please select document type' }]}
                                     >
                                         <Select
@@ -863,7 +897,7 @@ const DocumentManagementDashboard = () => {
                                 <Col span={12}>
                                     <Form.Item
                                         name="part"
-                                        label="Part Classification (ประเภทชิ้นงาน)"
+                                        label="Part Classification"
                                     >
                                         <Select placeholder="Select or type part" allowClear>
                                             <Option value="Comp.">Comp.</Option>
@@ -881,7 +915,7 @@ const DocumentManagementDashboard = () => {
                                     showIcon
                                     message={
                                         <span style={{ fontSize: 13 }}>
-                                            หมายเลขเอกสารถัดไปที่จะออกให้: <b style={{ color: theme.colors.primary, fontSize: 15 }}>{previewNumber}</b> (Auto-Running Number)
+                                            Next Document Number to be issued: <b style={{ color: theme.colors.primary, fontSize: 15 }}>{previewNumber}</b> (Auto-Running Number)
                                         </span>
                                     }
                                     style={{ marginBottom: 16, borderRadius: 8 }}
@@ -890,7 +924,7 @@ const DocumentManagementDashboard = () => {
 
                             <Form.Item
                                 name="title"
-                                label="Document Title (ชื่อเรื่อง / รหัสพาร์ท / รายละเอียด)"
+                                label="Document Title / Part Code / Description"
                                 rules={[{ required: true, message: 'Please input document title' }]}
                             >
                                 <Input placeholder="e.g. Control Plan_Sleeve-210926 or PFMEA_BACB10GD" />
@@ -910,7 +944,7 @@ const DocumentManagementDashboard = () => {
                                 <Col span={12}>
                                     <Form.Item
                                         name="link_innovator"
-                                        label="Aras Innovator PLM Link (ถ้ามี)"
+                                        label="Aras Innovator PLM Link (Optional)"
                                     >
                                         <Input
                                             prefix={<ShareAltOutlined />}
@@ -921,7 +955,7 @@ const DocumentManagementDashboard = () => {
                                 <Col span={12}>
                                     <Form.Item
                                         name="seq_no"
-                                        label="Sequence No. / Aras Doc No. (ถ้ามี)"
+                                        label="Sequence No. / Aras Doc No. (Optional)"
                                     >
                                         <Input placeholder="e.g. DOC-0061933" />
                                     </Form.Item>
@@ -930,7 +964,7 @@ const DocumentManagementDashboard = () => {
 
                             <Form.Item
                                 name="note"
-                                label="Note / Remark (หมายเหตุ / กิจกรรมอ้างอิง)"
+                                label="Note / Engineering Remarks"
                             >
                                 <Input placeholder="e.g. AS9100_activity, NCR_CAR2508-02, PB_Ring_HW#3" />
                             </Form.Item>
@@ -972,10 +1006,10 @@ const DocumentManagementDashboard = () => {
                                 </div>
                                 <div>
                                     <div style={{ fontSize: 16, fontWeight: 700, color: theme.colors.textPrimary, lineHeight: 1.2 }}>
-                                        {isNewlyIssued ? 'Document Issued Successfully (ออกเลขเอกสารสำเร็จ)' : 'Document Details & Metadata (รายละเอียดเอกสาร)'}
+                                        {isNewlyIssued ? 'Document Issued Successfully' : 'Document Details & Metadata'}
                                     </div>
                                     <Text type="secondary" style={{ fontSize: 12 }}>
-                                        {isNewlyIssued ? 'ระบบได้ทำการบันทึกข้อมูลและออกเลขทะเบียนเอกสารใหม่เรียบร้อยแล้ว' : 'ข้อมูลทะเบียนเอกสารและการอ้างอิงระบบวิศวกรรม'}
+                                        {isNewlyIssued ? 'New document number registered and stored in the central database.' : 'Engineering document register and system metadata reference.'}
                                     </Text>
                                 </div>
                             </div>
@@ -1002,12 +1036,12 @@ const DocumentManagementDashboard = () => {
                                             icon={<CheckCircleFilled style={{ fontSize: 20, color: '#52c41a' }} />}
                                             message={
                                                 <div style={{ fontWeight: 700, fontSize: 14 }}>
-                                                    ออกหมายเลขเอกสารใหม่สำเร็จสมบูรณ์!
+                                                    New Document Number Issued Successfully!
                                                 </div>
                                             }
                                             description={
                                                 <div style={{ fontSize: 12, marginTop: 2 }}>
-                                                    ระบบได้สร้างหมายเลขทะเบียน <b>{currentEditDoc.document_no}</b> ลงในฐานข้อมูลกลางแล้ว ท่านสามารถคัดลอกหรือตรวจสอบรายละเอียดได้ทันที
+                                                    Document number <b>{currentEditDoc.document_no}</b> has been registered in the database. You can copy the document number or review details below.
                                                 </div>
                                             }
                                             style={{
@@ -1037,7 +1071,7 @@ const DocumentManagementDashboard = () => {
                                                 <Tag color={colorConfig.tag} style={{ fontWeight: 800, fontSize: 12, borderRadius: 4, padding: '1px 8px', margin: 0 }}>
                                                     {currentEditDoc.prefix}
                                                 </Tag>
-                                                <span style={{ fontSize: 12, color: '#8c8c8c' }}>Document Number (หมายเลขเอกสาร)</span>
+                                                <span style={{ fontSize: 12, color: '#8c8c8c' }}>Document Number</span>
                                             </div>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                                 <span style={{
@@ -1114,7 +1148,7 @@ const DocumentManagementDashboard = () => {
                                                 <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>Registered By</Text>
                                                 <Text strong style={{ fontSize: 13 }}>{currentEditDoc.created_by || 'admin'}</Text>
                                                 <div style={{ fontSize: 11, color: '#8c8c8c' }}>
-                                                    {currentEditDoc.created_at ? new Date(currentEditDoc.created_at).toLocaleString('th-TH') : '-'}
+                                                    {currentEditDoc.created_at ? new Date(currentEditDoc.created_at).toLocaleString('en-GB') : '-'}
                                                 </div>
                                             </div>
                                         </div>
@@ -1145,7 +1179,7 @@ const DocumentManagementDashboard = () => {
                                                 <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>Last Updated</Text>
                                                 <Text strong style={{ fontSize: 13 }}>{currentEditDoc.updated_by || 'No edits yet'}</Text>
                                                 <div style={{ fontSize: 11, color: '#8c8c8c' }}>
-                                                    {currentEditDoc.updated_at ? new Date(currentEditDoc.updated_at).toLocaleString('th-TH') : '-'}
+                                                    {currentEditDoc.updated_at ? new Date(currentEditDoc.updated_at).toLocaleString('en-GB') : '-'}
                                                 </div>
                                             </div>
                                         </div>
@@ -1166,12 +1200,12 @@ const DocumentManagementDashboard = () => {
                                             marginBottom: 14
                                         }}>
                                             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: theme.colors.textPrimary, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <InfoCircleOutlined style={{ color: theme.colors.primary }} /> General Information (ข้อมูลทั่วไป)
+                                                <InfoCircleOutlined style={{ color: theme.colors.primary }} /> General Information
                                             </div>
 
                                             <Form.Item
                                                 name="title"
-                                                label="Document Title (ชื่อเรื่อง / รหัสพาร์ท / รายละเอียด)"
+                                                label="Document Title / Part Code / Description"
                                                 rules={[{ required: true, message: 'Please input title' }]}
                                                 style={{ marginBottom: 12 }}
                                             >
@@ -1182,7 +1216,7 @@ const DocumentManagementDashboard = () => {
                                                 <Col span={12}>
                                                     <Form.Item
                                                         name="part"
-                                                        label="Part Classification (ประเภทชิ้นงาน)"
+                                                        label="Part Classification"
                                                         style={{ marginBottom: 12 }}
                                                     >
                                                         <Select placeholder="Select part classification" allowClear style={{ borderRadius: 6 }}>
@@ -1205,7 +1239,7 @@ const DocumentManagementDashboard = () => {
 
                                             <Form.Item
                                                 name="note"
-                                                label="Note / Remarks (หมายเหตุ / กิจกรรมอ้างอิง)"
+                                                label="Note / Engineering Remarks"
                                                 style={{ marginBottom: 0 }}
                                             >
                                                 <Input placeholder="e.g. AS9100_activity, NCR_CAR2508-02, PB_Ring_HW#3" style={{ borderRadius: 6 }} />
@@ -1221,7 +1255,7 @@ const DocumentManagementDashboard = () => {
                                             marginBottom: 18
                                         }}>
                                             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: theme.colors.textPrimary, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <LinkOutlined style={{ color: theme.colors.primary }} /> External Links & Cloud Storage (ลิงก์ไฟล์)
+                                                <LinkOutlined style={{ color: theme.colors.primary }} /> External Links & Cloud Storage
                                             </div>
 
                                             <Form.Item
@@ -1341,7 +1375,7 @@ const DocumentManagementDashboard = () => {
 
                     {/* MODAL: Manage Document Types */}
                     <Modal
-                        title="Document Types Configuration (จัดการประเภทเอกสาร)"
+                        title="Document Types Configuration"
                         open={typesModalVisible}
                         onCancel={() => setTypesModalVisible(false)}
                         footer={null}
@@ -1411,7 +1445,7 @@ const DocumentManagementDashboard = () => {
                         />
 
                         <Divider orientation="left" style={{ fontSize: 13, fontWeight: 600 }}>
-                            Add New Document Type (เพิ่มตัวย่อประเภทเอกสารใหม่)
+                            Add New Document Type
                         </Divider>
 
                         <Form

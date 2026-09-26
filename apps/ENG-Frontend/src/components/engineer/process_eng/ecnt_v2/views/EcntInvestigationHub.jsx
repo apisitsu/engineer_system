@@ -66,7 +66,7 @@ export default function EcntInvestigationHub({
                             <Space>
                                 <Tag color={documentType === 'ECR' ? 'blue' : 'purple'}>{documentType}</Tag>
                                 <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
-                                    {docData?.ecr_no || docData?.ecn_no || `#${documentId}`} - Problem Investigation & Traceability Hub
+                                    {documentType === 'ECR' ? (docData?.ecr_no || `#${documentId}`) : (docData?.ecn_no || `#${documentId}`)} - Problem Investigation & Traceability Hub
                                 </Title>
                             </Space>
                             <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>

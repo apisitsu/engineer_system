@@ -23,6 +23,7 @@ const StatusBadge = ({ status }) => {
             break;
         case 'ecr only closed':
         case 'issued ecn':
+        case 'transferred to ecn':
         case 'ecn effective':
             color = 'success';
             icon = <CheckCircleOutlined />;
@@ -41,7 +42,20 @@ const StatusBadge = ({ status }) => {
     }
 
     return (
-        <Tag color={color} icon={icon} style={{ padding: '4px 8px', fontSize: '13px', borderRadius: '4px' }}>
+        <Tag 
+            color={color} 
+            icon={icon} 
+            style={{ 
+                padding: '2px 8px', 
+                fontSize: '11px', 
+                fontWeight: 600,
+                borderRadius: '4px',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                margin: 0
+            }}
+        >
             {status?.toUpperCase() || 'UNKNOWN'}
         </Tag>
     );

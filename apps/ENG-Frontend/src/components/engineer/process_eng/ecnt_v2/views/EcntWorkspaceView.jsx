@@ -7,7 +7,7 @@ import { App } from 'antd';
 import { 
     ArrowLeftOutlined, MessageOutlined, CalendarOutlined, FilePdfOutlined, 
     EditOutlined, PlusCircleOutlined, CheckCircleOutlined, ClockCircleOutlined,
-    CopyOutlined, DiffOutlined, MoreOutlined
+    CopyOutlined, DiffOutlined, MoreOutlined, ArrowRightOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
@@ -30,7 +30,8 @@ export default function EcntWorkspaceView({
     onBack, 
     onOpenInvestigation, 
     onOpenGantt, 
-    onEditEcr 
+    onEditEcr,
+    onOpenDoc
 }) {
     const { message: antdMessage } = App.useApp();
     const [loading, setLoading] = useState(false);
@@ -193,8 +194,15 @@ export default function EcntWorkspaceView({
                                 {documentType}
                             </Tag>
                             <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
-                                {docData?.ecr_no || docData?.ecn_no || `#${docData?.id}`}
+                                {documentType === 'ECR' 
+                                    ? (docData?.ecr_no || `#${docData?.id}`) 
+                                    : (docData?.ecn_no || `#${docData?.id}`)}
                             </Title>
+                            {documentType === 'ECN' && docData?.ecr_no && (
+                                <Tag color="blue" style={{ fontSize: 12, padding: '1px 8px', borderRadius: 4 }}>
+                                    Ref ECR: {docData.ecr_no}
+                                </Tag>
+                            )}
                             <StatusBadge status={docData?.process_status} />
                         </Space>
                     </Space>
@@ -261,6 +269,19 @@ export default function EcntWorkspaceView({
                                     ⏳ Awaiting requester ({docData?.request_by_name || docData?.request_by || 'Requester'}) to revise and resubmit
                                 </Tag>
                             )
+                        )}
+
+                        {documentType === 'ECR' && docData?.linked_ecn_id && (
+                            <Tooltip title={`Open linked official ECN (${docData?.linked_ecn_no || `ECN #${docData?.linked_ecn_id}`})`}>
+                                <Button 
+                                    type="primary" 
+                                    icon={<ArrowRightOutlined />} 
+                                    onClick={() => onOpenDoc && onOpenDoc(docData.linked_ecn_id, 'ECN')}
+                                    style={{ background: '#722ed1', borderColor: '#722ed1', borderRadius: 8, fontWeight: 600 }}
+                                >
+                                    Open {docData?.linked_ecn_no || `ECN #${docData?.linked_ecn_id}`}
+                                </Button>
+                            </Tooltip>
                         )}
 
                         {documentType === 'ECR' && docData?.process_status === 'Issued ECN' && !docData?.linked_ecn_id && (
@@ -380,8 +401,16 @@ export default function EcntWorkspaceView({
                                     key="overview_section"
                                 >
                                     <Row gutter={[16, 10]}>
-                                        <Col span={8}><Text type="secondary">Document Type:</Text> <Tag color="blue">{documentType}</Tag></Col>
-                                        <Col span={8}><Text type="secondary">Number:</Text> <Text strong>{docData.ecr_no || docData.ecn_no || 'Pending'}</Text></Col>
+                                        <Col span={8}><Text type="secondary">Document Type:</Text> <Tag color={documentType === 'ECR' ? 'blue' : 'purple'}>{documentType}</Tag></Col>
+                                        <Col span={8}>
+                                            <Text type="secondary">{documentType === 'ECN' ? 'ECN Number:' : 'ECR Number:'}</Text>{' '}
+                                            <Text strong>{documentType === 'ECR' ? (docData.ecr_no || 'Pending') : (docData.ecn_no || 'Pending')}</Text>
+                                            {documentType === 'ECN' && docData.ecr_no && (
+                                                <span style={{ marginLeft: 8 }}>
+                                                    (<Text type="secondary">Ref ECR: </Text><Text strong>{docData.ecr_no}</Text>)
+                                                </span>
+                                            )}
+                                        </Col>
                                         <Col span={8}><Text type="secondary">Status:</Text> <StatusBadge status={docData.process_status} /></Col>
                                         
                                         <Col span={8}><Text type="secondary">Requester:</Text> <Text strong>{docData.request_by_name || docData.request_by}</Text></Col>
@@ -700,7 +729,15 @@ export default function EcntWorkspaceView({
                                 tasksData={tasksData}
                                 systemConfig={systemConfig}
                                 docData={docData}
-                                onSuccess={fetchDetail} 
+                                onSuccess={(opts) => {
+                                    fetchDetail();
+                                    if (opts?.openCreateEcn) {
+                                        setIsCreateEcnOpen(true);
+                                    }
+                                }}
+                                onOpenCreateEcn={() => setIsCreateEcnOpen(true)}
+                                onOpenResubmit={() => onEditEcr && onEditEcr(docData)}
+                                onNavigateToEcn={(ecnId) => onOpenDoc && onOpenDoc({ id: ecnId, doc_type: 'ECN' })}
                             />
                         </Col>
                     </Row>
