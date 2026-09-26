@@ -8,6 +8,7 @@ export const MTC_PATHS = {
   TOOLING_INSPECT: '/eng/mtc_eng/tooling',
   TOOLING_RESULT_DASHBOARD: '/eng/mtc_eng/tooling-result-dashboard',
   TOOL_REQUEST: '/eng/mtc_eng/tool-request',
+  GENERAL_DWG_REPORT: '/eng/mtc_eng/general-dwg-report',
   TOOLING_SELECT: '/eng/mtc_eng/tooling-select',
   TOOLING_MANAGEMENT: '/eng/mtc_eng/tooling-management',
   TOOLING_INVENTORY: '/eng/mtc_eng/inventory',
@@ -41,6 +42,7 @@ export const MTC_VERSIONS = {
   'sds-selection-cond':       { version: '1.0', updated: '2026-08-28' },
   'cam':                      { version: '1.0', updated: '2026-08-05' },
   'lot-track':                { version: '1.1', updated: '2026-09-07' },
+  'general-dwg-report':       { version: '1.0', updated: '2026-09-23' },
 };
 
 export const WORKFLOW_STATUS = {

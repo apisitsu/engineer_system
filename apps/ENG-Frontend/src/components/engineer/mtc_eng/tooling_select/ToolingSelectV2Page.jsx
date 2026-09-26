@@ -10,6 +10,7 @@ import ScrollbarStyle from '../../../common/scrollbar';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import TemplateBConformancePage from '../sds/TemplateBConformancePage';
 import SelectionConditionConformancePage from '../sds/SelectionConditionConformancePage';
+import ToolingInventoryBrowserPage from './ToolingInventoryBrowserPage';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -32,6 +33,11 @@ export default function ToolingSelectV2Page() {
       key: 'selection-cond',
       label: 'Selection-Condition Conformance',
       children: <SelectionConditionConformancePage embedded />,
+    },
+    {
+      key: 'inventory-browser',
+      label: 'Tool List Browser',
+      children: <ToolingInventoryBrowserPage embedded />,
     },
   ];
 

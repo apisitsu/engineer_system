@@ -620,7 +620,7 @@ router.get('/machine-tools/combos', async (req, res) => {
 router.get('/machine-tools', async (req, res) => {
   const { machine_type, process_code } = req.query;
   try {
-    let sql = `SELECT id, machine_type, process_code, tool_number, tool_drawing_no
+    let sql = `SELECT id, machine_type, process_code, tool_number, tool_drawing_no, dwg_suffix
                FROM ${TABLES.SDS_V2_MACHINE_TOOL}`;
     const params = [];
     const where = [];
@@ -638,8 +638,13 @@ router.get('/machine-tools', async (req, res) => {
 /**
  * PUT /api/sds/v2/admin/machine-tools/bulk
  * Replaces all rows for a (machine_type, process_code) combo.
- * Body: { machine_type, process_code, rows: [{ tool_number, tool_drawing_no }] }
+ * Body: { machine_type, process_code, rows: [{ tool_number, tool_drawing_no, dwg_suffix? }] }
  * Rows with empty tool_drawing_no are skipped (treated as clearing the slot).
+ * `dwg_suffix` (optional, comma-separated 4th-DWG-segment values) only needs setting
+ * when ONE DWG family covers more than one physical fixture — see dwgSuffixOf() in
+ * sdsV2HeadlessController.js and 20260923_sds_machine_tool_dwg_suffix.js. Leave blank
+ * for every ordinary slot; it is stored as NULL, which matches any suffix (unchanged
+ * behavior).
  */
 router.put('/machine-tools/bulk', isAdmin, flushSds, async (req, res) => {
   const { machine_type, process_code, rows } = req.body;
@@ -656,12 +661,12 @@ router.put('/machine-tools/bulk', isAdmin, flushSds, async (req, res) => {
       [machine_type.trim(), String(process_code).trim()]
     );
     const saved = [];
-    for (const { tool_number, tool_drawing_no } of rows) {
+    for (const { tool_number, tool_drawing_no, dwg_suffix } of rows) {
       if (!tool_number?.trim() || !tool_drawing_no?.trim()) continue;
       const r = await client.query(
-        `INSERT INTO ${TABLES.SDS_V2_MACHINE_TOOL} (machine_type, process_code, tool_number, tool_drawing_no)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [machine_type.trim(), String(process_code).trim(), tool_number.trim(), tool_drawing_no.trim()]
+        `INSERT INTO ${TABLES.SDS_V2_MACHINE_TOOL} (machine_type, process_code, tool_number, tool_drawing_no, dwg_suffix)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [machine_type.trim(), String(process_code).trim(), tool_number.trim(), tool_drawing_no.trim(), dwg_suffix?.trim() || null]
       );
       saved.push(r.rows[0]);
     }

@@ -107,14 +107,10 @@ export const mtc = createMenu([
             { label: "CN Enable", path: MTC_PATHS.CN_ENABLE, key: "cn-enable" },
         ]
     },
-    {
-        label: "Report", key: "report",
-        children: [
-            { label: "Inspection Dashboard", path: MTC_PATHS.TOOLING_RESULT_DASHBOARD, key: "tooling-result-dashboard" },
-            { label: "SDS Coverage Report", path: MTC_PATHS.SDS_COVERAGE_REPORT, key: "sds-coverage-report" },
-            { label: "SDS History", path: MTC_PATHS.SDS_HISTORY, key: "sds-history" },
-        ]
-    },
+    // Inspection Report / General DWG Report / SDS Coverage Report moved to
+    // "Full Report" buttons on their home-page cards (home_mtc.jsx) — SDS History
+    // moved to a "History" button on the Setup Data Sheet page itself (SdsV2Page.jsx,
+    // next to Setting).
 ]);
 
 export const all = createMenu([

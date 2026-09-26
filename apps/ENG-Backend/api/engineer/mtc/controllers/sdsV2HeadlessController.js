@@ -142,6 +142,29 @@ function dwgPrefixOf(no) {
   return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || '');
 }
 
+// 4th dash-segment of a DWG no — a same-family sub-part discriminator, e.g.
+// 4879-03-0012-01 → '01'. null when the number has fewer than 4 segments. Most
+// families never need this (the family alone is one physical fixture); a family
+// whose 4th segment names TWO DIFFERENT fixtures (J-WAVE 4879-03: -01 = GUIDE PIN
+// HOLDER, -02/-03 = GUIDE PIN) needs a `dwg_suffix` on its whitelist rows — see
+// `sds_machine_tool.dwg_suffix` and 20260923_sds_machine_tool_dwg_suffix.js.
+function dwgSuffixOf(no) {
+  const p = String(no || '').split('-');
+  return p.length >= 4 ? p[3] : null;
+}
+
+// A whitelist row with no dwg_suffix matches any candidate in its family (today's
+// behavior, unchanged). One WITH a dwg_suffix — a comma-separated list, since a
+// physical sub-part can have more than one DWG spelling for the same role, e.g.
+// GUIDE PIN is both -02 and -03 depending on which of two duplicate `lpb.eng_tooling`
+// rows (EN vs JP name) the plan happens to reference — only claims a candidate
+// whose OWN 4th segment is in that list.
+function suffixMatches(row, dwgNo) {
+  if (!row.dwg_suffix) return true;
+  const allowed = String(row.dwg_suffix).split(',').map(s => s.trim()).filter(Boolean);
+  return allowed.includes(dwgSuffixOf(dwgNo));
+}
+
 // Name for a Machine-Tool-Config slot the part has NO tool for: the sheet still lists the
 // fixture, so it needs the family's name out of `lpb.eng_tooling`. A DWG family holds
 // SEVERAL drawings with DIFFERENT names, so something has to choose between them.
@@ -373,14 +396,24 @@ function buildSlotByFixture(mtRows, nameByDwg, orderMap) {
   return slotByFixture;
 }
 
-// DWG no (+ optional fixture NAME) → configured T-slot. Three tiers, in order: 1) exact
-// DWG in the whitelist, 2) dash-prefix family overlap, 3) fixture NAME (MSB grinders) —
-// the name tier fires only when the candidate shares the whitelisted fixture's DWG family,
-// so a same-named tool of a DIFFERENT family can't cross over. null = no slot.
-function makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture }) {
+// DWG no (+ optional fixture NAME) → configured T-slot. Four tiers, in order: 1) exact
+// DWG in the whitelist, 2) a `dwg_suffix`-pinned row for this family (see dwgSuffixOf),
+// 3) plain dash-prefix family overlap, 4) fixture NAME (MSB grinders) — the name tier
+// fires only when the candidate shares the whitelisted fixture's DWG family, so a
+// same-named tool of a DIFFERENT family can't cross over. null = no slot.
+//
+// `suffixRows` defaults to `[]` and is additive only: with no suffix-pinned rows in the
+// whitelist (every machine except the ones `dwg_suffix` was configured for), tier 2 never
+// matches and this function is byte-identical to before.
+function makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture, suffixRows = [] }) {
   return (dwgNo, toolName) => {
     if (!dwgNo) return null;
     if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
+    for (const r of suffixRows) {
+      const key = r.tool_drawing_no;
+      const familyMatch = dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-');
+      if (familyMatch && suffixMatches(r, dwgNo)) return r.slot;
+    }
     const k = allowedKeys.find(key => dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
     if (k !== undefined) return orderMap[k];
     const canon = canonFixtureName(toolName);
@@ -494,7 +527,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     // group-wide list (COMBINED groups / not-yet-split members keep working — the curated
     // list lives once on the representative and siblings reuse it).
     const runToolQuery = (names) => engPool.query(
-      `SELECT tool_number, tool_drawing_no FROM ${TABLES.SDS_V2_MACHINE_TOOL}
+      `SELECT tool_number, tool_drawing_no, dwg_suffix FROM ${TABLES.SDS_V2_MACHINE_TOOL}
        WHERE machine_type = ANY($1) AND process_code = $2
        ORDER BY LPAD(SUBSTRING(tool_number FROM 2), 5, '0')`,
       [names, String(process_code)]
@@ -535,12 +568,21 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   };
 
   // DWG no (+ optional fixture NAME) → configured T-number. Tiers: 1) exact DWG,
-  // 2) dash-prefix family, 3) fixture NAME (MSB grinders). null = no slot.
+  // 2) dwg_suffix-pinned row, 3) dash-prefix family, 4) fixture NAME (MSB grinders).
+  // null = no slot.
   let configSlotOf = () => null;
   if (mtRows.length > 0) {
-    const allowedKeys = mtRows.map(r => r.tool_drawing_no);
+    // Rows that pin a dwg_suffix (e.g. J-WAVE 4879-03's GUIDE PIN / GUIDE PIN HOLDER
+    // split) are resolved separately, BEFORE the plain family tier — see
+    // makeConfigSlotResolver. Every other row keeps today's plain family-prefix
+    // matching, unchanged.
+    const wildcardRows = mtRows.filter(r => !r.dwg_suffix);
+    const suffixRows = mtRows
+      .filter(r => r.dwg_suffix)
+      .map(r => ({ tool_drawing_no: r.tool_drawing_no, dwg_suffix: r.dwg_suffix, slot: parseInt(r.tool_number.slice(1), 10) }));
+    const allowedKeys = wildcardRows.map(r => r.tool_drawing_no);
     const orderMap = {};
-    mtRows.forEach(r => { orderMap[r.tool_drawing_no] = parseInt(r.tool_number.slice(1)); });
+    wildcardRows.forEach(r => { orderMap[r.tool_drawing_no] = parseInt(r.tool_number.slice(1)); });
 
     // Resolve each whitelist slot's fixture NAME (from lpb.eng_tooling) so a factory /
     // T-Select tool can be matched to its slot by fixture TYPE — the only key that
@@ -548,20 +590,26 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     // -07/-08/-09; the whitelist lists them at -02/-03/-04). Best-effort: a name-resolution
     // failure is LOGGED (not silently swallowed) and falls back to DWG-only matching
     // (slotByFixture stays empty → the fixture-NAME tier is inert).
+    // Looked up for every configured family (including dwg_suffix rows) so a future
+    // suffix-pinned canon fixture would still resolve; today's suffix rows (GUIDE PIN /
+    // GUIDE PIN HOLDER) don't canonicalize so this is a no-op for them.
     let slotByFixture = new Map();   // canon fixture → { slot, family }
     try {
       const nameRows = (await maqPool.query(
         `SELECT tool_dwg_no, tool_name FROM ${TABLES.LPB_ENG_TOOLING} WHERE tool_dwg_no = ANY($1)`,
-        [allowedKeys]
+        [mtRows.map(r => r.tool_drawing_no)]
       )).rows;
       const nameByDwg = {};
       for (const r of nameRows) if (r.tool_name && !nameByDwg[r.tool_dwg_no]) nameByDwg[r.tool_dwg_no] = r.tool_name;
-      slotByFixture = buildSlotByFixture(mtRows, nameByDwg, orderMap);
+      // wildcardRows only — orderMap has no entries for dwg_suffix rows (they carry
+      // their own resolved slot directly in suffixRows), so looking them up here would
+      // just resolve to undefined.
+      slotByFixture = buildSlotByFixture(wildcardRows, nameByDwg, orderMap);
     } catch (err) {
       console.warn(`[sds-pdf] fixture-name resolution failed for [${allowedKeys.join(', ')}] — falling back to DWG-only slotting: ${err.message}`);
     }
 
-    configSlotOf = makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture });
+    configSlotOf = makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture, suffixRows });
     // Factory-plan tools that match the whitelist land in their configured T-slot
     // (slot positions are honored, gaps preserved). Sorted by slot so a same-family
     // collision resolves deterministically: the first (lowest T) tool keeps the slot,
@@ -730,11 +778,17 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       // so that slot fell through here with a blank Tool No. Recover its REAL part-specific
       // Tool No from the part's FULL process plan (every process_code) by DWG family before
       // the name-only fallback, so e.g. KS-400B5/B6 show 4800-42-0293 instead of a blank.
+      // `row` carries an optional `dwg_suffix` (see dwgSuffixOf/suffixMatches) — a plain
+      // family match is not enough for a family split into sub-parts by 4th segment
+      // (J-WAVE 4879-03: GUIDE PIN vs GUIDE PIN HOLDER), or the empty slot could recover
+      // the SIBLING sub-part's DWG/name instead of its own.
       const planAll = searchData.process_plan || [];
-      const planMatchNo = (family) => {
+      const planMatchNo = (row) => {
+        const family = row.tool_drawing_no;
         const hit = planAll.find(t => {
           const d = t.tool_dwg_no;
-          return d && (d === family || d.startsWith(`${family}-`) || family.startsWith(`${d}-`));
+          if (!d || !(d === family || d.startsWith(`${family}-`) || family.startsWith(`${d}-`))) return false;
+          return suffixMatches(row, d);
         });
         return hit || null;
       };
@@ -755,11 +809,15 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
           )).rows;
         } catch (_) { /* part-no map is optional — fall back to plan / name-only */ }
       }
-      const partNoMatchNo = (family) => partNoRows.find(r => {
-        // Stored as DD#### — convert to the full 4800-42 form so it matches the config family.
-        const d = toDwg(r.tool_dwg_no);
-        return d && (d === family || d.startsWith(`${family}-`) || family.startsWith(`${d}-`));
-      }) || null;
+      const partNoMatchNo = (row) => {
+        const family = row.tool_drawing_no;
+        return partNoRows.find(r => {
+          // Stored as DD#### — convert to the full 4800-42 form so it matches the config family.
+          const d = toDwg(r.tool_dwg_no);
+          if (!d || !(d === family || d.startsWith(`${family}-`) || family.startsWith(`${d}-`))) return false;
+          return suffixMatches(row, d);
+        }) || null;
+      };
 
       const families = [...new Set(emptyCfg.map(r => r.tool_drawing_no))];
       const nameByFamily = {};
@@ -802,23 +860,32 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
         }
         altPairs = alternativeFamilies(solo, together);
         const planned = Object.fromEntries(pr.rows.map(r => [r.tool_dwg_no, r.n]));
-        const byFam = {};
-        for (const row of nr.rows) {
-          if (!row.tool_name) continue;
-          const fam = families.find(f => row.tool_dwg_no === f || row.tool_dwg_no.startsWith(`${f}-`));
-          if (fam) (byFam[fam] = byFam[fam] || []).push(row);
+        // Grouped per EMPTY-SLOT ROW (not per bare family) and gated by suffixMatches, so
+        // two rows sharing one family but different dwg_suffix (GUIDE PIN vs GUIDE PIN
+        // HOLDER, both '4879-03') each collect only their own sub-part's candidate names —
+        // otherwise both slots would print whichever name the family's combined plan count
+        // favors. Keyed on the row's tool_number, which is unique per slot.
+        const byRow = {};
+        for (const candidate of nr.rows) {
+          if (!candidate.tool_name) continue;
+          for (const row of emptyCfg) {
+            const fam = row.tool_drawing_no;
+            const familyMatch = candidate.tool_dwg_no === fam || candidate.tool_dwg_no.startsWith(`${fam}-`);
+            if (!familyMatch || !suffixMatches(row, candidate.tool_dwg_no)) continue;
+            (byRow[row.tool_number] = byRow[row.tool_number] || []).push(candidate);
+          }
         }
-        for (const [fam, list] of Object.entries(byFam)) nameByFamily[fam] = pickFamilyName(list, planned);
+        for (const [tn, list] of Object.entries(byRow)) nameByFamily[tn] = pickFamilyName(list, planned);
       } catch (_) { /* name resolution is best-effort — slot still lists the fixture */ }
       for (const r of emptyCfg) {
         const slot = parseInt(r.tool_number.slice(1), 10);
         // Part No map (authoritative) → full process plan (any process_code) → name-only blank.
-        const fromMap = partNoMatchNo(r.tool_drawing_no);
-        const fromPlan = fromMap ? null : planMatchNo(r.tool_drawing_no);
+        const fromMap = partNoMatchNo(r);
+        const fromPlan = fromMap ? null : planMatchNo(r);
         const dwg = fromMap ? fromMap.tool_dwg_no : (fromPlan ? fromPlan.tool_dwg_no : '');
         const name = (fromMap && fromMap.tooling_name)
           || (fromPlan && fromPlan.tool_name)
-          || nameByFamily[r.tool_drawing_no] || '';
+          || nameByFamily[r.tool_number] || '';
         slotData[slot - 1] = {
           tool_name: name,
           tool_dwg_no: dwg,          // '' only when neither map nor plan has this fixture for the part
@@ -1309,9 +1376,10 @@ function buildGridPdfHtml(grid) {
         const rs = span ? span.rs : 1;
         let cellHmm = 0;
         for (let i = r; i < r + rs; i++) cellHmm += (rowH[i] || 0) * scale;
+        const imgPct = ((cd.imgScale || 1) * 100).toFixed(1);
         content = `<div style="height:${cellHmm.toFixed(3)}mm;width:100%;overflow:hidden;`
           + `display:flex;align-items:center;justify-content:center;">`
-          + `<img src="${cd.img}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;"></div>`;
+          + `<img src="${cd.img}" style="max-width:${imgPct}%;max-height:${imgPct}%;object-fit:contain;display:block;"></div>`;
       } else {
         content = escHtml(cd && cd.v);
         // Cap an unwrapped value at the room Excel would give it, and mark the cut with an
@@ -1482,7 +1550,10 @@ function applyDataToGrid(grid, valueMap, mappings) {
     .filter((m) => !IMAGE_PARAM_KEY(m.param_key))
     .map((m) => cellAddrToRC(m.cell_address))
     .filter(Boolean);
-  const placeImage = (extentKey, dataUri) => {
+  // `scale` shrinks the picture inside its box (still centered by the flex wrapper in
+  // buildGridPdfHtml) without touching the box/border itself — the printed frame is part
+  // of the template's own design, not something a photo's size should resize.
+  const placeImage = (extentKey, dataUri, scale = 1) => {
     if (!dataUri) return;
     const ext = IMAGE_EXTENTS[extentKey];
     if (!ext) return;
@@ -1491,7 +1562,7 @@ function applyDataToGrid(grid, valueMap, mappings) {
     const collides = mappedRC.some(({ r, c }) => r >= tl.r && r <= br.r && c >= tl.c && c <= br.c);
     if (collides) return;
     const k = `${tl.r},${tl.c}`;
-    cells[k] = { ...(cells[k] || {}), img: dataUri };
+    cells[k] = { ...(cells[k] || {}), img: dataUri, imgScale: scale };
     if (!existingTl.has(k)) { newMerges.push({ r1: tl.r, c1: tl.c, r2: br.r, c2: br.c }); existingTl.add(k); }
   };
 
@@ -1630,7 +1701,7 @@ function applyDataToGrid(grid, valueMap, mappings) {
   // 4b) Turning-style per-tool photos (Holder_Info_N-keyed) — see buildValueMap.
   const turningImgs = valueMap._turningToolImages || {};
   for (const [n, dataUri] of Object.entries(turningImgs)) placeImage(`turning_tool_image_${n}`, dataUri);
-  placeImage('turning_layout_image', valueMap._turningLayoutImage);
+  placeImage('turning_layout_image', valueMap._turningLayoutImage, 0.7);
 
   return { ...grid, cells, fills, merges: [...(grid.merges || []), ...newMerges] };
 }
