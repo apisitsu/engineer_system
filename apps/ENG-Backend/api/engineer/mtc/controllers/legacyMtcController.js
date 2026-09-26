@@ -612,7 +612,23 @@ const ToolingResultDashboard = async (req, res) => {
                               AND NULLIF(TRIM(issue_date::TEXT), '') IS NOT NULL`;
         const issueFilter = `issue_date  ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE  BETWEEN $1 AND $2`;
 
-        const [kpiRes, delayCausesRes, measuringToolsRes, wcRes, monthlyRes, dailyRes, detailRowsRes, prevMonthlyRes] = await Promise.all([
+        // Drill-down selection (card / root-cause click). Applied ONLY to the detail
+        // panels below (measuring tools, W/C, daily, records) — the KPI cards, ratio
+        // donuts, monthly trend and root-cause chart stay on the whole period so they
+        // remain usable as selectors. Column names are fixed; values are bound params.
+        const status    = ['On time', 'Delay'].includes(req.query.status) ? req.query.status : null;
+        const judgement = ['Accept', 'Reject'].includes(req.query.judgement) ? req.query.judgement : null;
+        const reason    = req.query.reason ? String(req.query.reason).slice(0, 200) : null;
+        const extraParams = [];
+        const extraConds  = [];
+        for (const [col, val] of [['status', status], ['judgement', judgement], ['reason', reason]]) {
+            if (val === null) continue;
+            extraParams.push(val);
+            extraConds.push(`${col} = $${2 + extraParams.length}`);
+        }
+        const extraWhere = extraConds.length ? ` AND ${extraConds.join(' AND ')}` : '';
+
+        const [kpiRes, delayCausesRes, measuringToolsRes, wcRes, monthlyRes, dailyRes, detailRowsRes, prevMonthlyRes, filteredRes] = await Promise.all([
             engPool.query(`
                 SELECT
                     COUNT(*) as total_po,
@@ -637,18 +653,18 @@ const ToolingResultDashboard = async (req, res) => {
             engPool.query(`
                 SELECT measuring_tools, COUNT(*) as cnt
                 FROM ${TABLES.TI_LIST}
-                WHERE ${rcvFilter}
+                WHERE ${rcvFilter}${extraWhere}
                   AND measuring_tools IS NOT NULL AND TRIM(measuring_tools) != ''
                 GROUP BY measuring_tools ORDER BY cnt DESC
-            `, [periodStart, periodEnd]),
+            `, [periodStart, periodEnd, ...extraParams]),
 
             engPool.query(`
                 SELECT w_c, COUNT(*) as cnt
                 FROM ${TABLES.TI_LIST}
-                WHERE ${rcvFilter}
+                WHERE ${rcvFilter}${extraWhere}
                   AND w_c IS NOT NULL AND TRIM(w_c) != ''
                 GROUP BY w_c ORDER BY cnt DESC LIMIT 15
-            `, [periodStart, periodEnd]),
+            `, [periodStart, periodEnd, ...extraParams]),
 
             // Monthly trend — issue_date, always full FYE
             engPool.query(`
@@ -667,19 +683,19 @@ const ToolingResultDashboard = async (req, res) => {
                 SELECT EXTRACT(DAY FROM issue_date::DATE)::int as day_num,
                        COALESCE(SUM(qty), 0) as received
                 FROM ${TABLES.TI_LIST}
-                WHERE ${issueFilter}
+                WHERE ${issueFilter}${extraWhere}
                 GROUP BY day_num ORDER BY day_num
-            `, [periodStart, periodEnd]),
+            `, [periodStart, periodEnd, ...extraParams]),
 
             // Detail rows for bottom table
             engPool.query(`
                 SELECT id, receive_date, po_no, item_name, dwg_no, qty,
                        issue_date, diff, w_c, status, reason, measuring_tools, judgement
                 FROM ${TABLES.TI_LIST}
-                WHERE ${rcvFilter}
+                WHERE ${rcvFilter}${extraWhere}
                 ORDER BY receive_date DESC
                 LIMIT 500
-            `, [periodStart, periodEnd]),
+            `, [periodStart, periodEnd, ...extraParams]),
 
             // Previous-FYE monthly on-time/delay — averaged in JS for the baseline bar
             engPool.query(`
@@ -690,11 +706,20 @@ const ToolingResultDashboard = async (req, res) => {
                 FROM ${TABLES.TI_LIST}
                 WHERE ${issueFilter}
                 GROUP BY month_key
-            `, [prevStart, prevEnd])
+            `, [prevStart, prevEnd]),
+
+            // Row count under the drill-down selection — denominator for the
+            // measuring-tool percentages when a card / root cause is selected.
+            engPool.query(`
+                SELECT COUNT(*) as cnt
+                FROM ${TABLES.TI_LIST}
+                WHERE ${rcvFilter}${extraWhere}
+            `, [periodStart, periodEnd, ...extraParams])
         ]);
 
         const kpi = kpiRes.rows[0];
         const totalItems = Number(kpi.total_items) || 0;
+        const filteredItems = Number(filteredRes.rows[0].cnt) || 0;
         const totalQty   = Number(kpi.total_qty)   || 0;
         const onTime     = Number(kpi.on_time)      || 0;
         const onTimePct  = totalItems > 0
@@ -717,6 +742,7 @@ const ToolingResultDashboard = async (req, res) => {
 
         res.json({
             prevFyeAvg,
+            filteredItems,
             kpi: { totalPO: Number(kpi.total_po)||0, totalQty, onTime,
                    delay: Number(kpi.delay)||0, accept: Number(kpi.accept)||0,
                    reject: Number(kpi.reject)||0, totalItems, onTimePct },
@@ -738,7 +764,7 @@ const ToolingResultDashboard = async (req, res) => {
             measuringTools: measuringToolsRes.rows.map(r => ({
                 tool:  r.measuring_tools,
                 count: Number(r.cnt),
-                pct:   totalItems > 0 ? parseFloat(((Number(r.cnt)/totalItems)*100).toFixed(1)) : 0
+                pct:   filteredItems > 0 ? parseFloat(((Number(r.cnt)/filteredItems)*100).toFixed(1)) : 0
             })),
             wcBreakdown: wcRes.rows.map(r => ({ wc: r.w_c, count: Number(r.cnt) })),
             dailyData:   dailyRes.rows.map(r => ({ day: Number(r.day_num), received: Number(r.received) })),

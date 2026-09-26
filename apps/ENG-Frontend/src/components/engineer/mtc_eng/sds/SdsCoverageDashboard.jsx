@@ -221,7 +221,9 @@ const PrevMonthPctRow = ({ label, snapshot, C }) => {
 };
 
 // ── Part Type Card ─────────────────────────────────────────────────────────────
-const PartTypeCard = ({ pt, C, delta }) => {
+// `onClick` makes the card a toggle filter on the CN table below (part type); `active`
+// outlines it in its own colour, `dimmed` fades it while a sibling card is selected.
+const PartTypeCard = ({ pt, C, delta, onClick, active, dimmed }) => {
   const cardStyle = cardStyleOf(C);
   const color = partTypeColors(C)[pt.part_type] || C.cyan;
   const pct = pt.complete_pct || 0;                       // with T-Select #1
@@ -232,7 +234,16 @@ const PartTypeCard = ({ pt, C, delta }) => {
   const displayLabel = partTypeLabel(pt.part_type);
 
   return (
-    <div style={{ ...cardStyle, borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box' }}>
+    <div
+      role="button" tabIndex={0} aria-pressed={!!active}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
+      style={{
+        ...cardStyle, borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box',
+        cursor: onClick ? 'pointer' : 'default',
+        boxShadow: active ? `0 0 0 2px ${color}` : 'none',
+        opacity: dimmed ? 0.6 : 1, transition: 'box-shadow 0.15s, opacity 0.15s',
+      }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
         <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>
           {displayLabel}
@@ -327,8 +338,37 @@ export default function SdsCoverageDashboard() {
   const [filterPt, setFilterPt] = useState('');
   const [filterMc, setFilterMc] = useState('');
   const [filterReason, setFilterReason] = useState('');
+  // 'YYYY-MM' of the production cohort picked by clicking a bar in either chart. Both
+  // charts bucket on a sheet's FIRST-PRODUCED month (UTC, same slice the backend uses).
+  // Picking one re-scopes the cards to that cohort and swaps the CN table from "what still
+  // needs action" to EVERY sheet of the cohort, Complete and Pending (`monthRows`).
+  const [filterMonth, setFilterMonth] = useState('');
+  const [monthRows, setMonthRows] = useState(null);      // null = not loaded / unavailable
+  const [monthRowsLoading, setMonthRowsLoading] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
   const pollRef = useRef(null);
+  const attentionRef = useRef(null);
+
+  // Selecting never moves the page: the point of a click on a card or bar is to watch the
+  // cards and charts change. The list is one click away from the "Showing" bar instead.
+  const goToTable = () => attentionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const pickPartType = (pt) => setFilterPt(cur => (cur === pt ? '' : pt));
+  const pickMonth = (m) => setFilterMonth(cur => (cur === m ? '' : m));
+  const clearSelection = () => { setFilterPt(''); setFilterMonth(''); };
+
+  // The cohort's full sheet list lives behind its own endpoint (the main payload only
+  // carries pending rows). A failed / unavailable load leaves `monthRows` null and the
+  // table falls back to the pending rows of that month.
+  useEffect(() => {
+    if (!filterMonth) { setMonthRows(null); return undefined; }
+    let cancelled = false;
+    setMonthRowsLoading(true);
+    axios.get(server.MTC_SDS_V2_REPORT_COVERAGE_ROWS, { params: { month: filterMonth } })
+      .then(res => { if (!cancelled) setMonthRows(Array.isArray(res.data?.rows) ? res.data.rows : null); })
+      .catch(() => { if (!cancelled) setMonthRows(null); })
+      .finally(() => { if (!cancelled) setMonthRowsLoading(false); });
+    return () => { cancelled = true; };
+  }, [filterMonth]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -383,6 +423,37 @@ export default function SdsCoverageDashboard() {
     () => sortByPartTypeOrder(data?.byPartType || [], r => r.part_type),
     [data]
   );
+
+  // With a month picked, the summary cards re-scope from "everything" to that production
+  // cohort — the same sheets the CN table now lists — so a bar click visibly moves the
+  // numbers. Counts follow the backend cards' own definitions (total = every sheet of the
+  // cohort, complete/pending by coverage level). Null until the cohort list has loaded, and
+  // the cards keep their whole-scope values.
+  const cohort = useMemo(() => {
+    if (!filterMonth || !monthRows) return null;
+    const stats = (rows) => {
+      const total = rows.length;
+      const complete = rows.filter(r => r.coverage_level === 'COMPLETE').length;
+      const completeSaved = rows.filter(r => r.coverage_level_saved === 'COMPLETE').length;
+      const pending = rows.filter(r => r.coverage_level === 'PENDING').length;
+      const pct = (n) => (total > 0 ? parseFloat(((n / total) * 100).toFixed(1)) : 0);
+      return { total, complete, completeSaved, pending, completePct: pct(complete),
+               completeSavedPct: pct(completeSaved), cnCount: new Set(rows.map(r => r.cn)).size };
+    };
+    const all = stats(monthRows);
+    return {
+      kpi: { total: all.total, complete: all.complete, completeSaved: all.completeSaved, pending: all.pending,
+             completePct: all.completePct, completeSavedPct: all.completeSavedPct, uniqueCnCount: all.cnCount },
+      byPartType: byPartType.map(p => {
+        const s = stats(monthRows.filter(r => r.part_type === p.part_type));
+        return { part_type: p.part_type, total: s.total, cn_count: s.cnCount, complete: s.complete,
+                 complete_saved: s.completeSaved, pending: s.pending,
+                 complete_pct: s.completePct, complete_saved_pct: s.completeSavedPct };
+      }),
+    };
+  }, [filterMonth, monthRows, byPartType]);
+  const cardKpi = cohort ? cohort.kpi : data?.kpi;
+  const cardPartTypes = cohort ? cohort.byPartType : byPartType;
 
   // The part-type set that drives the New Parts chart series. Prefer the scope config
   // (data.partTypes, from sds_report_config) so add/remove a type there flows through;
@@ -440,14 +511,33 @@ export default function SdsCoverageDashboard() {
         return {
           label: partTypeLabel(t),
           data: monthlyNewParts.map(r => r[t] || 0),
-          backgroundColor: monthlyNewParts.map(r => hexToRgba(color, faint(r) ? 0.35 : 0.75)),
+          // A picked month fades every other month; a picked part-type card fades every
+          // other part type's segments — so both selections read off the chart.
+          backgroundColor: monthlyNewParts.map(r => hexToRgba(color,
+            (filterPt && t !== filterPt) || (filterMonth && r.month !== filterMonth)
+              ? 0.2 : (faint(r) ? 0.35 : 0.75))),
           borderColor: color, borderWidth: 1, stack: 'np',
         };
       }),
     };
-  }, [monthlyNewParts, activePartTypes]);
+  }, [monthlyNewParts, activePartTypes, filterMonth, filterPt]);
+  // Shared by both charts: the category under the pointer, resolved by COLUMN (mode
+  // 'index', no intersect) so the whole month is clickable, not just the painted bar.
+  const columnIndexAt = (evt, chart) => {
+    const hit = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
+    return hit.length ? hit[0].index : -1;
+  };
   const newPartsChartOpts = {
     responsive: true, maintainAspectRatio: false, animation: false,
+    // The FYE-avg baseline is not a month, so it neither selects nor gets a pointer.
+    onClick: (evt, _els, chart) => {
+      const row = monthlyNewParts[columnIndexAt(evt, chart)];
+      if (row && !row.isAvg && row.month) pickMonth(row.month);
+    },
+    onHover: (evt, _els, chart) => {
+      const row = monthlyNewParts[columnIndexAt(evt, chart)];
+      chart.canvas.style.cursor = row && !row.isAvg && row.month ? 'pointer' : 'default';
+    },
     plugins: {
       legend: { position: 'bottom', labels: { color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12 } },
       tooltip: { mode: 'index', intersect: false },
@@ -543,6 +633,9 @@ export default function SdsCoverageDashboard() {
     // prev-FY carry-over bar, so it reads as provisional rather than settled.
     const curMonth = new Date().toISOString().slice(0, 7);
     const faint = (r) => r.isPrevLast || r.month === curMonth;
+    // A picked month (click on either chart) fades every other bar to one flat alpha.
+    const dimmed = (r) => !!filterMonth && (r.isPrevLast || r.month !== filterMonth);
+    const fill = (r, faintA, normalA) => (dimmed(r) ? 0.2 : (faint(r) ? faintA : normalA));
     // A future placeholder month ({month:key, complete:0, pending:0, ...}, see the
     // `monthlyStatus` useMemo) has nothing to label — the % line already skips it via
     // `spanGaps`, and the count/delta labels below need the same guard.
@@ -590,7 +683,7 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'KZW Complete',
         data: monthlyStatus.map(r => r.complete_saved ?? r.complete),
-        backgroundColor: monthlyStatus.map(r => hexToRgba(C.green, faint(r) ? 0.30 : 0.75)),
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.green, fill(r, 0.30, 0.75))),
         borderColor: monthlyStatus.map(r => hexToRgba(C.green, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
@@ -600,7 +693,7 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'THAI Complete *',
         data: monthlyStatus.map(r => Math.max(0, (r.complete || 0) - (r.complete_saved ?? r.complete ?? 0))),
-        backgroundColor: monthlyStatus.map(r => hexToRgba(C.greenSoft, faint(r) ? 0.30 : 0.70)),
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.greenSoft, fill(r, 0.30, 0.70))),
         borderColor: monthlyStatus.map(r => hexToRgba(C.greenSoft, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
@@ -610,7 +703,7 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'Pending',
         data: monthlyStatus.map(r => r.pending),
-        backgroundColor: monthlyStatus.map(r => hexToRgba(C.yellow, faint(r) ? 0.28 : 0.65)),
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.yellow, fill(r, 0.28, 0.65))),
         borderColor: monthlyStatus.map(r => hexToRgba(C.yellow, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
@@ -690,9 +783,19 @@ export default function SdsCoverageDashboard() {
       },
     ],
     };
-  }, [monthlyStatus]);
+  }, [monthlyStatus, filterMonth]);
 
   const statusChartOpts = {
+    // Only months that have bars are selectable — the empty future placeholders and the
+    // previous-FY carry-over bar are not production cohorts of this year.
+    onClick: (evt, _els, chart) => {
+      const row = monthlyStatus[columnIndexAt(evt, chart)];
+      if (row && !row.isPrevLast && ((row.complete || 0) + (row.pending || 0)) > 0) pickMonth(row.month);
+    },
+    onHover: (evt, _els, chart) => {
+      const row = monthlyStatus[columnIndexAt(evt, chart)];
+      chart.canvas.style.cursor = row && !row.isPrevLast && ((row.complete || 0) + (row.pending || 0)) > 0 ? 'pointer' : 'default';
+    },
     responsive: true, animation: false,
     maintainAspectRatio: false,
     // Legend at the BOTTOM so the 'top'-aligned % datalabels on the near-100% Complete-%
@@ -741,40 +844,54 @@ export default function SdsCoverageDashboard() {
   // All three filter dropdowns are derived from the rows actually in the table
   // (data.needsAttention), so each only lists values that exist there — selecting any
   // option always yields rows.
+  // What the table lists. Normally the sheets that still need action; with a month picked,
+  // EVERY sheet first produced that month (Complete + Pending, from `monthRows`). If that
+  // list is unavailable (cache built before the endpoint existed) it degrades to the
+  // month's pending rows, and `monthListPartial` lets the table say so.
+  const monthListPartial = !!filterMonth && !monthRowsLoading && monthRows === null;
+  const listRows = useMemo(() => {
+    if (!filterMonth) return data?.needsAttention || [];
+    if (monthRows) return monthRows;
+    return (data?.needsAttention || []).filter(r => String(r.first_prod_date || '').slice(0, 7) === filterMonth);
+  }, [data, filterMonth, monthRows]);
+
   const machineOptions = useMemo(() => {
-    const names = [...new Set((data?.needsAttention || []).map(r => r.machine_type_name).filter(Boolean))].sort();
+    const names = [...new Set(listRows.map(r => r.machine_type_name).filter(Boolean))].sort();
     return [{ value: '', label: 'All Machines' }, ...names.map(n => ({ value: n, label: n }))];
-  }, [data]);
+  }, [listRows]);
 
   const partTypeOptions = useMemo(() => {
-    const types = [...new Set((data?.needsAttention || []).map(r => r.part_type).filter(Boolean))].sort();
+    const types = [...new Set(listRows.map(r => r.part_type).filter(Boolean))].sort();
     return [{ value: '', label: 'All Part Types' },
       ...types.map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))];
-  }, [data]);
+  }, [listRows]);
 
   // `LIMIT_ANOMALY` is a synthetic reason value — `limit_excluded` is a separate flag
   // from `pending_reason` (a row can be e.g. NO_STAMP *and* limit_excluded at once), so
   // it never appeared here on its own. Added so removing the old "reconcile data"
   // summary card still leaves a way to isolate these rows in the table below.
+  // `COMPLETE` is likewise synthetic: Complete rows have no pending_reason, and they only
+  // exist in the list when a month is picked.
   const reasonOptions = useMemo(() => {
-    const rows = data?.needsAttention || [];
-    const reasons = [...new Set(rows.map(r => r.pending_reason).filter(Boolean))].sort();
-    const hasLimitAnomaly = rows.some(r => r.limit_excluded);
+    const reasons = [...new Set(listRows.map(r => r.pending_reason).filter(Boolean))].sort();
+    const hasLimitAnomaly = listRows.some(r => r.limit_excluded);
+    const hasComplete = listRows.some(r => r.coverage_level === 'COMPLETE');
     return [{ value: '', label: 'All Reasons' },
+      ...(hasComplete ? [{ value: 'COMPLETE', label: 'Complete (PDF ready)' }] : []),
       ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r })),
       ...(hasLimitAnomaly ? [{ value: 'LIMIT_ANOMALY', label: 'Limit Anomaly' }] : [])];
-  }, [data]);
+  }, [listRows]);
 
   const filteredAttention = useMemo(() => {
-    const rows = data?.needsAttention || [];
-    return rows.filter(r => {
+    return listRows.filter(r => {
       if (filterPt && r.part_type !== filterPt) return false;
       if (filterMc && r.machine_type_name !== filterMc) return false;
       if (filterReason === 'LIMIT_ANOMALY') { if (!r.limit_excluded) return false; }
+      else if (filterReason === 'COMPLETE') { if (r.coverage_level !== 'COMPLETE') return false; }
       else if (filterReason && r.pending_reason !== filterReason) return false;
       return true;
     });
-  }, [data, filterPt, filterMc, filterReason]);
+  }, [listRows, filterPt, filterMc, filterReason]);
 
   // Keyed dataSource — memoized so the (potentially large) array isn't rebuilt with a
   // spread on every render (poll tick / chart hover). Only changes when the filter does.
@@ -916,36 +1033,44 @@ export default function SdsCoverageDashboard() {
               <Row gutter={[10, 10]} style={{ marginBottom: 14 }}>
                 {/* Total CNs summary card */}
                 <Col span={4}>
-                  <div style={{ ...cardStyle, borderTop: `3px solid ${C.cyan}`, height: '100%', boxSizing: 'border-box' }}>
+                  <div
+                    role="button" tabIndex={0}
+                    title="Show every pending CN (clears the part-type and month filters)"
+                    onClick={clearSelection}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearSelection(); } }}
+                    style={{
+                      ...cardStyle, borderTop: `3px solid ${C.cyan}`, height: '100%', boxSizing: 'border-box',
+                      cursor: 'pointer', opacity: filterPt ? 0.6 : 1, transition: 'opacity 0.15s',
+                    }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
                       <Text style={{ color: C.cyan, fontSize: 13, fontWeight: 800 }}>TOTAL</Text>
                       <Tooltip title="Total SDS requirements = CN × machine × process">
                         <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1, cursor: 'help' }}>
-                          {totalCns.toLocaleString()}
+                          {(cardKpi?.total ?? 0).toLocaleString()}
                         </Text>
                       </Tooltip>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
                       <Text style={{ color: C.textSec, fontSize: 10 }}>SDS reqs</Text>
                       <Tooltip title="Unique CNs across the selected part types (deduplicated across machine × process)">
-                        <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(data?.kpi?.uniqueCnCount ?? 0).toLocaleString()} Unique CNs</Text>
+                        <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(cardKpi?.uniqueCnCount ?? 0).toLocaleString()} Unique CNs</Text>
                       </Tooltip>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
                       <Tooltip title="Complete / Pending sheets">
                         <Text style={{ fontSize: 10, cursor: 'help' }}>
-                          <span style={{ color: C.green, fontWeight: 700 }}>{(data?.kpi?.complete ?? 0).toLocaleString()}</span>
+                          <span style={{ color: C.green, fontWeight: 700 }}>{(cardKpi?.complete ?? 0).toLocaleString()}</span>
                           <span style={{ color: C.textSec }}> comp / </span>
-                          <span style={{ color: C.yellow, fontWeight: 700 }}>{(data?.kpi?.pending ?? 0).toLocaleString()}</span>
+                          <span style={{ color: C.yellow, fontWeight: 700 }}>{(cardKpi?.pending ?? 0).toLocaleString()}</span>
                           <span style={{ color: C.textSec }}> pend</span>
                         </Text>
                       </Tooltip>
                     </div>
                     {(() => {
-                      const pct = data?.kpi?.completePct ?? 0;
-                      const pctSaved = data?.kpi?.completeSavedPct ?? pct;
-                      const boost = Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0));
+                      const pct = cardKpi?.completePct ?? 0;
+                      const pctSaved = cardKpi?.completeSavedPct ?? pct;
+                      const boost = Math.max(0, (cardKpi?.complete ?? 0) - (cardKpi?.completeSaved ?? cardKpi?.complete ?? 0));
                       return (<>
                         <Tooltip title={`KZW ${pctSaved}% + THAI ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
                           <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px', display: 'flex', cursor: 'help' }}>
@@ -960,30 +1085,61 @@ export default function SdsCoverageDashboard() {
                         </div>
                       </>);
                     })()}
-                    <TrendArrow from={monthDelta?.prevTotalPct?.pct} to={data?.kpi?.completePct ?? 0} C={C} />
-                    <PrevMonthPctRow label={monthDelta?.prevLabel} snapshot={monthDelta?.prevTotalPct} C={C} />
-                    <TrendArrow from={monthDelta?.prev2TotalPct?.pct} to={monthDelta?.prevTotalPct?.pct} C={C} />
-                    <PrevMonthPctRow label={monthDelta?.prev2Label} snapshot={monthDelta?.prev2TotalPct} C={C} />
+                    {/* The month history rows and "vs last month" badges compare the LIVE
+                        totals over time — meaningless for a single production cohort. */}
+                    {!cohort && <>
+                      <TrendArrow from={monthDelta?.prevTotalPct?.pct} to={cardKpi?.completePct ?? 0} C={C} />
+                      <PrevMonthPctRow label={monthDelta?.prevLabel} snapshot={monthDelta?.prevTotalPct} C={C} />
+                      <TrendArrow from={monthDelta?.prev2TotalPct?.pct} to={monthDelta?.prevTotalPct?.pct} C={C} />
+                      <PrevMonthPctRow label={monthDelta?.prev2Label} snapshot={monthDelta?.prev2TotalPct} C={C} />
+                    </>}
                     <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                      <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
-                      {Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)) > 0 && (
+                      <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(cardKpi?.completeSaved ?? cardKpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
+                      {Math.max(0, (cardKpi?.complete ?? 0) - (cardKpi?.completeSaved ?? cardKpi?.complete ?? 0)) > 0 && (
                         <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: C.greenSoft, background: hexToRgba(C.greenSoft, 0.18), borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
+                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: C.greenSoft, background: hexToRgba(C.greenSoft, 0.18), borderColor: C.greenSoft }}>+{Math.max(0, (cardKpi?.complete ?? 0) - (cardKpi?.completeSaved ?? cardKpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
                         </Tooltip>
                       )}
                     </div>
-                    <DeltaBadge delta={monthDelta?.total} C={C} />
+                    {!cohort && <DeltaBadge delta={monthDelta?.total} C={C} />}
                   </div>
                 </Col>
-                {byPartType.map(pt => (
+                {cardPartTypes.map(pt => (
                   <Col key={pt.part_type} span={4}>
                     <PartTypeCard
                       pt={pt} C={C}
-                      delta={monthDelta?.byPartType?.[pt.part_type]}
+                      delta={cohort ? null : monthDelta?.byPartType?.[pt.part_type]}
+                      onClick={() => pickPartType(pt.part_type)}
+                      active={filterPt === pt.part_type}
+                      dimmed={!!filterPt && filterPt !== pt.part_type}
                     />
                   </Col>
                 ))}
               </Row>
+            )}
+
+            {/* ── Active selection (cards / bars) ─────────────────────────────── */}
+            {(filterPt || filterMonth) && (
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                <Text style={{ color: C.textSec, fontSize: 11 }}>Showing</Text>
+                {filterPt && (
+                  <Tag closable color="geekblue" style={{ margin: 0 }} onClose={(e) => { e.preventDefault(); setFilterPt(''); }}>
+                    Part type: {partTypeLabel(filterPt)}
+                  </Tag>
+                )}
+                {filterMonth && (
+                  <Tooltip title="Sheets whose first production was in this month. Cards show this cohort's live counts; a closed month's bar is a frozen snapshot, so its Pending count can be higher than what is left now.">
+                    <Tag closable color="blue" style={{ margin: 0 }} onClose={(e) => { e.preventDefault(); setFilterMonth(''); }}>
+                      First produced: {fmtMonth(filterMonth)}
+                    </Tag>
+                  </Tooltip>
+                )}
+                <a onClick={clearSelection} style={{ fontSize: 11 }}>Clear all</a>
+                <Text style={{ color: C.textSec, fontSize: 11 }}>
+                  — {filteredAttention.length.toLocaleString()} sheet(s) in the list
+                </Text>
+                <a onClick={goToTable} style={{ fontSize: 11, fontWeight: 700 }}>View list ↓</a>
+              </div>
             )}
 
             {/* ── Charts Row (New Parts + Cumulative Status) ─────────────────── */}
@@ -1037,10 +1193,15 @@ export default function SdsCoverageDashboard() {
             )}
 
             {/* ── Needs Attention Table ───────────────────────────────────────── */}
-            <div style={cardStyle}>
+            <div style={cardStyle} ref={attentionRef}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                {sectionTitle('CNs Requiring Action', C)}
+                {sectionTitle(filterMonth ? `All sheets first produced ${fmtMonth(filterMonth)}` : 'CNs Requiring Action', C)}
                 <Space>
+                  {monthListPartial && (
+                    <Tooltip title="The full list for this month is not in the cached report yet (it appears after the next rebuild). Showing only the sheets that still need action.">
+                      <Tag color="warning" style={{ margin: 0 }}>Pending only</Tag>
+                    </Tooltip>
+                  )}
                   <Select size="small" value={filterPt} onChange={setFilterPt} style={{ width: 130 }}
                     options={partTypeOptions} popupMatchSelectWidth={false} />
                   <Select size="small" value={filterMc} onChange={setFilterMc} style={{ width: 160 }}
@@ -1054,6 +1215,7 @@ export default function SdsCoverageDashboard() {
               <Table
                 dataSource={attentionRows}
                 columns={attentionColumns}
+                loading={monthRowsLoading}
                 size="small"
                 pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}
                 scroll={{ x: 'max-content' }}

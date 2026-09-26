@@ -117,16 +117,33 @@ const sectionTitle = (label, C) => (
 );
 
 // ── KPI Card ────────────────────────────────────────────────────────────────
-const KpiCard = ({ label, value, color, sub, C }) => (
-    <div style={{ ...cardStyleOf(C), textAlign: 'center', borderTop: `3px solid ${color}` }}>
-        <div style={{ color: C.textSec, fontSize: 11, textTransform: 'uppercase',
-                      letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
-        <div style={{ color, fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>
-            {value?.toLocaleString() ?? '-'}
+// `onClick` makes the card a toggle filter (On Time / Delay / Accept / Reject); `active`
+// outlines it in its own colour and `dimmed` fades it when a sibling group is selected.
+const KpiCard = ({ label, value, color, sub, C, onClick, active, dimmed }) => {
+    const clickable = typeof onClick === 'function';
+    return (
+        <div
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            aria-pressed={clickable ? !!active : undefined}
+            onClick={onClick}
+            onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+            style={{
+                ...cardStyleOf(C), textAlign: 'center', borderTop: `3px solid ${color}`,
+                cursor: clickable ? 'pointer' : 'default',
+                boxShadow: active ? `0 0 0 2px ${color}` : 'none',
+                opacity: dimmed ? 0.55 : 1,
+                transition: 'box-shadow 0.15s, opacity 0.15s',
+            }}>
+            <div style={{ color: C.textSec, fontSize: 11, textTransform: 'uppercase',
+                          letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
+            <div style={{ color, fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>
+                {value?.toLocaleString() ?? '-'}
+            </div>
+            {sub && <div style={{ color: C.textSec, fontSize: 11, marginTop: 2 }}>{sub}</div>}
         </div>
-        {sub && <div style={{ color: C.textSec, fontSize: 11, marginTop: 2 }}>{sub}</div>}
-    </div>
-);
+    );
+};
 
 // ── Donut with center label ─────────────────────────────────────────────────
 const DonutChart = ({ data, colors, centerLabel, centerSub, size = 140, C }) => {
@@ -193,11 +210,34 @@ export default function InspectionResultDashboard() {
         ...FYE_MONTH_NUMS.map((num, i) => ({ label: FYE_MONTH_LABELS[i], value: num }))
     ];
 
-    const fetchData = useCallback(async (f, m) => {
+    // Drill-down selection from the KPI cards and the Root Cause chart. Month lives in
+    // `month` above (bar click and the dropdown share it). Each of these is a toggle: the
+    // same click again clears it. They narrow the detail panels only — see the backend.
+    const [statusSel,    setStatusSel]    = useState('');   // 'On time' | 'Delay'
+    const [judgementSel, setJudgementSel] = useState('');   // 'Accept' | 'Reject'
+    const [reasonSel,    setReasonSel]    = useState('');   // a delay root cause
+
+    const toggleStatus = (s) => {
+        setStatusSel(cur => (cur === s ? '' : s));
+        // A root cause only exists on Delay rows; leaving Delay makes it meaningless.
+        if (s !== 'Delay') setReasonSel('');
+    };
+    const toggleJudgement = (j) => setJudgementSel(cur => (cur === j ? '' : j));
+    const toggleReason = (r) => {
+        if (reasonSel === r) { setReasonSel(''); return; }
+        setReasonSel(r);
+        setStatusSel('Delay');   // the pie counts Delay rows only — keep the table consistent with it
+    };
+    const clearSelection = () => { setStatusSel(''); setJudgementSel(''); setReasonSel(''); };
+
+    const fetchData = useCallback(async (f, m, st, jd, rs) => {
         setLoading(true);
         try {
             const params = { fye: f };
-            if (m) params.month = m;
+            if (m)  params.month = m;
+            if (st) params.status = st;
+            if (jd) params.judgement = jd;
+            if (rs) params.reason = rs;
             const res = await axios.get(server.TOOLING_RESULT_DASHBOARD, { params });
             setData(res.data);
         } catch (e) {
@@ -207,7 +247,15 @@ export default function InspectionResultDashboard() {
         }
     }, []);
 
-    useEffect(() => { fetchData(fye, month || null); }, [fye, month, fetchData]);
+    useEffect(() => {
+        fetchData(fye, month || null, statusSel, judgementSel, reasonSel);
+    }, [fye, month, statusSel, judgementSel, reasonSel, fetchData]);
+
+    // The root-cause list follows the month, so a cause selected in one month may not
+    // exist in the next — drop it rather than leave the records table silently empty.
+    useEffect(() => {
+        if (reasonSel && data && !(data.delayCauses || []).some(d => d.reason === reasonSel)) setReasonSel('');
+    }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Build monthly trend chart ──────────────────────────────────────────
     const buildMonthlyChart = () => {
@@ -229,6 +277,8 @@ export default function InspectionResultDashboard() {
         const avgLabel = prev ? `FYE${prev.fye} avg` : 'Prev avg';
         const labels = [avgLabel, ...FYE_MONTH_LABELS];
         const lead = (arr, val) => [val, ...arr];
+        // With a month selected, every other month's bar fades so the chosen one reads.
+        const monthAlpha = (num) => (month && num !== month ? 0.25 : 0.7);
 
         return {
             labels,
@@ -238,7 +288,7 @@ export default function InspectionResultDashboard() {
                     label: 'On Time',
                     data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.onTime ?? 0), prev?.onTime ?? null),
                     // muted green for the avg baseline bar, normal green for the FYE months
-                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.green, 0.7)), hexToRgba(C.green, 0.3)),
+                    backgroundColor: lead(FYE_MONTH_NUMS.map(num => hexToRgba(C.green, monthAlpha(num))), hexToRgba(C.green, 0.3)),
                     borderColor: C.green,
                     borderWidth: 1,
                     stack: 'monthly',
@@ -249,7 +299,7 @@ export default function InspectionResultDashboard() {
                     type: 'bar',
                     label: 'Delay',
                     data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.delay ?? 0), prev?.delay ?? null),
-                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.red, 0.7)), hexToRgba(C.red, 0.3)),
+                    backgroundColor: lead(FYE_MONTH_NUMS.map(num => hexToRgba(C.red, monthAlpha(num))), hexToRgba(C.red, 0.3)),
                     borderColor: C.red,
                     borderWidth: 1,
                     stack: 'monthly',
@@ -301,6 +351,19 @@ export default function InspectionResultDashboard() {
         // Legend at the BOTTOM so the 'top'-aligned % On Time datalabels on the near-100%
         // line never collide with it; top padding + axis headroom keep the 100% label visible.
         layout: { padding: { top: 24 } },
+        // Click anywhere in a month's column (not just on the bar) to filter the page to
+        // that month; click it again to go back to the full FYE. Index 0 is the previous-
+        // FYE average baseline, which is not a month, so it does nothing.
+        onClick: (evt, _els, chart) => {
+            const hit = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
+            if (!hit.length || hit[0].index === 0) return;
+            const num = FYE_MONTH_NUMS[hit[0].index - 1];
+            setMonth(cur => (cur === num ? 0 : num));
+        },
+        onHover: (evt, _els, chart) => {
+            const hit = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
+            chart.canvas.style.cursor = hit.length && hit[0].index !== 0 ? 'pointer' : 'default';
+        },
         plugins: {
             legend: { position: 'bottom', labels: { color: C.textPri, font: { size: 11 }, boxWidth: 12, padding: 12 } },
             datalabels: { display: false },
@@ -406,16 +469,28 @@ export default function InspectionResultDashboard() {
     // ── Delay cause pie ──────────────────────────────────────────────────────
     const delayArr = data?.delayCauses || [];
     const delayCauseColors = [C.red, C.orange, C.yellow, C.purple, C.cyan];
+    // Selected cause keeps its colour, the rest fade (colours cycle past the 5th cause).
+    const delayCauseColor = (i) => delayCauseColors[i % delayCauseColors.length];
     const delayChartData = {
         labels: delayArr.map(d => d.reason),
         datasets: [{
             data: delayArr.length ? delayArr.map(d => d.count) : [1],
-            backgroundColor: delayArr.length ? delayCauseColors : [C.empty],
+            backgroundColor: delayArr.length
+                ? delayArr.map((d, i) => (reasonSel && d.reason !== reasonSel ? hexToRgba(delayCauseColor(i), 0.25) : delayCauseColor(i)))
+                : [C.empty],
             borderColor: C.card,
             borderWidth: 2,
         }]
     };
     const delayChartOpts = {
+        onClick: (evt, _els, chart) => {
+            const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+            if (hit.length && delayArr[hit[0].index]) toggleReason(delayArr[hit[0].index].reason);
+        },
+        onHover: (evt, _els, chart) => {
+            const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+            chart.canvas.style.cursor = hit.length && delayArr.length ? 'pointer' : 'default';
+        },
         plugins: {
             legend: {
                 position: 'bottom',
@@ -459,7 +534,7 @@ export default function InspectionResultDashboard() {
                             </div>
                             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                                 <Text style={{ color: C.textSec, fontSize: 12 }}>FYE</Text>
-                                <Select value={fye} onChange={v => { setFye(v); setMonth(0); }}
+                                <Select value={fye} onChange={v => { setFye(v); setMonth(0); clearSelection(); }}
                                     style={{ width: 100 }}
                                     popupClassName="dark-select"
                                     loading={fyeOptions.length === 0}>
@@ -478,11 +553,30 @@ export default function InspectionResultDashboard() {
                         <Row gutter={[10, 10]} style={{ marginBottom: 12 }}>
                             <Col flex="1"><KpiCard C={C} label="Total PO" value={kpi?.totalPO}  color={C.blue}   /></Col>
                             <Col flex="1"><KpiCard C={C} label="Total Tooling Qty" value={kpi?.totalQty} color={C.cyan}   /></Col>
-                            <Col flex="1"><KpiCard C={C} label="On Time" value={kpi?.onTime}  color={C.green}  /></Col>
-                            <Col flex="1"><KpiCard C={C} label="Delay"   value={kpi?.delay}   color={C.red}    /></Col>
-                            <Col flex="1"><KpiCard C={C} label="Accept"  value={kpi?.accept}  color={C.yellow} /></Col>
-                            <Col flex="1"><KpiCard C={C} label="Reject"  value={kpi?.reject}  color={C.orange} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="On Time" value={kpi?.onTime}  color={C.green}
+                                onClick={() => toggleStatus('On time')} active={statusSel === 'On time'} dimmed={!!statusSel && statusSel !== 'On time'} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Delay"   value={kpi?.delay}   color={C.red}
+                                onClick={() => toggleStatus('Delay')}   active={statusSel === 'Delay'}   dimmed={!!statusSel && statusSel !== 'Delay'} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Accept"  value={kpi?.accept}  color={C.yellow}
+                                onClick={() => toggleJudgement('Accept')} active={judgementSel === 'Accept'} dimmed={!!judgementSel && judgementSel !== 'Accept'} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Reject"  value={kpi?.reject}  color={C.orange}
+                                onClick={() => toggleJudgement('Reject')} active={judgementSel === 'Reject'} dimmed={!!judgementSel && judgementSel !== 'Reject'} /></Col>
                         </Row>
+
+                        {/* ── Active selection ────────────────────────────────── */}
+                        {(month || statusSel || judgementSel || reasonSel) && (
+                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                                <Text style={{ color: C.textSec, fontSize: 11 }}>Showing</Text>
+                                {month ? <Tag closable color="blue" onClose={(e) => { e.preventDefault(); setMonth(0); }}>Month: {MONTH_LABELS_ALL[month]}</Tag> : null}
+                                {statusSel ? <Tag closable color={statusSel === 'Delay' ? 'red' : 'green'} onClose={(e) => { e.preventDefault(); toggleStatus(statusSel); }}>Status: {statusSel}</Tag> : null}
+                                {reasonSel ? <Tag closable color="volcano" onClose={(e) => { e.preventDefault(); setReasonSel(''); }}>Cause: {reasonSel}</Tag> : null}
+                                {judgementSel ? <Tag closable color={judgementSel === 'Accept' ? 'gold' : 'orange'} onClose={(e) => { e.preventDefault(); toggleJudgement(judgementSel); }}>Judgement: {judgementSel}</Tag> : null}
+                                <a onClick={() => { setMonth(0); clearSelection(); }} style={{ fontSize: 11 }}>Clear all</a>
+                                <Text style={{ color: C.textSec, fontSize: 11 }}>
+                                    — status / judgement / cause narrow W/C, Daily, Measuring Tools and Records ({(data?.filteredItems ?? 0).toLocaleString()} rows); cards, ratios, trend and root cause keep the full period
+                                </Text>
+                            </div>
+                        )}
 
                         {/* ── Charts Row 1 ────────────────────────────────────── */}
                         <Row gutter={[10, 10]} style={{ marginBottom: 10 }}>
@@ -546,17 +640,28 @@ export default function InspectionResultDashboard() {
                                                 <div style={{ marginTop: 6 }}>
                                                     {delayArr.map((d, i) => {
                                                         const pct = totalDelay > 0 ? ((d.count / totalDelay) * 100).toFixed(1) : 0;
+                                                        const picked = reasonSel === d.reason;
                                                         return (
-                                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                                                            <div key={i}
+                                                                role="button" tabIndex={0} aria-pressed={picked}
+                                                                onClick={() => toggleReason(d.reason)}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleReason(d.reason); } }}
+                                                                style={{
+                                                                    display: 'flex', alignItems: 'center', gap: 5,
+                                                                    cursor: 'pointer', borderRadius: 4, padding: '1px 3px', margin: '0 -3px 4px',
+                                                                    background: picked ? hexToRgba(delayCauseColor(i), 0.18) : 'transparent',
+                                                                    outline: picked ? `1px solid ${delayCauseColor(i)}` : 'none',
+                                                                    opacity: reasonSel && !picked ? 0.5 : 1,
+                                                                }}>
                                                                 <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                                                                               background: delayCauseColors[i % delayCauseColors.length] }} />
-                                                                <Tooltip title={d.reason}>
-                                                                    <span style={{ color: C.textSec, fontSize: 10, flex: 1,
+                                                                               background: delayCauseColor(i) }} />
+                                                                <Tooltip title={`${d.reason} — ${d.count}`}>
+                                                                    <span style={{ color: picked ? C.textPri : C.textSec, fontSize: 10, flex: 1, fontWeight: picked ? 700 : 400,
                                                                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                                         {d.reason}
                                                                     </span>
                                                                 </Tooltip>
-                                                                <span style={{ color: delayCauseColors[i % delayCauseColors.length], fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{pct}%</span>
+                                                                <span style={{ color: delayCauseColor(i), fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{pct}%</span>
                                                             </div>
                                                         );
                                                     })}
