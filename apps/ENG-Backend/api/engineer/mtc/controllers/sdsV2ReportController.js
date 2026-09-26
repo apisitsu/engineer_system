@@ -746,8 +746,23 @@ async function buildCoverage() {
     // `limitExcludedByMachine` is the (machine, process) reconcile worklist — each line
     // is a `tooling_machine_limit` bound or production log that needs checking.
     // Mirrors `limitSoftenedByMachine`.
+    // `reasonFor` pulls the same failing-limit text (e.g. "ID=12.700 > max 12") the
+    // (machine, process) worklist below derives, but attached to the row itself so the
+    // "Limit Anomaly" tag in the CN table can show the actual size/limit numbers instead
+    // of a generic explanation.
+    const reasonFor = (r, byCn) => {
+      const s = byCn.get(r.cn);
+      if (!s || !r.machine_type_name) return null;
+      const machine = displayGroup(r.machine_type_name);
+      return (s.get(machine) || s.get(r.machine_type_name))
+        || (nameToGroup[r.machine_type_name] && s.get(nameToGroup[r.machine_type_name]))
+        || null;
+    };
     const limitExcludedRows = evaluated.filter(isLimitExcluded);
-    for (const r of limitExcludedRows) r.limit_excluded = true;
+    for (const r of limitExcludedRows) {
+      r.limit_excluded = true;
+      r.limit_reason = reasonFor(r, limitExcludedByCn);
+    }
     const limitExcludedCount = limitExcludedRows.length;
     // `limit_softened` rows classify normally (they get tooling — often COMPLETE), so
     // they are not a worklist row-by-row; the (machine, process) breakdown IS — each

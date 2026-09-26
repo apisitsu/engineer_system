@@ -306,9 +306,11 @@ const REASON_LABELS = {
 // A limit anomaly (`limit_excluded` — produced on a machine whose T-Select size LIMIT
 // says it cannot run) rests on contradictory data, not a config gap. These rows STAY
 // in `needsAttention` (so `pending` reconciles with total − complete − missing) and
-// appear in the table below with the red "Limit Anomaly" tag/row highlight; the
-// "Limit Anomaly — reconcile data" worklist card (`kpi.limitExcludedByMachine`) is
-// the (machine · process) reconcile list.
+// appear in the table below with the red "Limit Anomaly (…)" tag/row highlight, whose
+// reason text now carries the actual size/limit numbers per CN — the old
+// "Limit Anomaly — reconcile data" (machine · process) rollup card was dropped as
+// redundant with that per-row detail (`kpi.limitExcludedByMachine` is still computed
+// on the backend for other consumers; only this card was removed).
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
@@ -750,11 +752,17 @@ export default function SdsCoverageDashboard() {
       ...types.map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))];
   }, [data]);
 
+  // `LIMIT_ANOMALY` is a synthetic reason value — `limit_excluded` is a separate flag
+  // from `pending_reason` (a row can be e.g. NO_STAMP *and* limit_excluded at once), so
+  // it never appeared here on its own. Added so removing the old "reconcile data"
+  // summary card still leaves a way to isolate these rows in the table below.
   const reasonOptions = useMemo(() => {
     const rows = data?.needsAttention || [];
     const reasons = [...new Set(rows.map(r => r.pending_reason).filter(Boolean))].sort();
+    const hasLimitAnomaly = rows.some(r => r.limit_excluded);
     return [{ value: '', label: 'All Reasons' },
-      ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r }))];
+      ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r })),
+      ...(hasLimitAnomaly ? [{ value: 'LIMIT_ANOMALY', label: 'Limit Anomaly' }] : [])];
   }, [data]);
 
   const filteredAttention = useMemo(() => {
@@ -762,7 +770,8 @@ export default function SdsCoverageDashboard() {
     return rows.filter(r => {
       if (filterPt && r.part_type !== filterPt) return false;
       if (filterMc && r.machine_type_name !== filterMc) return false;
-      if (filterReason && r.pending_reason !== filterReason) return false;
+      if (filterReason === 'LIMIT_ANOMALY') { if (!r.limit_excluded) return false; }
+      else if (filterReason && r.pending_reason !== filterReason) return false;
       return true;
     });
   }, [data, filterPt, filterMc, filterReason]);
@@ -825,8 +834,13 @@ export default function SdsCoverageDashboard() {
           )}
           <Tag color={r.has_machine_template ? 'success' : 'error'} style={{ fontSize: 10 }}>Excel Config</Tag>
           {r.limit_excluded && (
-            <Tooltip title="ผลิตบนเครื่องนี้จริง แต่ Tooling Select LIMIT ระบุว่าชิ้นงานเกินพิกัดของเครื่อง (ขึ้นเครื่องไม่ได้) — ตรวจสอบ machine limit หรือข้อมูลการผลิต">
-              <Tag color="error" icon={<WarningOutlined />} style={{ fontSize: 10, fontWeight: 700 }}>Limit Anomaly</Tag>
+            <Tooltip title={r.limit_reason
+              ? `ผลิตบนเครื่องนี้จริง แต่เกิน Tooling Select LIMIT: ${r.limit_reason} — ตรวจสอบ machine limit หรือข้อมูลการผลิต`
+              : 'ผลิตบนเครื่องนี้จริง แต่ Tooling Select LIMIT ระบุว่าชิ้นงานเกินพิกัดของเครื่อง (ขึ้นเครื่องไม่ได้) — ตรวจสอบ machine limit หรือข้อมูลการผลิต'}
+            >
+              <Tag color="error" icon={<WarningOutlined />} style={{ fontSize: 10, fontWeight: 700 }}>
+                {r.limit_reason ? `Limit Anomaly (${r.limit_reason})` : 'Limit Anomaly'}
+              </Tag>
             </Tooltip>
           )}
         </Space>
@@ -1015,34 +1029,6 @@ export default function SdsCoverageDashboard() {
                       <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textPri }}>{g.machine}</Tag>
                       <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textSec }}>{g.process}</Tag>
                       <Text style={{ color: C.orange, fontSize: 11 }}>{g.reason || 'over work-size limit'}</Text>
-                      <Text style={{ color: C.textSec, fontSize: 11, marginLeft: 'auto' }}>{g.cn_count} C/N</Text>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── Limit-anomaly reconcile worklist ────────────────────────────── */}
-            {/* (machine, process) pairs where a part was PRODUCED but the T-Select
-                work-size limit says it cannot run there, and the floor has no sustained
-                history to soften it. The limit and the production record disagree —
-                one of them is wrong. These rows are flagged "Limit Anomaly" in the
-                table below; this card is the (machine · process) reconcile list. */}
-            {(data?.kpi?.limitExcludedByMachine?.length > 0) && (
-              <div style={{ ...cardStyle, marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                  {sectionTitle('Limit Anomaly — reconcile data', C)}
-                  <Text style={{ color: C.textSec, fontSize: 11 }}>
-                    {(data?.kpi?.limitExcluded ?? 0).toLocaleString()} sheet(s) across{' '}
-                    {data.kpi.limitExcludedByMachine.length} (machine · process) — flagged in the table below
-                  </Text>
-                </div>
-                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                  {data.kpi.limitExcludedByMachine.map((g, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
-                      <Tag icon={<WarningOutlined />} color="error" style={{ fontFamily: 'monospace', fontSize: 11, margin: 0 }}>{g.machine}</Tag>
-                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textSec }}>{g.process}</Tag>
-                      <Text style={{ color: C.red, fontSize: 11 }}>{g.reason || 'over work-size limit'}</Text>
                       <Text style={{ color: C.textSec, fontSize: 11, marginLeft: 'auto' }}>{g.cn_count} C/N</Text>
                     </div>
                   ))}

@@ -3,7 +3,7 @@ import {
   Layout, Typography, Card, Tabs, App, Space,
   Table, Input, Button, Popconfirm, AutoComplete,
   Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox, Image, Modal,
-  InputNumber, Segmented,
+  InputNumber, Segmented, Tooltip,
 } from 'antd';
 import {
   SaveOutlined, SearchOutlined, UploadOutlined, DeleteOutlined, ReloadOutlined,
@@ -1557,7 +1557,7 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
 
   // Slot editor state
   const [selectedCombo, setSelectedCombo] = useState(null); // { machine_type, process_code }
-  const [slots, setSlots] = useState({}); // tool_number → tool_drawing_no
+  const [slots, setSlots] = useState({}); // tool_number → { dwg: tool_drawing_no, suffix: dwg_suffix }
   const [editorLoading, setEditorLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -1591,7 +1591,7 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
         params: { machine_type, process_code },
       });
       const map = {};
-      res.data.forEach(r => { map[r.tool_number] = r.tool_drawing_no; });
+      res.data.forEach(r => { map[r.tool_number] = { dwg: r.tool_drawing_no, suffix: r.dwg_suffix || '' }; });
       setSlots(map);
     } catch (err) {
       message.error('Load tools failed');
@@ -1605,8 +1605,8 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
     loadSlots(combo.machine_type, combo.process_code);
   };
 
-  const handleSlotChange = (toolNumber, val) => {
-    setSlots(prev => ({ ...prev, [toolNumber]: val }));
+  const handleSlotChange = (toolNumber, field, val) => {
+    setSlots(prev => ({ ...prev, [toolNumber]: { ...prev[toolNumber], [field]: val } }));
     setDirty(true);
   };
 
@@ -1616,7 +1616,8 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
     try {
       const rows = TOOL_NUMBER_SLOTS.map(tn => ({
         tool_number: tn,
-        tool_drawing_no: slots[tn]?.trim() || '',
+        tool_drawing_no: slots[tn]?.dwg?.trim() || '',
+        dwg_suffix: slots[tn]?.suffix?.trim() || '',
       }));
       await axios.put(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS_BULK, {
         machine_type: selectedCombo.machine_type,
@@ -1710,7 +1711,7 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
     },
   ];
 
-  const filledCount = TOOL_NUMBER_SLOTS.filter(tn => slots[tn]?.trim()).length;
+  const filledCount = TOOL_NUMBER_SLOTS.filter(tn => slots[tn]?.dwg?.trim()).length;
 
   return (
     <Row gutter={16}>
@@ -1798,12 +1799,29 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
                   render: (tn) => (
                     <Input
                       size="small"
-                      value={slots[tn] || ''}
-                      onChange={e => handleSlotChange(tn, e.target.value)}
+                      value={slots[tn]?.dwg || ''}
+                      onChange={e => handleSlotChange(tn, 'dwg', e.target.value)}
                       //placeholder="เช่น 4866-01"
                       style={{ fontFamily: 'monospace' }}
                       allowClear
                     />
+                  ),
+                },
+                {
+                  title: 'DWG Suffix',
+                  dataIndex: 'tool_number',
+                  width: 130,
+                  render: (tn) => (
+                    <Tooltip title="ใส่เฉพาะตอนที่ DWG family เดียวกันครอบคลุมชิ้นงานคนละตัว (ดู 4879-03: -01=GUIDE PIN HOLDER, -02/-03=GUIDE PIN). ปล่อยว่างไว้สำหรับ slot ทั่วไปทุกตัว — ค่าว่าง = จับทุก suffix เหมือนเดิม">
+                      <Input
+                        size="small"
+                        value={slots[tn]?.suffix || ''}
+                        onChange={e => handleSlotChange(tn, 'suffix', e.target.value)}
+                        placeholder="เช่น 01 หรือ 02,03"
+                        style={{ fontFamily: 'monospace' }}
+                        allowClear
+                      />
+                    </Tooltip>
                   ),
                 },
               ]}

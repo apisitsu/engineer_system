@@ -4,12 +4,13 @@ import {
   Table, Tag, Spin, Layout, App, Descriptions,
   Modal, Select, Space, Tooltip, Divider, Popconfirm, DatePicker, Alert,
 } from 'antd';
-import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined, SwapOutlined, CheckCircleOutlined, EditOutlined } from '@ant-design/icons';
+import { SearchOutlined, FilePdfOutlined, SettingOutlined, HistoryOutlined, WarningOutlined, SwapOutlined, CheckCircleOutlined, EditOutlined } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useNavigate } from 'react-router-dom';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
+import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { useTheme } from '../../../../theme';
 import { useAuthStore } from '../../../../stores/authStore';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -1111,15 +1112,24 @@ const SdsV2Page = () => {
                     <Text type="secondary">Manage and view machine setup data sheets</Text>
                   </div>
                 </div>
-                {isAdmin && (
+                <div style={{ display: 'flex', gap: 8 }}>
                   <Button
-                    icon={<SettingOutlined />}
+                    icon={<HistoryOutlined />}
                     size="large"
-                    onClick={() => navigate('/eng/mtc_eng/sds-v2/admin')}
+                    onClick={() => navigate(MTC_PATHS.SDS_HISTORY)}
                   >
-                    Setting
+                    History
                   </Button>
-                )}
+                  {isAdmin && (
+                    <Button
+                      icon={<SettingOutlined />}
+                      size="large"
+                      onClick={() => navigate('/eng/mtc_eng/sds-v2/admin')}
+                    >
+                      Setting
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Search Section */}

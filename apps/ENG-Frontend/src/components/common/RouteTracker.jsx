@@ -53,7 +53,7 @@ function getFriendlyTitle(routePath) {
     if (routePath.includes('/mtc_eng/sds-v2')) return 'MTC: SDS V2';
     if (routePath.includes('/mtc_eng/sds-template-config')) return 'MTC: SDS Template Config';
     if (routePath.includes('/mtc_eng/sds-coverage')) return 'MTC: SDS Coverage Report';
-    if (routePath.includes('/mtc_eng/tooling-inspect-result-dashboard')) return 'MTC: Inspection Dashboard';
+    if (routePath.includes('/mtc_eng/tooling-inspect-result-dashboard')) return 'MTC: Inspection Report';
     if (routePath.includes('/mtc_eng/tooling-inspect')) return 'MTC: Tooling Inspection';
     if (routePath.includes('/mtc_eng/tooling-select-v2')) return 'MTC: Tooling Select V2';
     if (routePath.includes('/mtc_eng/tooling-management')) return 'MTC: Tool Inventory';

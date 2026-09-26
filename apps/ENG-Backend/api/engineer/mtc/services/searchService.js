@@ -1080,6 +1080,18 @@ function _familyFromMatch(row) {
   }
   return null;
 }
+// 4th dash-segment of that same DWG (XXXX-XX-NNNN-SS → 'SS'), when present. A family
+// can hold more than one physical fixture told apart only by this segment — J-WAVE
+// 4879-03 is GUIDE PIN (-02/-03) AND GUIDE PIN HOLDER (-01) — so the nearest-reference
+// lookup below must not pool them; see _attachSimilarRefFromFactoryPlan.
+function _suffixFromMatch(row) {
+  for (const v of Object.values(row || {})) {
+    if (typeof v !== 'string') continue;
+    const m = v.match(/^\d{4}-\d{2}-\d+-(\w+)$/);
+    if (m) return m[1];
+  }
+  return null;
+}
 async function _attachSimilarRefFromFactoryPlan(results, spec, specCtx) {
   const dim = _classDimFor(spec.cn);
   if (!dim) return;
@@ -1097,22 +1109,36 @@ async function _attachSimilarRefFromFactoryPlan(results, spec, specCtx) {
   // crosses sub-classes — e.g. a C35 yball is not suggested for a C31 ball.
   const cnPrefix = targetCn.slice(0, 3);
 
-  // Candidates = matched toolings that have NO curated/fill reference yet.
-  const famByResult = new Map(); // result → family
+  // Candidates = matched toolings that have NO curated/fill reference yet. Grouped by
+  // FAMILY when the DWG has no 4th segment (the overwhelming majority — one family is
+  // one fixture), but by family+SUFFIX when it does: a family whose DWGs carry a 4th
+  // segment can be more than one physical fixture (J-WAVE 4879-03: GUIDE PIN -02/-03,
+  // GUIDE PIN HOLDER -01), and pooling them found the family's single nearest factory
+  // reference and stamped it onto EVERY co-family result — GUIDE PIN's `similarRef`
+  // was silently the HOLDER's own DWG number (4879-03-0031-01), which then printed on
+  // the SDS sheet in place of GUIDE PIN's real number. Verified live on A41-02277.
+  const famByResult = new Map(); // result → grouping key (bare family, or family::suffix)
   const families = new Set();
   for (const res of results) {
     if (res.similarRef || res.overrideBy || !res.matches?.length) continue;
-    const fam = _familyFromMatch(res.matches[0]);
-    if (!fam) continue;
+    const bareFam = _familyFromMatch(res.matches[0]);
+    if (!bareFam) continue;
+    const suf = _suffixFromMatch(res.matches[0]);
+    const fam = suf ? `${bareFam}::${suf}` : bareFam;
     famByResult.set(res, fam);
     families.add(fam);
   }
   if (!families.size) return;
 
-  // One query: nearest same-CN-prefix produced part per tool family (DISTINCT ON).
+  // One query: nearest same-CN-prefix produced part per (family[, suffix]) key
+  // (DISTINCT ON). A candidate with no 4th segment keys on its bare family, same as
+  // before; one that has it must match the SAME suffix as the result it could fill —
+  // a GUIDE PIN result never accepts a HOLDER's reference DWG, or the reverse.
   let rows;
   try {
-    const famExpr = `split_part(t.tool_dwg_no,'-',1)||'-'||split_part(t.tool_dwg_no,'-',2)`;
+    const bareFamExpr = `split_part(t.tool_dwg_no,'-',1)||'-'||split_part(t.tool_dwg_no,'-',2)`;
+    const sufExpr = `NULLIF(split_part(t.tool_dwg_no,'-',4), '')`;
+    const famExpr = `CASE WHEN ${sufExpr} IS NULL THEN ${bareFamExpr} ELSE ${bareFamExpr} || '::' || ${sufExpr} END`;
     ({ rows } = await maqPool.query(
       `SELECT DISTINCT ON (fam) ${famExpr} AS fam,
               t.process_plan_no AS ref_cn, t.tool_dwg_no,
