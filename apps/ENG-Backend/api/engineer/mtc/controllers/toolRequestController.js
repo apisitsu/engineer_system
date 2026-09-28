@@ -660,7 +660,9 @@ const getToolRequestReport = async (req, res) => {
 
         const fetchPeriod = async (start, end) => {
             const reqRes = await engPool.query(
-                `SELECT id, req_date, completion_status, updated_at FROM ${TABLES.TR_REQUEST}
+                `SELECT id, req_no, req_date, req_by, department, title, type_of_request, priority,
+                        work_center_name, diff_days, completion_status, updated_at
+                   FROM ${TABLES.TR_REQUEST}
                   WHERE deleted_at IS NULL AND completion_status IN ('On time', 'Delay')
                     AND DATE(updated_at) BETWEEN $1 AND $2`,
                 [start, end]);
@@ -724,8 +726,74 @@ const getToolRequestReport = async (req, res) => {
             fetchPeriod(prevStart, prevEnd),
         ]);
 
+        // ── Drill-down selection (bar / card / breakdown clicks) ──────────────
+        // Whitelisted, then applied in JS: a FYE holds hundreds of completed requests, so
+        // there is nothing to gain from more SQL variants. Each panel drops the selection
+        // that it is itself the selector for, so it stays usable to change that choice:
+        //   monthlyTrend      — none (the whole FYE, always)
+        //   kpi               — month only  (cards toggle status; a card must not zero itself)
+        //   stageAvg          — status / type / dept, not month (its x-axis IS the month)
+        //   byType            — month + status + dept
+        //   byDept            — month + status + type
+        //   records           — everything
+        const month   = req.query.month ? parseInt(req.query.month) : null;   // calendar 1-12
+        const status  = ['On time', 'Delay'].includes(req.query.status) ? req.query.status : null;
+        const typeSel = req.query.type ? String(req.query.type).slice(0, 100) : null;
+        const deptSel = req.query.dept ? String(req.query.dept).slice(0, 100) : null;
+        const label   = (v) => (v && String(v).trim()) || '(none)';
+        const inMonth  = (r) => !month || (moment(r.updated_at).month() + 1) === month;
+        const okStatus = (r) => !status || r.completion_status === status;
+        const okType   = (r) => !typeSel || label(r.type_of_request) === typeSel;
+        const okDept   = (r) => !deptSel || label(r.department) === deptSel;
+        const reqs = curPeriod.requests;
+
         const monthlyTrend = buildMonthly(curPeriod);
-        const stageAvg = buildStageAvg(curPeriod);
+        const stageAvg = buildStageAvg({
+            requests: reqs.filter(r => okStatus(r) && okType(r) && okDept(r)),
+            workflow: curPeriod.workflow,
+        });
+
+        const leadDays = (r) => Math.max(moment(r.updated_at).diff(moment(r.req_date), 'hours') / 24, 0);
+        const kpiRows = reqs.filter(inMonth);
+        const kpiOnTime = kpiRows.filter(r => r.completion_status === 'On time').length;
+        const kpi = {
+            total: kpiRows.length,
+            onTime: kpiOnTime,
+            delay: kpiRows.length - kpiOnTime,
+            onTimePct: kpiRows.length > 0 ? parseFloat(((kpiOnTime / kpiRows.length) * 100).toFixed(1)) : 0,
+            avgLeadDays: kpiRows.length > 0
+                ? parseFloat((kpiRows.reduce((s, r) => s + leadDays(r), 0) / kpiRows.length).toFixed(1)) : 0,
+        };
+        // Requests still moving through the workflow — all-time, not FYE-scoped: it is a
+        // "what is open right now" number, and an open request has no completion month yet.
+        const openRes = await engPool.query(
+            `SELECT COUNT(*)::int AS n FROM ${TABLES.TR_REQUEST}
+              WHERE deleted_at IS NULL AND completion_status = 'Pending'`);
+        kpi.open = openRes.rows[0].n;
+
+        const tally = (rows, keyOf) => {
+            const m = {};
+            rows.forEach(r => {
+                const k = keyOf(r);
+                m[k] ||= { name: k, count: 0, onTime: 0, delay: 0 };
+                m[k].count++;
+                if (r.completion_status === 'On time') m[k].onTime++; else m[k].delay++;
+            });
+            return Object.values(m).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+        };
+        const byType = tally(reqs.filter(r => inMonth(r) && okStatus(r) && okDept(r)), r => label(r.type_of_request));
+        const byDept = tally(reqs.filter(r => inMonth(r) && okStatus(r) && okType(r)), r => label(r.department));
+
+        const recordRows = reqs
+            .filter(r => inMonth(r) && okStatus(r) && okType(r) && okDept(r))
+            .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        const records = recordRows.slice(0, 500).map(r => ({
+            id: r.id, req_no: r.req_no, title: r.title, type_of_request: r.type_of_request,
+            department: r.department, requester: r.req_by, work_center_name: r.work_center_name,
+            priority: r.priority, completion_status: r.completion_status, diff_days: r.diff_days,
+            req_date: r.req_date, completed_at: r.updated_at,
+            lead_days: parseFloat(leadDays(r).toFixed(1)),
+        }));
 
         const prevMonthly = buildMonthly(prevPeriod);
         const prevMonths = prevMonthly.length;
@@ -740,7 +808,10 @@ const getToolRequestReport = async (req, res) => {
                 ? parseFloat(((prevOnTime / (prevOnTime + prevDelay)) * 100).toFixed(1)) : 0,
         } : null;
 
-        res.json({ fye, stageOrder: TR_STAGE_ORDER, monthlyTrend, prevFyeAvg, stageAvg });
+        res.json({
+            fye, stageOrder: TR_STAGE_ORDER, monthlyTrend, prevFyeAvg, stageAvg,
+            kpi, byType, byDept, records, recordCount: recordRows.length,
+        });
     } catch (err) {
         logger.error('Error building tool request report', { error: err.message });
         res.status(500).json({ error: err.message });
