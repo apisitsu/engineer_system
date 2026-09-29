@@ -1178,7 +1178,12 @@ const SdsV2Page = () => {
                     <Descriptions size="small" bordered column={4}>
                       <Descriptions.Item label="PN">{data.parts_no || '-'}</Descriptions.Item>
                       <Descriptions.Item label="DWG Rev">{data.dwg_rev || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="Material">{data.material?.material || '-'}</Descriptions.Item>
+                      {/* `sheet_material` is what the PDF prints too: the part's own grade, or for a
+                          spherical (ball + race, no raw material of its own) its race's. The ball's
+                          grade sits beside its CN below. */}
+                      <Descriptions.Item label={data.components ? 'Material (Race)' : 'Material'}>
+                        {data.sheet_material || '-'}
+                      </Descriptions.Item>
                       {data.production && <>
                         <Descriptions.Item label="Model">{data.production.model || '-'}</Descriptions.Item>
                         <Descriptions.Item label="Customer">{data.production.customer || '-'}</Descriptions.Item>
@@ -1190,6 +1195,36 @@ const SdsV2Page = () => {
                         <Descriptions.Item label="SWG Rev">{data.production.sdwg_no_rev || '-'}</Descriptions.Item>
                       </>}
                     </Descriptions>
+                    {data.components && (() => {
+                      // SPHERICAL only. Design BOM (what the drawing calls for), not the lot that
+                      // was assembled. Each CN opens that part's own SDS.
+                      const c = data.components;
+                      const bomEmpty = !c.ball.length && !c.race.length && !c.other.length;
+                      const openCn = (target) => { setCn(target); runSearch(target); };
+                      const links = (list) => list.length
+                        ? list.map((p) => (
+                          <div key={p.cn}>
+                            <Button type="link" size="small" style={{ padding: 0 }} onClick={() => openCn(p.cn)}>{p.cn}</Button>
+                            {p.pn && <Text type="secondary"> {p.pn}</Text>}
+                            {p.qty > 1 && <Text type="secondary"> ×{p.qty}</Text>}
+                            {p.material && <div><Text style={{ fontSize: 12 }}>{p.material}</Text></div>}
+                          </div>))
+                        : <Text type="secondary">{bomEmpty ? 'No BOM on file' : '-'}</Text>;
+                      return (
+                        <Descriptions size="small" bordered column={2} style={{ marginTop: 12 }}
+                          title={<Text type="secondary" style={{ fontSize: 13 }}>Assembled from (design BOM)</Text>}>
+                          <Descriptions.Item label="Ball CN">{links(c.ball)}</Descriptions.Item>
+                          <Descriptions.Item label="Race CN">{links(c.race)}</Descriptions.Item>
+                          {c.other.length > 0 && (
+                            <Descriptions.Item label="Other BOM" span={2}>
+                              {c.other.map((p) => (
+                                <div key={p.cn}><Text>{p.cn}</Text>{p.pn && <Text type="secondary"> {p.pn}</Text>}</div>
+                              ))}
+                            </Descriptions.Item>
+                          )}
+                        </Descriptions>
+                      );
+                    })()}
                   </Card>
 
                   <Card

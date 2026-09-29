@@ -52,6 +52,23 @@ describe('searchByCn — CN normalization & routing', () => {
     expect(maq.calls.some(c => /eng_ball|eng_race|eng_body|eng_sleeve|eng_sph/i.test(c.sql))).toBe(false);
   });
 
+  it('gives a SPHERICAL an (empty) component list, and every other type null', async () => {
+    const maq = fakePool(), rodpc = fakePool();
+    const sph = await searchByCn('A41-00001', maq, rodpc);
+    expect(sph.part_type).toBe('SPHERICAL');
+    expect(sph.components).toEqual({ ball: [], race: [], other: [] });   // no BOM → empty, not null
+    expect((await searchByCn('C25-00235', fakePool(), fakePool())).components).toBeNull();
+  });
+
+  it('runs the SPHERICAL component query only for a SPHERICAL', async () => {
+    const isComponentQuery = (c) => /ORDER BY b\.child_cn/i.test(c.sql);
+    const sph = fakePool(), race = fakePool();
+    await searchByCn('A41-00001', sph, fakePool());
+    await searchByCn('C25-00235', race, fakePool());
+    expect(sph.calls.some(isComponentQuery)).toBe(true);
+    expect(race.calls.some(isComponentQuery)).toBe(false);
+  });
+
   it('throws a clear error for an unknown CN prefix', async () => {
     const maq = fakePool(), rodpc = fakePool();
     await expect(searchByCn('824047', maq, rodpc)).rejects.toThrow(/Unknown CN prefix: C82/);
