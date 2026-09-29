@@ -542,10 +542,66 @@ async function searchInventory(machine, rules, computedDims) {
     sql += ` ORDER BY ${tieBreak}`;
   }
 
-  sql += ' LIMIT 2';
+  // Fetch a wider candidate window than the 2 we return — a search-rule with a
+  // coarse output_key (e.g. XD-8 WRIST END ASSY's "B", which is an integer-ish
+  // bore fit shared by several shelf drawings) can put many rows at the EXACT
+  // same combined distance, and the plain `tooling_no ASC` tie-break below then
+  // decides by drawing-number spelling rather than which one the shop actually
+  // uses. Widened so untieByPopularity (below) has the whole tied cluster to
+  // choose from; harmless for every rule that never ties — same top 2 either way.
+  sql += ' LIMIT 12';
 
   const { rows } = await engPool.query(sql, params);
-  return rows;
+  if (rows.length < 2 || distanceRules.length === 0) return rows;
+  const ranked = await untieByPopularity(rows, distanceRules);
+  return ranked.length > 2 ? ranked.slice(0, 2) : ranked;
+}
+
+// A candidate's combined distance, recomputed in JS from the same (col, computed)
+// pairs the SQL ORDER BY used — needed to find the tied cluster without re-parsing
+// the query text.
+function combinedDistance(row, distanceRules) {
+  return distanceRules.reduce((sum, { col, computed }) => sum + Math.abs(Number(row[col]) - computed), 0);
+}
+
+// When two or more of the top candidates land on the EXACT same combined distance
+// (common for a search rule with a coarse/integer-ish output — see the LIMIT 12
+// comment above), `tooling_no ASC` is not a real decision, just alphabetical
+// spelling. Break that tie by how often the FACTORY PLAN actually used each
+// drawing — measured on XD-8 WRIST END ASSY (862 planned C/Ns, 87% land in a tied
+// cluster averaging 2.6 members): "most-planned" lifts top-1 56% -> 74% with no
+// change to top-2 (92%), while every non-tied rule (the overwhelming majority) is
+// completely unaffected because there is nothing to reorder.
+//
+// Fails open: a maqPool error, or every tied candidate having 0 factory uses,
+// leaves the SQL order (tooling_no ASC) exactly as it was.
+async function untieByPopularity(rows, distanceRules) {
+  const topDist = combinedDistance(rows[0], distanceRules);
+  const EPS = 1e-6;
+  let tieEnd = 1;
+  while (tieEnd < rows.length && Math.abs(combinedDistance(rows[tieEnd], distanceRules) - topDist) < EPS) tieEnd++;
+  if (tieEnd < 2) return rows; // no tie at the top — nothing to do
+
+  const tied = rows.slice(0, tieEnd);
+  const dwgs = tied.map(r => r.tooling_no).filter(Boolean);
+  if (!dwgs.length) return rows;
+
+  let popular;
+  try {
+    const { rows: pop } = await maqPool.query(
+      `SELECT tool_dwg_no, count(*)::int n FROM lpb.eng_r_pi_tool WHERE tool_dwg_no = ANY($1) GROUP BY 1`,
+      [dwgs]
+    );
+    popular = new Map(pop.map(p => [p.tool_dwg_no, p.n]));
+  } catch (_) { return rows; } // maqdb unavailable — keep the SQL order, unchanged
+
+  if (![...popular.values()].some(n => n > 0)) return rows; // no plan history at all — nothing to prefer
+
+  const reordered = [...tied].sort((a, b) =>
+    (popular.get(b.tooling_no) || 0) - (popular.get(a.tooling_no) || 0) ||
+    a.tooling_no.localeCompare(b.tooling_no) // stable fallback among equally-popular (or both 0) ties
+  );
+  return [...reordered, ...rows.slice(tieEnd)];
 }
 
 // ── Post-processing: suffix-link SUPPORT BLOCK to LOADING CHUTE ─────────────

@@ -439,17 +439,37 @@ async function buildCoverage() {
       `, [wcArr]).catch(() => ({ rows: [] })),
     ]);
 
-    // The rodpc machine master (query 12) is what turns a floor machine code (IDG-03)
-    // into its machine type (KS-03A). Its `.catch` above degrades to an empty result, and
-    // an empty map does NOT look like a failure downstream: every row simply loses its
-    // machine_type_name, falls out of the (cn, machine, process) dedup — one row per floor
-    // machine instead of per machine type — and lands in NO_TOOL_NO_EXCEL. 2026-09-26: a
-    // build in that state took total 3,687 → 6,428 and Ball pending 49 → 5,103, and it
-    // passed the `total > 0` guard in kickCoverageBuild, so it replaced the good cache.
-    // Throwing here keeps the previous report, and the auto-stamp / backlog steps that run
-    // after a successful build never see the bogus one.
-    if (!rodpcMachineRes.rows.length) {
-      throw new Error('rodpc m_machine returned no rows - refusing to build a degraded coverage report');
+    // Every query above degrades to `.catch(() => ({ rows: [] }))` on a connection error —
+    // deliberately, so one flaky query does not 500 the whole build. But an empty result
+    // from one of these specific large, always-populated tables does NOT look like a
+    // failure downstream: it just makes some other field quietly absent, and the build
+    // still reports total > 0 (something else still had data), so `kickCoverageBuild`'s
+    // only guard (`total > 0`) waves it through and it overwrites the previous good cache.
+    // Both incidents below were exactly this shape — a DIFFERENT query silently starved,
+    // because right after a process restart the maqPool/rodpcPool connections are not
+    // always up yet when the warm-up build fires:
+    //   2026-09-26 rodpcMachineRes empty  → every floor code loses machine_type_name →
+    //     rows stop deduping by (cn, machine_type, process) → one row per floor machine
+    //     instead → total 3,687 → 6,428, Ball pending 49 → 5,103 (NO_TOOL_NO_EXCEL).
+    //   2026-09-29 cnRpiToolRes empty     → every CN's process-plan tool list is empty →
+    //     checkToolingMatch() has nothing to match against for ANY machine → pending
+    //     636 vs the true ~73, almost all NO_TOOL across many real machine names.
+    // So the guard is now every query whose live row count is always in the thousands+;
+    // refusing here keeps serving the last good cache (stale-while-revalidate already
+    // retries on the next request) instead of caching a degraded build that looks valid
+    // because its OWN total is nonzero.
+    const REQUIRED_MIN_ROWS = {
+      rodpcMachineRes: 100,   // rodpc.m_machine — floor code → machine type, ~666 today
+      cnRpiToolRes:    1000,  // lpb.eng_r_pi_tool — process-plan tooling, ~122k today
+      cnWithProcessRes: 1000, // lpb.eng_process_info — CNs with a process plan, ~73k today
+      machineToolsRes: 100,   // sds_machine_tool — whitelist config, ~679 today
+    };
+    const criticalResults = { rodpcMachineRes, cnRpiToolRes, cnWithProcessRes, machineToolsRes };
+    for (const [name, min] of Object.entries(REQUIRED_MIN_ROWS)) {
+      const n = criticalResults[name].rows.length;
+      if (n < min) {
+        throw new Error(`${name} returned only ${n} row(s) (expected >= ${min}) - refusing to build a degraded coverage report`);
+      }
     }
 
     // ── Extra refs for Tooling Select fallback ───────────────────────────────

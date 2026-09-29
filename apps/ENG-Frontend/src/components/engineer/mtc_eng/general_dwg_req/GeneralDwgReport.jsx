@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Layout, Select, Spin, Row, Col, Typography, Table } from 'antd';
+import { Layout, Select, Spin, Row, Col, Typography, Table, Tag, Tooltip } from 'antd';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { useTheme } from '../../../../theme';
 import { SystemVersionBadge } from '../SystemVersionBadge';
@@ -85,6 +85,31 @@ const sectionTitle = (label, C) => (
     </div>
 );
 
+// KPI card — same behaviour as InspectionResultDashboard's: `onClick` makes it a toggle
+// filter, `active` outlines it in its own colour, `dimmed` fades it while a sibling in the
+// same group is selected.
+const KpiCard = ({ label, value, color, sub, C, onClick, active, dimmed }) => {
+    const clickable = typeof onClick === 'function';
+    return (
+        <div
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            aria-pressed={clickable ? !!active : undefined}
+            onClick={onClick}
+            onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+            style={{
+                ...cardStyleOf(C), textAlign: 'center', borderTop: `3px solid ${color}`,
+                cursor: clickable ? 'pointer' : 'default',
+                boxShadow: active ? `0 0 0 2px ${color}` : 'none',
+                opacity: dimmed ? 0.55 : 1, transition: 'box-shadow 0.15s, opacity 0.15s',
+            }}>
+            <div style={{ color: C.textSec, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
+            <div style={{ color, fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>{value ?? '-'}</div>
+            {sub && <div style={{ color: C.textSec, fontSize: 11, marginTop: 2 }}>{sub}</div>}
+        </div>
+    );
+};
+
 // FYE month order: Apr(4)…Dec(12), Jan(1)…Mar(3) — same convention as
 // InspectionResultDashboard / legacyMtcController's fyeToRange.
 const FYE_MONTH_LABELS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
@@ -122,10 +147,29 @@ export default function GeneralDwgReport() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const fetchData = useCallback(async (f) => {
+    // Drill-down selection, same model as InspectionResultDashboard. Every one is a toggle
+    // (the same click again clears it). The month comes from a click on a month column in
+    // either chart and re-scopes the cards + lists; status / type / department come from
+    // the cards and breakdown bars and narrow the panels that are not their own selector
+    // (the server decides which — see getToolRequestReport).
+    const [month, setMonth] = useState(0);            // calendar month 1-12, 0 = whole FYE
+    const [statusSel, setStatusSel] = useState('');   // 'On time' | 'Delay'
+    const [typeSel, setTypeSel] = useState('');
+    const [deptSel, setDeptSel] = useState('');
+    const toggleStatus = (s) => setStatusSel(cur => (cur === s ? '' : s));
+    const toggleType = (t) => setTypeSel(cur => (cur === t ? '' : t));
+    const toggleDept = (d) => setDeptSel(cur => (cur === d ? '' : d));
+    const clearSelection = () => { setMonth(0); setStatusSel(''); setTypeSel(''); setDeptSel(''); };
+
+    const fetchData = useCallback(async (f, m, st, ty, dp) => {
         setLoading(true);
         try {
-            const res = await axios.get(server.MTC_TOOL_REQUEST_REPORT, { params: { fye: f } });
+            const params = { fye: f };
+            if (m) params.month = m;
+            if (st) params.status = st;
+            if (ty) params.type = ty;
+            if (dp) params.dept = dp;
+            const res = await axios.get(server.MTC_TOOL_REQUEST_REPORT, { params });
             setData(res.data);
         } catch (e) {
             console.error('General DWG Report error:', e);
@@ -134,7 +178,22 @@ export default function GeneralDwgReport() {
         }
     }, []);
 
-    useEffect(() => { fetchData(fye); }, [fye, fetchData]);
+    useEffect(() => { fetchData(fye, month, statusSel, typeSel, deptSel); }, [fye, month, statusSel, typeSel, deptSel, fetchData]);
+
+    // A type / department picked in one month may not exist in the next; drop it instead of
+    // leaving the records list silently empty. The lists are unfiltered by their own
+    // selection, so their names are the truth about what can still be picked.
+    useEffect(() => {
+        if (typeSel && data && !(data.byType || []).some(t => t.name === typeSel)) setTypeSel('');
+        if (deptSel && data && !(data.byDept || []).some(d => d.name === deptSel)) setDeptSel('');
+    }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Category under the pointer, resolved by COLUMN (or ROW for horizontal bars) so the
+    // whole month / category is clickable, not just the painted bar.
+    const indexAt = (evt, chart, axis = 'x') => {
+        const hit = chart.getElementsAtEventForMode(evt, 'index', { intersect: false, axis }, true);
+        return hit.length ? hit[0].index : -1;
+    };
 
     // ── Chart 1: monthly On time / Delay + %On time, with a previous-FYE average
     // baseline bar (same device as InspectionResultDashboard's Monthly Trend).
@@ -154,6 +213,8 @@ export default function GeneralDwgReport() {
         const avgLabel = prev ? `FYE${prev.fye} avg` : 'Prev avg';
         const labels = [avgLabel, ...FYE_MONTH_LABELS];
         const lead = (arr, val) => [val, ...arr];
+        // With a month picked, every other month's bars fade so the chosen one reads.
+        const monthAlpha = (num) => (month && num !== month ? 0.25 : 0.7);
 
         const onTimeArr = lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.onTime ?? 0), prev?.onTime ?? null);
         const delayArr = lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.delay ?? 0), prev?.delay ?? null);
@@ -165,7 +226,7 @@ export default function GeneralDwgReport() {
                 {
                     type: 'bar', label: 'On time',
                     data: onTimeArr,
-                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.green, 0.7)), hexToRgba(C.green, 0.3)),
+                    backgroundColor: lead(FYE_MONTH_NUMS.map(num => hexToRgba(C.green, monthAlpha(num))), hexToRgba(C.green, 0.3)),
                     borderColor: C.green, borderWidth: 1, yAxisID: 'yLeft', order: 2,
                     datalabels: {
                         display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
@@ -176,7 +237,7 @@ export default function GeneralDwgReport() {
                 {
                     type: 'bar', label: 'Delay',
                     data: delayArr,
-                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.red, 0.7)), hexToRgba(C.red, 0.3)),
+                    backgroundColor: lead(FYE_MONTH_NUMS.map(num => hexToRgba(C.red, monthAlpha(num))), hexToRgba(C.red, 0.3)),
                     borderColor: C.red, borderWidth: 1, yAxisID: 'yLeft', order: 2,
                     datalabels: {
                         display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
@@ -218,12 +279,21 @@ export default function GeneralDwgReport() {
                 },
             ],
         };
-    }, [data, C]);
+    }, [data, C, month]);
 
     const monthlyChartOpts = useMemo(() => ({
         responsive: true,
         maintainAspectRatio: false,
         layout: { padding: { top: 20 } },
+        // Click a month's column to scope the page to it; again to go back to the FYE.
+        // Index 0 is the previous-FYE average baseline — not a month, so it does nothing.
+        onClick: (evt, _els, chart) => {
+            const i = indexAt(evt, chart);
+            if (i > 0) setMonth(cur => (cur === FYE_MONTH_NUMS[i - 1] ? 0 : FYE_MONTH_NUMS[i - 1]));
+        },
+        onHover: (evt, _els, chart) => {
+            chart.canvas.style.cursor = indexAt(evt, chart) > 0 ? 'pointer' : 'default';
+        },
         plugins: {
             // Base "off" so any dataset that doesn't set its own `datalabels` stays
             // silent (the On time/Delay bars); Total and % On time opt back in per-dataset.
@@ -272,15 +342,24 @@ export default function GeneralDwgReport() {
             datasets: stages.map((stage, i) => ({
                 label: STAGE_LABELS[stage] || stage,
                 data: FYE_MONTH_NUMS.map(num => byMonth[num]?.[stage] ?? null),
-                backgroundColor: hexToRgba(C[STAGE_COLOR_KEYS[i % STAGE_COLOR_KEYS.length]], 0.85),
+                backgroundColor: FYE_MONTH_NUMS.map(num => hexToRgba(
+                    C[STAGE_COLOR_KEYS[i % STAGE_COLOR_KEYS.length]], month && num !== month ? 0.22 : 0.85)),
                 borderRadius: 2,
             })),
         };
-    }, [data, C]);
+    }, [data, C, month]);
 
     const stageChartOpts = useMemo(() => ({
         responsive: true,
         maintainAspectRatio: false,
+        // Same month selection as the trend chart above (this chart's x-axis is the month).
+        onClick: (evt, _els, chart) => {
+            const i = indexAt(evt, chart);
+            if (i >= 0) setMonth(cur => (cur === FYE_MONTH_NUMS[i] ? 0 : FYE_MONTH_NUMS[i]));
+        },
+        onHover: (evt, _els, chart) => {
+            chart.canvas.style.cursor = indexAt(evt, chart) >= 0 ? 'pointer' : 'default';
+        },
         plugins: {
             datalabels: { display: false },
             legend: { position: 'bottom', labels: { color: C.textPri, font: { size: 11 }, boxWidth: 12, padding: 12 } },
@@ -294,6 +373,43 @@ export default function GeneralDwgReport() {
             },
         },
     }), [C]);
+
+    // ── Breakdown bars (Type of Request / Department) — horizontal, stacked On time +
+    // Delay, one row per category. Clicking a row toggles that category as a filter;
+    // the picked row keeps its colour and the rest fade, exactly like a Root Cause slice.
+    const breakdownData = (list, picked) => ({
+        labels: list.map(d => d.name),
+        datasets: [
+            { label: 'On time', data: list.map(d => d.onTime), stack: 's',
+              backgroundColor: list.map(d => hexToRgba(C.green, picked && d.name !== picked ? 0.2 : 0.75)), borderRadius: 2 },
+            { label: 'Delay', data: list.map(d => d.delay), stack: 's',
+              backgroundColor: list.map(d => hexToRgba(C.red, picked && d.name !== picked ? 0.2 : 0.75)), borderRadius: 2 },
+        ],
+    });
+    const breakdownOpts = (list, onPick) => ({
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        onClick: (evt, _els, chart) => {
+            const i = indexAt(evt, chart, 'y');
+            if (i >= 0 && list[i]) onPick(list[i].name);
+        },
+        onHover: (evt, _els, chart) => {
+            chart.canvas.style.cursor = indexAt(evt, chart, 'y') >= 0 ? 'pointer' : 'default';
+        },
+        plugins: {
+            datalabels: { display: false },
+            legend: { position: 'bottom', labels: { color: C.textPri, font: { size: 11 }, boxWidth: 12, padding: 12 } },
+            tooltip: { mode: 'index', intersect: false, axis: 'y' },
+        },
+        scales: {
+            x: { stacked: true, ticks: { color: C.textSec, font: { size: 10 }, precision: 0 }, grid: { color: C.gridLine } },
+            y: { stacked: true, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
+        },
+    });
+    const byType = data?.byType || [];
+    const byDept = data?.byDept || [];
+    const kpi = data?.kpi;
 
     // Plain-number table alongside the chart — same monthly figures for anyone who
     // needs to read the values directly rather than the plot.
@@ -309,6 +425,7 @@ export default function GeneralDwgReport() {
 
     const fyeStartYear = fye + 1999;
     const fyeEndYear = fye + 2000;
+    const monthLabel = month ? FYE_MONTH_LABELS[FYE_MONTH_NUMS.indexOf(month)] : '';
 
     return (
         <Layout style={{ height: '100%', background: C.bg }}>
@@ -333,11 +450,42 @@ export default function GeneralDwgReport() {
                             </div>
                             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                                 <Text style={{ color: C.textSec, fontSize: 12 }}>FYE</Text>
-                                <Select value={fye} onChange={setFye} style={{ width: 100 }} popupClassName="dark-select" loading={fyeOptions.length === 0}>
+                                <Select value={fye} onChange={v => { setFye(v); clearSelection(); }} style={{ width: 100 }} popupClassName="dark-select" loading={fyeOptions.length === 0}>
                                     {fyeOptions.map(f => <Option key={f} value={f}>FYE{f}</Option>)}
                                 </Select>
                             </div>
                         </div>
+
+                        {/* KPI cards — the month selection (chart click) re-scopes them; On Time / Delay
+                            toggle the status filter for the panels below. */}
+                        <Row gutter={[10, 10]} style={{ marginBottom: 12 }}>
+                            <Col flex="1"><KpiCard C={C} label="Completed" value={kpi?.total} color={C.blue}
+                                sub={month ? `${monthLabel} only` : 'whole FYE'} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="On Time" value={kpi?.onTime} color={C.green}
+                                onClick={() => toggleStatus('On time')} active={statusSel === 'On time'} dimmed={!!statusSel && statusSel !== 'On time'} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Delay" value={kpi?.delay} color={C.red}
+                                onClick={() => toggleStatus('Delay')} active={statusSel === 'Delay'} dimmed={!!statusSel && statusSel !== 'Delay'} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="% On Time" value={kpi ? `${kpi.onTimePct}%` : '-'}
+                                color={kpi && kpi.onTimePct >= 95 ? C.green : C.yellow} sub="target 95%" /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Avg Lead Days" value={kpi?.avgLeadDays} color={C.cyan}
+                                sub="request → informed" /></Col>
+                            <Col flex="1"><KpiCard C={C} label="In Progress" value={kpi?.open} color={C.orange}
+                                sub="open now (all time)" /></Col>
+                        </Row>
+
+                        {(month || statusSel || typeSel || deptSel) && (
+                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                                <Text style={{ color: C.textSec, fontSize: 11 }}>Showing</Text>
+                                {month ? <Tag closable color="blue" style={{ margin: 0 }} onClose={(e) => { e.preventDefault(); setMonth(0); }}>Month: {monthLabel}</Tag> : null}
+                                {statusSel ? <Tag closable color={statusSel === 'Delay' ? 'red' : 'green'} style={{ margin: 0 }} onClose={(e) => { e.preventDefault(); setStatusSel(''); }}>Status: {statusSel}</Tag> : null}
+                                {typeSel ? <Tag closable color="geekblue" style={{ margin: 0 }} onClose={(e) => { e.preventDefault(); setTypeSel(''); }}>Type: {typeSel}</Tag> : null}
+                                {deptSel ? <Tag closable color="purple" style={{ margin: 0 }} onClose={(e) => { e.preventDefault(); setDeptSel(''); }}>Dept: {deptSel}</Tag> : null}
+                                <a onClick={clearSelection} style={{ fontSize: 11 }}>Clear all</a>
+                                <Text style={{ color: C.textSec, fontSize: 11 }}>
+                                    — month re-scopes the cards and lists; status / type / dept narrow the stage chart, breakdowns and records ({(data?.recordCount ?? 0).toLocaleString()} rows). The monthly trend always shows the whole FYE.
+                                </Text>
+                            </div>
+                        )}
 
                         <Row gutter={[10, 10]} style={{ marginBottom: 10 }}>
                             <Col xs={24}>
@@ -360,6 +508,60 @@ export default function GeneralDwgReport() {
                                 </div>
                             </Col>
                         </Row>
+
+                        <Row gutter={[10, 10]} style={{ marginBottom: 10 }}>
+                            <Col xs={24} md={12}>
+                                <div style={{ ...cardStyle, height: Math.max(220, 90 + Math.max(byType.length, byDept.length) * 34) }}>
+                                    {sectionTitle('By Type of Request — click to filter', C)}
+                                    {byType.length > 0
+                                        ? <div style={{ height: Math.max(130, byType.length * 34 + 40) }}><Bar data={breakdownData(byType, typeSel)} options={breakdownOpts(byType, toggleType)} /></div>
+                                        : <div style={{ color: C.textSec, textAlign: 'center', paddingTop: 50 }}>No data</div>}
+                                </div>
+                            </Col>
+                            <Col xs={24} md={12}>
+                                <div style={{ ...cardStyle, height: Math.max(220, 90 + Math.max(byType.length, byDept.length) * 34) }}>
+                                    {sectionTitle('By Department — click to filter', C)}
+                                    {byDept.length > 0
+                                        ? <div style={{ height: Math.max(130, byDept.length * 34 + 40) }}><Bar data={breakdownData(byDept, deptSel)} options={breakdownOpts(byDept, toggleDept)} /></div>
+                                        : <div style={{ color: C.textSec, textAlign: 'center', paddingTop: 50 }}>No data</div>}
+                                </div>
+                            </Col>
+                        </Row>
+
+                        <div style={{ ...cardStyle, marginBottom: 10 }}>
+                            {sectionTitle(`Completed Requests${month ? ` — ${monthLabel}` : ''}`, C)}
+                            <Table
+                                className="dark-report-table"
+                                dataSource={data?.records || []}
+                                rowKey="id"
+                                size="small"
+                                scroll={{ x: 'max-content' }}
+                                pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'], showTotal: (t) => `Total ${t} records` }}
+                                locale={{ emptyText: 'No completed requests match the selection' }}
+                                columns={[
+                                    { title: 'Req No.', dataIndex: 'req_no', key: 'req_no', width: 100,
+                                      sorter: (a, b) => (a.req_no || '').localeCompare(b.req_no || '') },
+                                    { title: 'Requested', dataIndex: 'req_date', key: 'req_date', width: 105,
+                                      render: (v) => (v ? moment(v).format('DD-MM-YYYY') : '-'),
+                                      sorter: (a, b) => new Date(a.req_date) - new Date(b.req_date) },
+                                    { title: 'Title', dataIndex: 'title', key: 'title', width: 200, render: (v) => v || '-' },
+                                    { title: 'Type', dataIndex: 'type_of_request', key: 'type_of_request', width: 130, render: (v) => v || '-' },
+                                    { title: 'Dept', dataIndex: 'department', key: 'department', width: 80, render: (v) => v || '-' },
+                                    { title: 'Requester', dataIndex: 'requester', key: 'requester', width: 150, render: (v) => v || '-' },
+                                    { title: 'Priority', dataIndex: 'priority', key: 'priority', width: 80, render: (v) => v || '-' },
+                                    { title: 'Informed', dataIndex: 'completed_at', key: 'completed_at', width: 105,
+                                      render: (v) => (v ? moment(v).format('DD-MM-YYYY') : '-'),
+                                      sorter: (a, b) => new Date(a.completed_at) - new Date(b.completed_at) },
+                                    { title: 'Lead days', dataIndex: 'lead_days', key: 'lead_days', width: 85, align: 'center',
+                                      sorter: (a, b) => (a.lead_days || 0) - (b.lead_days || 0) },
+                                    { title: 'Late (wd)', dataIndex: 'diff_days', key: 'diff_days', width: 85, align: 'center',
+                                      render: (v) => (v ?? '-'),
+                                      sorter: (a, b) => (a.diff_days || 0) - (b.diff_days || 0) },
+                                    { title: 'Status', dataIndex: 'completion_status', key: 'completion_status', width: 90, align: 'center',
+                                      render: (v) => (v ? <Tag color={v === 'On time' ? 'success' : 'error'}>{v}</Tag> : '-') },
+                                ]}
+                            />
+                        </div>
 
                         <div style={cardStyle}>
                             {sectionTitle('Monthly Summary', C)}

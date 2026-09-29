@@ -462,7 +462,9 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['dwg_rev']          = searchData.dwg_rev || 'NC';
   map['part_type']        = searchData.part_type || '';
   map['category']         = searchData.part_info?.class1_name || PART_CATEGORY[searchData.part_type] || searchData.part_type || '';
-  map['material']         = searchData.material?.material || '';
+  // `sheet_material` = own grade, or a SPHERICAL's race grade. Fall back to the plain field for a
+  // payload cached by an older process that predates it.
+  map['material']         = (searchData.sheet_material !== undefined ? searchData.sheet_material : searchData.material?.material) || '';
   map['process_code']     = firstProcessInfo?.process_code || '';
   map['process_name']     = firstProcessInfo?.process_eng  || firstProcessInfo?.process_name || '';
   // Some layouts (the Turning template's AB3) print code + name in ONE cell — the
