@@ -1,5 +1,7 @@
 const { TABLES } = require('../mtcConstants');
 const cnFormat = require('../utils/cnFormat');
+const { groupBomChildren } = require('../utils/bomComponents');
+const { fetchPartMaterials, sheetMaterial } = require('./partMaterial');
 
 const PART_TYPE_MAP = {
   C31: { type: 'BALL',      table: TABLES.LPB_ENG_BALL },
@@ -99,7 +101,7 @@ async function searchByCn(cn, maqPool, rodpcPool) {
   const partInfo = PART_TYPE_MAP[prefix];
   if (!partInfo) throw new Error(`Unknown CN prefix: ${prefix}`);
 
-  const [partTypeResult, dimensionResult, toolingResult, itemResult, cadRevResult, processInfoLpbResult, bomResult] = await Promise.all([
+  const [partTypeResult, dimensionResult, toolingResult, itemResult, cadRevResult, processInfoLpbResult, componentsResult] = await Promise.all([
     maqPool.query(`SELECT class1, class1_name, sub_class, sub_class_name, t_parts_name AS part_type FROM ${TABLES.LPB_ENG_TEMP_PARTS} WHERE class1 = $1 LIMIT 1`, [prefix]),
     // Mecha (C9x) has no dimension table → skip the query, dimension stays null.
     partInfo.table
@@ -118,48 +120,47 @@ async function searchByCn(cn, maqPool, rodpcPool) {
       FROM ${TABLES.LPB_ENG_PROCESS_INFO}
       WHERE process_plan_no = $1 OR process_plan_no IN (SELECT process_plan_no FROM ${TABLES.LPB_ENG_R_PI_ITEM} WHERE control_no = $1)
     `, [cnUpper]),
-    // BOM depends only on cnUpper → fetch in the same batch (saves a round-trip).
-    maqPool.query(`SELECT child_cn, child_pn FROM ${TABLES.LPB_ENG_BOM} WHERE parent_cn = $1 LIMIT 1`, [cnUpper]),
+    // A spherical is assembled from a ball and a race: list every BOM child (not just one) so
+    // the page can name them. Other part types have no such structure → skip the query.
+    partInfo.type === 'SPHERICAL'
+      ? maqPool.query(`
+          SELECT b.child_cn, b.child_pn, b.qty,
+                 (SELECT i.parts_name FROM ${TABLES.LPB_ENG_ITEM} i WHERE i.control_no = b.child_cn LIMIT 1) AS parts_name
+            FROM ${TABLES.LPB_ENG_BOM} b
+           WHERE b.parent_cn = $1
+           ORDER BY b.child_cn`, [cnUpper])
+      : Promise.resolve(null),
   ]);
 
   const itemData = itemResult.rows[0];
-  const bomRow = bomResult.rows[0];
 
-  let rawMaterial = null;
-  if (bomRow?.child_cn) {
-    const pmItemResult = await maqPool.query(
-      `SELECT control_no, parts_no, parts_name, remark, gnk FROM ${TABLES.LPB_ENG_ITEM} WHERE control_no = $1`,
-      [bomRow.child_cn]
-    );
-    rawMaterial = pmItemResult.rows[0] || null;
-  }
+  // SPHERICAL: the ball and race its design BOM calls for. `null` for every other part type, so
+  // the frontend can tell "not applicable" from "BOM is empty".
+  const components = componentsResult ? groupBomChildren(componentsResult.rows) : null;
+  const componentCns = components
+    ? [...components.ball, ...components.race].map((p) => p.cn)
+    : [];
 
   const uniqueProcessCodes = [...new Set([
     ...toolingResult.rows.map(r => r.process_code),
     ...processInfoLpbResult.rows.map(r => r.process_code),
   ])].filter(Boolean);
 
-  const pmPartsNo = rawMaterial?.parts_no || bomRow?.child_pn;
-  const purchaseCodePrefix = pmPartsNo ? pmPartsNo.slice(0, 4) : null;
-
-  const [productionResult, processMasterResult, mcodeResult] = await Promise.all([
+  const [productionResult, processMasterResult, materials] = await Promise.all([
     rodpcPool.query(`SELECT control_no, model, customer, type, packing, approval_type, cust_dwg_no, cust_dwg_no_rev, sdwg_no, sdwg_no_rev, update_date FROM ${TABLES.RODPC_ENG_PRODUCTION} WHERE control_no = $1`, [cnUpper]),
     uniqueProcessCodes.length > 0
       ? rodpcPool.query(`SELECT process_code, process_name, process_eng FROM ${TABLES.RODPC_ENG_PROCESS} WHERE process_code = ANY($1)`, [uniqueProcessCodes])
       : Promise.resolve({ rows: [] }),
-    purchaseCodePrefix
-      ? maqPool.query(`SELECT mate_code, as400name, procument_spec, mate_name, mate_sprc FROM lpb.eng_mcode WHERE mate_class_code4 = $1 LIMIT 1`, [purchaseCodePrefix])
-      : Promise.resolve({ rows: [] }),
+    // The part's own raw material, plus (SPHERICAL) that of its ball and race in the same query.
+    fetchPartMaterials(maqPool, [cnUpper, ...componentCns]),
   ]);
 
-  const mcodeRow = mcodeResult.rows[0] || null;
-  const finalMaterial = rawMaterial ? {
-    material:       mcodeRow?.as400name || null,
-    mate_code:      mcodeRow?.mate_code || null,
-    procument_spec: mcodeRow?.procument_spec || null,
-    raw_control_no: rawMaterial.control_no,
-    raw_parts_no:   rawMaterial.parts_no,
-  } : null;
+  const finalMaterial = materials.get(cnUpper) || null;
+  if (components) {
+    for (const p of [...components.ball, ...components.race]) {
+      p.material = materials.get(p.cn)?.material || null;
+    }
+  }
 
   const processMap = processMasterResult.rows.reduce((acc, row) => {
     acc[row.process_code] = row;
@@ -192,6 +193,11 @@ async function searchByCn(cn, maqPool, rodpcPool) {
     dwg_rev: /^[A-Z]$/i.test(cadRevResult.rows[0]?.dwg_rev?.trim())
       ? cadRevResult.rows[0].dwg_rev.trim().toUpperCase() : 'NC',
     material: finalMaterial,
+    // What the sheet prints in Material: the part's own grade, or for a SPHERICAL its race's. The page
+    // and the PDF's {{material}} both read this. `material` above stays the part's OWN raw material.
+    sheet_material: sheetMaterial(finalMaterial, components),
+    // SPHERICAL only (see above); the ball's and race's grades ride on each entry.
+    components,
     dimension: dimensionResult.rows[0] || null,
     process_info: mergedProcessInfo,
     process_plan: mergedProcessPlan,
