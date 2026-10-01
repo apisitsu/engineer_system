@@ -2,6 +2,7 @@ const { TABLES } = require('../mtcConstants');
 const cnFormat = require('../utils/cnFormat');
 const { groupBomChildren } = require('../utils/bomComponents');
 const { fetchPartMaterials, sheetMaterial } = require('./partMaterial');
+const { fetchLatestActualCycleTime } = require('./actualCycleTime');
 
 const PART_TYPE_MAP = {
   C31: { type: 'BALL',      table: TABLES.LPB_ENG_BALL },
@@ -101,7 +102,7 @@ async function searchByCn(cn, maqPool, rodpcPool) {
   const partInfo = PART_TYPE_MAP[prefix];
   if (!partInfo) throw new Error(`Unknown CN prefix: ${prefix}`);
 
-  const [partTypeResult, dimensionResult, toolingResult, itemResult, cadRevResult, processInfoLpbResult, componentsResult] = await Promise.all([
+  const [partTypeResult, dimensionResult, toolingResult, itemResult, cadRevResult, processInfoLpbResult, componentsResult, actualCycleTime] = await Promise.all([
     maqPool.query(`SELECT class1, class1_name, sub_class, sub_class_name, t_parts_name AS part_type FROM ${TABLES.LPB_ENG_TEMP_PARTS} WHERE class1 = $1 LIMIT 1`, [prefix]),
     // Mecha (C9x) has no dimension table → skip the query, dimension stays null.
     partInfo.table
@@ -130,6 +131,12 @@ async function searchByCn(cn, maqPool, rodpcPool) {
            WHERE b.parent_cn = $1
            ORDER BY b.child_cn`, [cnUpper])
       : Promise.resolve(null),
+    // ACTUAL cycle time per process (lpb.pc_production, latest lot that recorded one) -
+    // distinct from eng_process_info.ct above, which is the factory PLAN and is often
+    // blank. Feeds both the page's Process Info column and the PDF's CYCLE TIME cell
+    // (sdsV2HeadlessController), so the two always print the same number. See
+    // services/actualCycleTime.js.
+    fetchLatestActualCycleTime(maqPool, cnUpper),
   ]);
 
   const itemData = itemResult.rows[0];
@@ -173,11 +180,18 @@ async function searchByCn(cn, maqPool, rodpcPool) {
     process_eng:  processMap[r.process_code]?.process_eng || null,
   })).sort(sortBySeq);
 
-  const mergedProcessInfo = processInfoLpbResult.rows.map(r => ({
-    ...r,
-    process_name: processMap[r.process_code]?.process_name || null,
-    process_eng:  processMap[r.process_code]?.process_eng || null,
-  })).sort(sortBySeq);
+  const mergedProcessInfo = processInfoLpbResult.rows.map(r => {
+    const act = actualCycleTime[String(r.process_code || '').trim()];
+    return {
+      ...r,
+      process_name: processMap[r.process_code]?.process_name || null,
+      process_eng:  processMap[r.process_code]?.process_eng || null,
+      // Actual (not planned) cycle time - null, never 0, when no lot ever recorded one.
+      actual_ct:      act ? act.ct : null,
+      actual_ct_lot:  act ? act.lotNo : null,
+      actual_ct_date: act ? act.lastDate : null,
+    };
+  }).sort(sortBySeq);
 
   return {
     result: 'true',
