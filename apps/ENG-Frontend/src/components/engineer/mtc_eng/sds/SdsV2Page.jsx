@@ -500,6 +500,13 @@ const SdsV2Page = () => {
     return map;
   }, [cnHistory]);
 
+  // process_code → ACTUAL cycle time: the latest lot that recorded one (lpb.pc_production),
+  // as opposed to the factory PLAN's eng_process_info.ct the Process Info row itself carries
+  // — the two can disagree (reported live: a part whose plan had no ct at all still had real
+  // production history). A process missing here means no lot ever recorded one — see
+  // services/actualCycleTime.js on the backend.
+  const cycleTimeByProcess = cnHistory?.cycleTime || {};
+
   // Machines Tooling Select ruled OUT for this part, by machine limit, with the reason.
   //
   // The PDF machine picker is built from `sds_machine_tool` config and tool-DWG code
@@ -567,6 +574,25 @@ const SdsV2Page = () => {
     { title: 'Process Code', dataIndex: 'process_code', width: 120 },
     { title: 'Process', dataIndex: 'process_eng' },
     { title: 'WC', dataIndex: 'wc', width: 80 },
+    {
+      // ACTUAL cycle time: the most recent production lot that recorded one (lpb.pc_production),
+      // not the factory plan's eng_process_info.ct — the plan is blank on ~45-55% of rows and
+      // the two can disagree for the same CN (see cycleTimeByProcess above). "-" means no lot
+      // ever recorded a cycle time for this process, never a guessed 0.
+      title: 'Cycle Time (s)',
+      key: 'cycle_time',
+      width: 110,
+      align: 'center',
+      render: (_, row) => {
+        const ct = cycleTimeByProcess[String(row.process_code || '').trim()];
+        if (!ct) return <Text type="secondary">-</Text>;
+        return (
+          <Tooltip title={`Latest recorded lot${ct.lotNo ? ` ${ct.lotNo}` : ''}${ct.lastDate ? ` · ${new Date(ct.lastDate).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`}>
+            {ct.ct}
+          </Tooltip>
+        );
+      },
+    },
     {
       title: 'Machine History',
       key: 'machine_history',

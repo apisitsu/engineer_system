@@ -556,15 +556,22 @@ export default function SdsCoverageDashboard() {
       legend: { position: 'bottom', labels: { color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12 } },
       tooltip: { mode: 'index', intersect: false },
       // One total label per bar — shown only on the topmost stacked segment (the last
-      // dataset), summed across every part type at that month so it reads as the bar's
-      // grand total rather than just that segment's own count.
+      // dataset). Normally summed across every part type so it reads as the bar's grand
+      // total; with a part-type card selected it switches to that type's own count,
+      // otherwise the label would keep showing the whole-FY number while the bar itself
+      // fades down to one segment — the same mismatch the cards and the status chart
+      // were fixed for.
       datalabels: {
         display: (ctx) => {
-          const total = ctx.chart.data.datasets.reduce((s, ds) => s + (ds.data[ctx.dataIndex] || 0), 0);
+          const row = monthlyNewParts[ctx.dataIndex];
+          const total = filterPt ? (row?.[filterPt] || 0)
+            : ctx.chart.data.datasets.reduce((s, ds) => s + (ds.data[ctx.dataIndex] || 0), 0);
           return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 && total > 0;
         },
         formatter: (v, ctx) => {
-          const total = ctx.chart.data.datasets.reduce((s, ds) => s + (ds.data[ctx.dataIndex] || 0), 0);
+          const row = monthlyNewParts[ctx.dataIndex];
+          const total = filterPt ? (row?.[filterPt] || 0)
+            : ctx.chart.data.datasets.reduce((s, ds) => s + (ds.data[ctx.dataIndex] || 0), 0);
           return total.toLocaleString();
         },
         color: C.textPri,
@@ -580,20 +587,36 @@ export default function SdsCoverageDashboard() {
   };
 
   // ── Monthly Coverage Status chart (bar: complete/pending + line: complete%) ──
+  // When a part-type card is selected, the chart should re-scope to it the same way the
+  // cards and "New Parts per Month" chart already do — each row's own `byPartType[pt]`
+  // (same shape as the row itself: complete/complete_saved/pending/complete_pct) stands
+  // in for the row's top-level TOTAL fields. A row frozen before `byPartType` shipped (or
+  // one simply missing the selected type) has nothing to show for that month — zero,
+  // not the unfiltered total, since showing the whole-FY number while a Ball filter is on
+  // would silently misreport as "this is Ball's number".
+  const scopeToPartType = (row, pt) => {
+    if (!pt) return row;
+    const t = row.byPartType?.[pt];
+    if (!t) return { ...row, complete: 0, complete_saved: 0, pending: 0, complete_pct: 0, complete_saved_pct: 0 };
+    return { ...row, ...t };
+  };
+
   const monthlyStatus = useMemo(() => {
     const all = data?.monthlyStatus || [];
     const raw = Object.fromEntries(
       all.filter(r => r.month >= fyeWin.start && r.month <= fyeWin.end).map(r => [r.month, r])
     );
-    const months = fyMonths(fyeWin).map(key => raw[key] || { month: key, complete: 0, pending: 0, complete_pct: 0 });
+    const months = fyMonths(fyeWin)
+      .map(key => raw[key] || { month: key, complete: 0, pending: 0, complete_pct: 0 })
+      .map(r => scopeToPartType(r, filterPt));
     // Prepend the previous FY's final cumulative bar (latest month ≤ prevEnd) so the
     // current-FY running total starts from a visible carry-over baseline. `all` is sorted
     // ascending by month, so the last matching row is the FY-end value.
     const prevRows = all.filter(r => r.month <= fyeWin.prevEnd);
     const prevLast = prevRows.length ? prevRows[prevRows.length - 1] : null;
-    if (prevLast) months.unshift({ ...prevLast, isPrevLast: true, prevLabel: `${fyeWin.prevLabel} end` });
+    if (prevLast) months.unshift({ ...scopeToPartType(prevLast, filterPt), isPrevLast: true, prevLabel: `${fyeWin.prevLabel} end` });
     return months;
-  }, [data, fyeWin]);
+  }, [data, fyeWin, filterPt]);
 
   // Month-over-month change for the dashboard cards ("vs last month"). Reads the RAW
   // (unwindowed) monthlyStatus — not the FY-windowed `monthlyStatus` above — so the
@@ -724,6 +747,41 @@ export default function SdsCoverageDashboard() {
         yAxisID: 'y',
       },
       {
+        // Invisible marker, plotted on the same CN axis ('y') as the bars, at exactly
+        // half of that month's total (complete+pending) — so its point sits at the true
+        // vertical MIDDLE of the stacked bar regardless of how the KZW/THAI/Pending split
+        // falls, and an anchor:'center' datalabel there reads as "the number inside the
+        // bar" rather than competing with the count/delta/% stack already crowded above
+        // it. No width tiering needed: unlike a horizontal label, this has nothing beside
+        // it to collide with, so it can just always show.
+        type: 'line',
+        label: 'Total (workable)',
+        data: monthlyStatus.map(r => hasBarData(r) ? ((r.complete || 0) + (r.pending || 0)) / 2 : null),
+        borderColor: 'transparent',
+        backgroundColor: 'transparent',
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        borderWidth: 0,
+        fill: false,
+        yAxisID: 'y',
+        order: -1, // drawn after the bars (lower `order` draws on top) so the text isn't hidden under a segment
+        datalabels: {
+          display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]),
+          formatter: (v, ctx) => {
+            const r = monthlyStatus[ctx.dataIndex];
+            return ((r?.complete ?? 0) + (r?.pending ?? 0)).toLocaleString();
+          },
+          color: '#fff',
+          // A dark stroke around white text keeps it legible whether it lands on the
+          // pale KZW green, the softer THAI green, or the tan Pending segment.
+          textStrokeColor: 'rgba(0,0,0,0.6)',
+          textStrokeWidth: 3,
+          anchor: 'center',
+          align: 'center',
+          font: { size: 10, weight: 700 },
+        },
+      },
+      {
         type: 'line',
         label: 'Complete % (KZW+THAI)',
         // Cut the line at the last month that actually has data (null → no point),
@@ -820,17 +878,30 @@ export default function SdsCoverageDashboard() {
     layout: { padding: { top: 54 } },
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: { position: 'bottom', labels: { color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12 } },
+      legend: {
+        position: 'bottom', labels: {
+          color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12,
+          filter: (item) => item.text !== 'Total (workable)', // marker-only series, not a real legend entry
+        },
+      },
       datalabels: { display: false },  // datalabels plugin is registered globally — keep it off here
       tooltip: {
         callbacks: {
           label: ctx => {
-            if (ctx.dataset.label === 'Target 90%') return null;
+            if (ctx.dataset.label === 'Target 90%' || ctx.dataset.label === 'Total (workable)') return null;
             if (ctx.dataset.label.includes('%')) return `${ctx.dataset.label}: ${ctx.parsed.y}%`;
             return `${ctx.dataset.label}: ${ctx.parsed.y}`;
           },
+          // Spells out the denominator behind Complete % — the three stacked bars already
+          // sum to it, but making someone add them up by eye is not "easy to understand".
+          footer: items => {
+            const r = monthlyStatus[items[0]?.dataIndex];
+            if (!r) return '';
+            const total = (r.complete || 0) + (r.pending || 0);
+            return `Total (workable): ${total.toLocaleString()}`;
+          },
         },
-        filter: item => item.dataset.label !== 'Target 90%',
+        filter: item => item.dataset.label !== 'Target 90%' && item.dataset.label !== 'Total (workable)',
       },
     },
     scales: {
