@@ -4,8 +4,32 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-24
-- **Active Goal:** Environment Automation & Setup Documentation Complete; 1-Click Setup (`setup_machine.cmd`) and Server Sync (`remote_sync_server.cmd`) Fully Verified; Baseline `.env.sample` Templates Generated across Monorepo Workspaces; `SETUP_GUIDE.md` Published.
+- **Last Update:** 2026-10-01
+- **Active Goal:** Tumble Process System: Integrated Inline Sub-Header Filter Row Deployed Across All 3 Tables (Tumble Models, Process Conditions, Condition Parts); Production Build Verified.
+
+- **Tumble Process System: Integrated Inline Sub-Header Filter Row Across All 3 Tables (2026-10-01):**
+  - **1. Inline 2-Tier Header Filter Row Architecture:**
+    - Repositioned search/filter inputs directly between column header titles and table data rows in a dedicated 2-tier table header matching standard ERP/WinForms grid UX.
+    - Uniformly implemented across all three engineering configuration tabs:
+      - **Tumble Models** (`TumbleModelManagement.jsx`): Actions (`Clear` reset), CN, Old CN, Part No., Class (Select `▼`), Material (Select `▼`), Process (Select `▼`), Condition (Select `▼`), Prev Condition, Update Date, Update User.
+      - **Process Conditions** (`TumbleConditionManagement.jsx`): Actions (`Clear` reset), Code, Process (Select `▼`), M/C Type & No (Select `▼`), Qty (Max), Media SPEC (Select `▼`), Media Qty (kg), SS-100, Light 1A, Water Qty (l), Revolution, Time (min), Update Date, Update User.
+      - **Condition Parts** (`TumbleConditionPartManagement.jsx`): Actions (`Clear` reset), Code, Part Name, Detail, Material (Select `▼`), Size, Process Code (Select `▼`), Update User.
+    - Designed with light blue cell background (`#e8f1fc`), subtle borders, active filter focus state, and pale yellow row click selection highlight (`#fef9c3`).
+  - **2. UX & Filtering Engine:**
+    - Live multi-information simultaneous filtering (AND logic across all columns).
+    - Top action bar includes active filter count indicator, result counter ("Showing X of Y items"), reset button, and global search.
+  - **3. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 warnings in all 3 Tumble components).
+
+- **Document Management System (DMS): Insecure Context Clipboard Resilience & English UI Localization (2026-09-24):**
+  - **1. Clipboard Write Failure Root Cause & Fallback:**
+    - On intranet deployments accessed via HTTP (e.g., `http://plbmp130:3000`), the modern `navigator.clipboard` API is `undefined` because browsers restrict it to Secure Contexts (`https://` or `localhost`). Clicking the copy document button threw `TypeError: Cannot read properties of undefined (reading 'writeText')`.
+    - Upgraded `copyToClipboard` in `DocumentManagementDashboard.jsx` with dual-mode execution: checks `navigator.clipboard && navigator.clipboard.writeText` first, and gracefully falls back to an invisible `<textarea>` element with `document.execCommand('copy')` on non-HTTPS network hosts.
+  - **2. Complete English Localization:**
+    - Replaced all Thai UI strings across modal dialogs, form labels, placeholder text, alerts, table tooltips, and configuration headers with clean, professional English.
+    - Updated date and timestamp formatting from `th-TH` (which previously produced Buddhist era dates) to `en-GB` ISO/Gregorian format across the data table, edit modals, and Excel export.
+  - **3. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully).
 
 - **DevOps & Environment: 1-Click Machine Setup, Remote Sync & Complete Guide (2026-09-24):**
   - **1. Baseline Environment Templates (`.env.sample`):**
