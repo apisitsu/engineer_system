@@ -171,6 +171,24 @@ async function freezeMonthlyStatus(live) {
       for (const m of toFreeze) frozen.set(m.month, m);
       console.log(`[SDS Report] froze ${toFreeze.length} monthlyStatus month(s): ${toFreeze.map((m) => m.month).join(', ')}`);
     }
+
+    // A row frozen before `byPartType` existed predates that field — the per-part-type
+    // chart otherwise shows a permanent hole for every month closed before this shipped.
+    // Patch ONLY that key from today's live curve; the frozen top-level numbers
+    // (complete/pending/pct) are left untouched so "locks in history" still holds —
+    // byPartType just reflects data as of this backfill rather than as of month-close.
+    const toPatch = live.filter((m) => m.month < curMonth && frozen.has(m.month) && !frozen.get(m.month).byPartType && m.byPartType);
+    if (toPatch.length) {
+      await Promise.all(toPatch.map((m) =>
+        engPool.query(
+          `UPDATE sds_coverage_monthly SET data = jsonb_set(data, '{byPartType}', $2::jsonb) WHERE month = $1`,
+          [m.month, JSON.stringify(m.byPartType)]
+        )
+      ));
+      for (const m of toPatch) frozen.set(m.month, { ...frozen.get(m.month), byPartType: m.byPartType });
+      console.log(`[SDS Report] backfilled byPartType on ${toPatch.length} frozen monthlyStatus month(s): ${toPatch.map((m) => m.month).join(', ')}`);
+    }
+
     // Serve frozen for closed months, live for the current (open) month.
     return live.map((m) => (m.month < curMonth && frozen.has(m.month) ? frozen.get(m.month) : m));
   } catch (e) {
