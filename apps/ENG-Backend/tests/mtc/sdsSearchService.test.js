@@ -74,3 +74,45 @@ describe('searchByCn — CN normalization & routing', () => {
     await expect(searchByCn('824047', maq, rodpc)).rejects.toThrow(/Unknown CN prefix: C82/);
   });
 });
+
+describe('searchByCn — actual cycle time (feeds both the page and the PDF)', () => {
+  // A pool that answers the planned-ct query and the actual-cycle-time query with fixed
+  // rows, everything else empty — so the merge logic is exercised without a real DB.
+  function pcPool({ planned = [], actual = [] } = {}) {
+    const calls = [];
+    return {
+      calls,
+      query: jest.fn((sql, params) => {
+        calls.push({ sql, params });
+        if (/FROM lpb\.eng_process_info/i.test(sql)) return Promise.resolve({ rows: planned });
+        if (/DISTINCT ON \(process\)/i.test(sql)) return Promise.resolve({ rows: actual });
+        return Promise.resolve({ rows: [] });
+      }),
+    };
+  }
+
+  it('attaches the latest-non-zero actual value beside the planned one, keyed by process', async () => {
+    const maq = pcPool({
+      planned: [{ process_code: '1011', ct: '' }],   // plan is blank, as it often is
+      actual: [{ process: '1011', lot_no: 'T9051T6', cycle_time: '200.00', last_date: '2026-08-20' }],
+    });
+    const out = await searchByCn('C25-00235', maq, fakePool());
+    const row = out.process_info.find((r) => r.process_code === '1011');
+    expect(row.ct).toBe('');                 // the plan, untouched
+    expect(row.actual_ct).toBe(200);          // the real lot
+    expect(row.actual_ct_lot).toBe('T9051T6');
+  });
+
+  it('is null (not undefined or 0) on a process no lot ever recorded', async () => {
+    const maq = pcPool({ planned: [{ process_code: '3091', ct: '' }], actual: [] });
+    const out = await searchByCn('C25-00235', maq, fakePool());
+    expect(out.process_info[0].actual_ct).toBeNull();
+  });
+
+  it('queries pc_production by the canonical CN the rest of the search already resolved', async () => {
+    const maq = pcPool();
+    await searchByCn('250235', maq, fakePool());   // 6-digit item-no form
+    const call = maq.calls.find((c) => /DISTINCT ON \(process\)/i.test(c.sql));
+    expect(call.params).toEqual(['250235']);        // fetchLatestActualCycleTime does its own toItemNo
+  });
+});
