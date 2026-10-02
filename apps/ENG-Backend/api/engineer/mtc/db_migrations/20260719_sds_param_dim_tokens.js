@@ -71,7 +71,7 @@ const TOKEN_DIM = { '{{dim.W|3}}': 'W', '{{dim.OD|3}}': 'OD', '{{dim.ID|3}}': 'I
 /** Does the token resolve for this CN? Mirrors buildValueMap's spherical enrichment. */
 async function resolvesFor(cn, dimKey) {
   try {
-    const sd = await searchByCn(cn, maqPool, rodpcPool);
+    const sd = await searchByCn(cn, maqPool, rodpcPool, engPool);
     let dim = sd.dimension;
     if (!dim) return null;
     if (String(sd.part_type).toUpperCase() === 'SPHERICAL' && dim[SPHERICAL_DESIGN.joinFrom]) {

@@ -14,7 +14,7 @@ function cacheKey(cn) {
   return `sds:${cnFormat.toControlNo(raw) || raw}`;
 }
 
-async function search(cn, maqPool, rodpcPool) {
+async function search(cn, maqPool, rodpcPool, engPool) {
   const key    = cacheKey(cn);
   const cached = cache.get(key);
 
@@ -23,7 +23,7 @@ async function search(cn, maqPool, rodpcPool) {
     return { ...cached, _fromCache: true };
   }
 
-  const result = await new SdsAgent(maqPool, rodpcPool).execute({ cn });
+  const result = await new SdsAgent(maqPool, rodpcPool, engPool).execute({ cn });
 
   if (result._agentError) {
     return { error: result.error, success: false };

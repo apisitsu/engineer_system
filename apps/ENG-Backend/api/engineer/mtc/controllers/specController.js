@@ -337,7 +337,7 @@ router.get('/factory-preview/:cn', isAdmin, async (req, res) => {
   const cn = req.params.cn.trim().toUpperCase();
   try {
     const { pool: rodpcPool } = require('../../../../instance/instance');
-    const searchData = await searchByCn(cn, maqPool, rodpcPool);
+    const searchData = await searchByCn(cn, maqPool, rodpcPool, engPool);
     const dim = searchData.dimension || {};
     const proposed = mapFactoryDimToSpec(dim);
     proposed.yball   = deriveYBall(searchData.cn);

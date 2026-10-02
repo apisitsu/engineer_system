@@ -2,7 +2,7 @@ const { TABLES } = require('../mtcConstants');
 const cnFormat = require('../utils/cnFormat');
 const { groupBomChildren } = require('../utils/bomComponents');
 const { fetchPartMaterials, sheetMaterial } = require('./partMaterial');
-const { fetchLatestActualCycleTime } = require('./actualCycleTime');
+const { fetchActualCycleTime } = require('./actualCycleTime');
 
 const PART_TYPE_MAP = {
   C31: { type: 'BALL',      table: TABLES.LPB_ENG_BALL },
@@ -81,9 +81,13 @@ function sortBySeq(a, b) {
  * @param {string} cn
  * @param {{ query: Function }} maqPool
  * @param {{ query: Function }} rodpcPool
+ * @param {{ query: Function }} [engPool]  optional - used only to resolve the sparse
+ *   sds_machine_code overrides for per-machine actual cycle time; omitting it degrades
+ *   that resolution to rodpc's base machine name instead of failing. See
+ *   services/actualCycleTime.js.
  * @returns {Promise<object>}
  */
-async function searchByCn(cn, maqPool, rodpcPool) {
+async function searchByCn(cn, maqPool, rodpcPool, engPool) {
   let cnUpper = cn.trim().toUpperCase();
 
   // Normalize to canonical Cxx-0YYYY (factory DB stores the 5-digit-suffix form).
@@ -102,6 +106,7 @@ async function searchByCn(cn, maqPool, rodpcPool) {
   const partInfo = PART_TYPE_MAP[prefix];
   if (!partInfo) throw new Error(`Unknown CN prefix: ${prefix}`);
 
+  // actualCycleTime (last entry below) = { flat, byMachine } — see services/actualCycleTime.js
   const [partTypeResult, dimensionResult, toolingResult, itemResult, cadRevResult, processInfoLpbResult, componentsResult, actualCycleTime] = await Promise.all([
     maqPool.query(`SELECT class1, class1_name, sub_class, sub_class_name, t_parts_name AS part_type FROM ${TABLES.LPB_ENG_TEMP_PARTS} WHERE class1 = $1 LIMIT 1`, [prefix]),
     // Mecha (C9x) has no dimension table → skip the query, dimension stays null.
@@ -131,12 +136,12 @@ async function searchByCn(cn, maqPool, rodpcPool) {
            WHERE b.parent_cn = $1
            ORDER BY b.child_cn`, [cnUpper])
       : Promise.resolve(null),
-    // ACTUAL cycle time per process (lpb.pc_production, latest lot that recorded one) -
-    // distinct from eng_process_info.ct above, which is the factory PLAN and is often
-    // blank. Feeds both the page's Process Info column and the PDF's CYCLE TIME cell
-    // (sdsV2HeadlessController), so the two always print the same number. See
-    // services/actualCycleTime.js.
-    fetchLatestActualCycleTime(maqPool, cnUpper),
+    // ACTUAL cycle time per (process, machine) (lpb.pc_production, latest lot that
+    // recorded one) - distinct from eng_process_info.ct above, which is the factory PLAN
+    // and is often blank. `byMachine` lets the PDF print ONLY the machine it is actually
+    // for (one (CN, process) commonly runs on several machines with genuinely different
+    // times - see services/actualCycleTime.js), never another machine's number.
+    fetchActualCycleTime({ maqPool, rodpcPool, engPool }, cnUpper),
   ]);
 
   const itemData = itemResult.rows[0];
@@ -181,15 +186,19 @@ async function searchByCn(cn, maqPool, rodpcPool) {
   })).sort(sortBySeq);
 
   const mergedProcessInfo = processInfoLpbResult.rows.map(r => {
-    const act = actualCycleTime[String(r.process_code || '').trim()];
+    const code = String(r.process_code || '').trim();
+    const act = actualCycleTime.flat[code];
     return {
       ...r,
       process_name: processMap[r.process_code]?.process_name || null,
       process_eng:  processMap[r.process_code]?.process_eng || null,
       // Actual (not planned) cycle time - null, never 0, when no lot ever recorded one.
+      // Cross-machine (any machine that ran it); the PDF uses `actual_ct_by_machine`
+      // instead so it never borrows a different machine's number onto its own sheet.
       actual_ct:      act ? act.ct : null,
       actual_ct_lot:  act ? act.lotNo : null,
       actual_ct_date: act ? act.lastDate : null,
+      actual_ct_by_machine: actualCycleTime.byMachine[code] || {},
     };
   }).sort(sortBySeq);
 

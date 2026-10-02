@@ -507,6 +507,13 @@ const SdsV2Page = () => {
   // services/actualCycleTime.js on the backend.
   const cycleTimeByProcess = cnHistory?.cycleTime || {};
 
+  // process_code → machine_name → that machine's OWN latest actual cycle time. One
+  // (CN, process) commonly runs on several machines with genuinely different cycle
+  // times (measured: ~65% of (CN, process) pairs run on 2+ machines) — the flat
+  // `cycleTimeByProcess` above is cross-machine, so the Machine History chip for each
+  // specific machine shows its own number here instead of implying it's that machine's.
+  const cycleTimeByMachineByProcess = cnHistory?.cycleTimeByMachine || {};
+
   // Machines Tooling Select ruled OUT for this part, by machine limit, with the reason.
   //
   // The PDF machine picker is built from `sds_machine_tool` config and tool-DWG code
@@ -598,21 +605,30 @@ const SdsV2Page = () => {
       key: 'machine_history',
       width: 220,
       render: (_, row) => {
-        const hist = machineHistoryByProcess[String(row.process_code || '').trim()] || [];
+        const code = String(row.process_code || '').trim();
+        const hist = machineHistoryByProcess[code] || [];
         if (!hist.length) return <Text type="secondary">—</Text>;
+        const ctForProcess = cycleTimeByMachineByProcess[code] || {};
         return (
           <Space size={[4, 4]} wrap>
-            {hist.map((h, i) => (
-              <Tag
-                key={i}
-                color={h.machine_type_code ? 'blue' : 'default'}
-                style={{ margin: 0 }}
-                title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`}
-              >
-                {h.machine_name || 'Unknown'}
-                <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
-              </Tag>
-            ))}
+            {hist.map((h, i) => {
+              // This machine's OWN actual cycle time — never another machine's, even
+              // though `machineHistoryByProcess` and this map share the same resolved
+              // machine_name key (see cycleTimeByMachineByProcess above).
+              const ct = ctForProcess[h.machine_name];
+              const title = `${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`
+                + (ct ? ` · Cycle Time ${ct.ct}s (lot ${ct.lotNo || '?'})` : '');
+              // antd <Tooltip> (styled, shows promptly) rather than the Tag's native `title`
+              // attribute (plain OS tooltip, easy to miss) — the cycle time lives here only.
+              return (
+                <Tooltip key={i} title={title}>
+                  <Tag color={h.machine_type_code ? 'blue' : 'default'} style={{ margin: 0 }}>
+                    {h.machine_name || 'Unknown'}
+                    <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
+                  </Tag>
+                </Tooltip>
+              );
+            })}
           </Space>
         );
       },
@@ -1048,6 +1064,8 @@ const SdsV2Page = () => {
             <Space size={[4, 4]} wrap>
               {historyMachines.map((h, i) => {
                 const excluded = isHistLimitExcluded(h);
+                // Cycle time shows on the "Machine History" chip (blue, collapsed row) only —
+                // not here — so it has one place, not two. See cycleTimeByMachineByProcess.
                 const lots = `${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`;
                 return (
                   <Tooltip key={i} title={excluded
