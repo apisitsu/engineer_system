@@ -661,7 +661,9 @@ export default function InspectionResultDashboard() {
                                                                         {d.reason}
                                                                     </span>
                                                                 </Tooltip>
-                                                                <span style={{ color: delayCauseColor(i), fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{pct}%</span>
+                                                                <span style={{ color: delayCauseColor(i), fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                                                    {d.count} <span style={{ fontWeight: 400 }}>({pct}%)</span>
+                                                </span>
                                                             </div>
                                                         );
                                                     })}
@@ -691,7 +693,7 @@ export default function InspectionResultDashboard() {
                             {/* Daily Issued — md=14 (aligns under Monthly Trend) */}
                             <Col xs={24} md={14}>
                                 <div style={{ ...cardStyle, height: 360 }}>
-                                    {sectionTitle('Daily Tooling Issued', C)}
+                                    {sectionTitle('Daily Tooling Received', C)}
                                     <div style={{ height: 305 }}>
                                         {dailyArr.length > 0
                                             ? <Line data={dailyChartData} options={dailyChartOpts} />
