@@ -611,6 +611,9 @@ const ToolingResultDashboard = async (req, res) => {
         const rcvFilter   = `receive_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND receive_date::DATE BETWEEN $1 AND $2
                               AND NULLIF(TRIM(issue_date::TEXT), '') IS NOT NULL`;
         const issueFilter = `issue_date  ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE  BETWEEN $1 AND $2`;
+        // Receive-date-only (no issue_date requirement) — for the Daily Tooling Received
+        // chart, which should count everything that arrived that day, issued or not.
+        const rcvOnlyFilter = `receive_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND receive_date::DATE BETWEEN $1 AND $2`;
 
         // Drill-down selection (card / root-cause click). Applied ONLY to the detail
         // panels below (measuring tools, W/C, daily, records) — the KPI cards, ratio
@@ -678,12 +681,14 @@ const ToolingResultDashboard = async (req, res) => {
                 GROUP BY month_key ORDER BY month_key
             `, [fyeStart, fyeEnd]),
 
-            // Daily — group by day-of-month (1–31), sum across all months in period
+            // Daily — group by day-of-month (1–31), sum across all months in period.
+            // Uses receive_date: this is "how much arrived each day", not "how much
+            // was issued" — an item can be received well before it is issued.
             engPool.query(`
-                SELECT EXTRACT(DAY FROM issue_date::DATE)::int as day_num,
+                SELECT EXTRACT(DAY FROM receive_date::DATE)::int as day_num,
                        COALESCE(SUM(qty), 0) as received
                 FROM ${TABLES.TI_LIST}
-                WHERE ${issueFilter}${extraWhere}
+                WHERE ${rcvOnlyFilter}${extraWhere}
                 GROUP BY day_num ORDER BY day_num
             `, [periodStart, periodEnd, ...extraParams]),
 

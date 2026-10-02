@@ -14,20 +14,21 @@ function isConnectionError(err) {
 }
 
 class SdsAgent extends BaseAgent {
-  constructor(maqPool, rodpcPool) {
+  constructor(maqPool, rodpcPool, engPool) {
     super('SdsAgent', 15000); // cross-DB queries can be slow
     this.maqPool   = maqPool;
     this.rodpcPool = rodpcPool;
+    this.engPool   = engPool;
   }
 
   async run({ cn }) {
     try {
-      return await searchByCn(cn, this.maqPool, this.rodpcPool);
+      return await searchByCn(cn, this.maqPool, this.rodpcPool, this.engPool);
     } catch (err) {
       // If rodpcPool is the cause, retry without it (graceful degradation)
       if (isConnectionError(err)) {
         console.warn('[SdsAgent] rodpcPool unreachable, retrying without production data');
-        const result = await searchByCn(cn, this.maqPool, NULL_POOL);
+        const result = await searchByCn(cn, this.maqPool, NULL_POOL, this.engPool);
         return { ...result, _rodpcUnavailable: true };
       }
       throw err;

@@ -59,7 +59,7 @@ function getTemplateHtml() {
 // Fetch CN search data through the cached orchestrator (sds:{CN}, 10-min TTL)
 // instead of a fresh factory-DB round-trip on every PDF render.
 async function getSearchData(cn) {
-  const data = await SdsOrchestrator.search(cn, maqPool, rodpcPool);
+  const data = await SdsOrchestrator.search(cn, maqPool, rodpcPool, engPool);
   if (!data || data.error || data.success === false) {
     throw new Error(data?.error || 'CN search failed');
   }
@@ -472,12 +472,22 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   // and sds_excel_mapping can only route one param_key to one address. This is that
   // combined string, so a machine can map it instead of process_name alone.
   map['process_code_name'] = [map['process_code'], map['process_name']].filter(Boolean).join(' ');
-  // ACTUAL cycle time (latest production lot that recorded one), not the factory plan's
-  // eng_process_info.ct — the plan is often blank and can disagree with reality for the
-  // same CN (see services/actualCycleTime.js). `actual_ct` is null, never 0, when no lot
-  // ever recorded one. Falls back to the plain `ct` field for a payload cached (sds:{CN},
-  // 10 min TTL) by an older process that predates this field.
-  const ctVal = firstProcessInfo && firstProcessInfo.actual_ct !== undefined ? firstProcessInfo.actual_ct : firstProcessInfo?.ct;
+  // ACTUAL cycle time, for THIS machine only (latest lot it recorded one on) — not the
+  // factory plan's eng_process_info.ct (often blank), and not another machine's number:
+  // one (CN, process) commonly runs on several machines with genuinely different cycle
+  // times (measured: ~65% of (CN, process) pairs run on 2+ machines), so `actual_ct`
+  // (cross-machine) would risk printing a different machine's value on this sheet. Try
+  // the machine_type_name param first, then the resolved display/group name.
+  // `actual_ct_by_machine` is null, never 0, when no lot ever recorded one.
+  let ctVal;
+  if (firstProcessInfo && firstProcessInfo.actual_ct_by_machine !== undefined) {
+    const byMachine = firstProcessInfo.actual_ct_by_machine;
+    const forThisMachine = byMachine[machine_type_name] || byMachine[machineDisplayName];
+    ctVal = forThisMachine ? forThisMachine.ct : null;
+  } else {
+    // Payload cached (sds:{CN}, 10 min TTL) by a process that predates per-machine data.
+    ctVal = firstProcessInfo && firstProcessInfo.actual_ct !== undefined ? firstProcessInfo.actual_ct : firstProcessInfo?.ct;
+  }
   map['ct']               = ctVal != null ? String(ctVal) : '';
   map['machine_type_name'] = machineDisplayName || '';
   map['current_date']     = moment().format('YYYY-MM-DD');

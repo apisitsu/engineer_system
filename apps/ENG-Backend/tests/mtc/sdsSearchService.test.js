@@ -85,7 +85,7 @@ describe('searchByCn — actual cycle time (feeds both the page and the PDF)', (
       query: jest.fn((sql, params) => {
         calls.push({ sql, params });
         if (/FROM lpb\.eng_process_info/i.test(sql)) return Promise.resolve({ rows: planned });
-        if (/DISTINCT ON \(process\)/i.test(sql)) return Promise.resolve({ rows: actual });
+        if (/FROM lpb\.pc_production/i.test(sql)) return Promise.resolve({ rows: actual });
         return Promise.resolve({ rows: [] });
       }),
     };
@@ -112,7 +112,18 @@ describe('searchByCn — actual cycle time (feeds both the page and the PDF)', (
   it('queries pc_production by the canonical CN the rest of the search already resolved', async () => {
     const maq = pcPool();
     await searchByCn('250235', maq, fakePool());   // 6-digit item-no form
-    const call = maq.calls.find((c) => /DISTINCT ON \(process\)/i.test(c.sql));
-    expect(call.params).toEqual(['250235']);        // fetchLatestActualCycleTime does its own toItemNo
+    const call = maq.calls.find((c) => /FROM lpb\.pc_production/i.test(c.sql));
+    expect(call.params).toEqual(['250235']);        // fetchActualCycleTime does its own toItemNo
+  });
+
+  it('also attaches an (empty) actual_ct_by_machine map, keyed by process', async () => {
+    const maq = pcPool({
+      planned: [{ process_code: '1011', ct: '' }],
+      actual: [{ machine: 'CGM-14', process: '1011', lot_no: 'T9051T6', cycle_time: '200.00', last_date: '2026-08-20' }],
+    });
+    const out = await searchByCn('C25-00235', maq, fakePool());
+    const row = out.process_info.find((r) => r.process_code === '1011');
+    // no rodpcPool/engPool was given to searchByCn here, so the floor code resolves to itself.
+    expect(row.actual_ct_by_machine).toEqual({ 'CGM-14': { ct: 200, lotNo: 'T9051T6', lastDate: '2026-08-20' } });
   });
 });
