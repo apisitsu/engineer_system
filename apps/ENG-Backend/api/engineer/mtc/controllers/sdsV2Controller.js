@@ -21,7 +21,7 @@ router.get('/search', async (req, res) => {
   const { cn } = req.query;
   if (!cn?.trim()) return res.status(400).json({ error: 'cn is required' });
   try {
-    const data = await search(cn, maqPool, rodpcPool);
+    const data = await search(cn, maqPool, rodpcPool, engPool);
     if (data.success === false) {
       return res.status(500).json({ error: data.error });
     }

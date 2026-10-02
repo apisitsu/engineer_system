@@ -11,7 +11,7 @@ const isAdmin = hasFeature('sds_admin');
 const cache = require('../services/agents/CacheAgent');
 const { invalidateCoverageCache } = require('./sdsV2ReportController');
 const sdsBoardRef = require('../utils/sdsBoardRef');
-const { fetchLatestActualCycleTime } = require('../services/actualCycleTime');
+const { fetchActualCycleTime } = require('../services/actualCycleTime');
 // sds_approval is created lazily on first hit of /api/sds/v2/approval; a machine rename
 // cascades into it (below) and may run first on a fresh deploy, so make sure it exists.
 const { ensureApprovalTables } = require('./sdsApprovalController');
@@ -849,7 +849,7 @@ router.get('/cn-history', async (req, res) => {
   if (!cn?.trim()) return res.status(400).json({ error: 'cn is required' });
   const variants = normalizeToPcCn(cn);
   try {
-    const [prodResult, cycleTime, resolver] = await Promise.all([
+    const [prodResult, actualCycleTime, resolver] = await Promise.all([
       maqPool.query(
         `SELECT machine, process, proc_name,
                 COUNT(*)::int AS production_count,
@@ -862,12 +862,16 @@ router.get('/cn-history', async (req, res) => {
       ),
       // ACTUAL cycle time (lot-level, lpb.pc_production), as distinct from the factory
       // plan's eng_process_info.ct used elsewhere on this page - the two can and do
-      // disagree (one blank, one not) for the same CN. Shared with the PDF's CYCLE TIME
-      // cell via sdsV2SearchService, so both print the same number — see
+      // disagree (one blank, one not) for the same CN. `byMachine` is keyed by the SAME
+      // display name as `resolver.nameOf` below, so the Machine History tooltip can show
+      // each chip's own value. Shared with the PDF's CYCLE TIME cell via
+      // sdsV2SearchService, so page and PDF always print the same numbers — see
       // services/actualCycleTime.js.
-      fetchLatestActualCycleTime(maqPool, cn),
+      fetchActualCycleTime({ maqPool, rodpcPool, engPool }, cn),
       buildMachineResolver(),
     ]);
+    const cycleTime = actualCycleTime.flat;
+    const cycleTimeByMachine = actualCycleTime.byMachine;
 
     // Aggregate by (machine_name, machine_type_code, process, proc_name)
     const agg = {};
@@ -884,7 +888,7 @@ router.get('/cn-history', async (req, res) => {
     const rows = Object.values(agg).sort((a, b) =>
       (a.machine_name || '').localeCompare(b.machine_name || '') || (a.process || '').localeCompare(b.process || '')
     );
-    res.json({ rows, cycleTime, searched_variants: variants });
+    res.json({ rows, cycleTime, cycleTimeByMachine, searched_variants: variants });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
