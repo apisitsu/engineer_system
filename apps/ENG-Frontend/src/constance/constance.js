@@ -77,6 +77,20 @@ export const server = {
   TSV2_PARTNO_MAP: `${apiUrl}api/tooling-select/partno-map`,      // Part No เน€เธยเธขยเนโฌย tool map; /meta for filters, /:id for PUT/DELETE
   TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
   TSV2_FORMULA_ERRORS: `${apiUrl}api/tooling-select/formula/errors`,
+
+  // PB Ring tooling monitor/manage — independent of Tooling Select / SDS (own pbring_* tables)
+  PBRING_FILTERS: `${apiUrl}api/engineer/pbring/filters`,
+  PBRING_SEARCH: `${apiUrl}api/engineer/pbring/search`,
+  PBRING_SUMMARY: `${apiUrl}api/engineer/pbring/summary`,
+  PBRING_TOOLING: `${apiUrl}api/engineer/pbring/tooling`, // append /:id (PUT, DELETE)
+  PBRING_HW: `${apiUrl}api/engineer/pbring/hw`, // append /:partGroup (DELETE)
+  PBRING_COST_DETECT: `${apiUrl}api/engineer/pbring/cost/detect`,
+  PBRING_COST_PENDING: `${apiUrl}api/engineer/pbring/cost/pending`, // append /:id/approve or /:id/reject
+  PBRING_CN_LOOKUP: `${apiUrl}api/engineer/pbring/cn-lookup`, // ?part_no=
+  PBRING_HISTORY_PROCESS_CODES: `${apiUrl}api/engineer/pbring/history/process-codes`,
+  PBRING_HISTORY_MACHINES: `${apiUrl}api/engineer/pbring/history/machines`, // ?pc=
+  PBRING_HISTORY_TEMPLATE: `${apiUrl}api/engineer/pbring/history/template`, // ?pc=&mc=
+  PBRING_TOOLING_FROM_HISTORY: `${apiUrl}api/engineer/pbring/tooling/from-history`,
   TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_SPEC_COUNTS: `${apiUrl}api/tooling-select/spec/counts`,
