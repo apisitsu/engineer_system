@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Layout, Tabs, Select, Button, Space, Typography, Table, Tag, Empty, Statistic,
   Row, Col, Card, Input, InputNumber, DatePicker, Checkbox, Popconfirm, App,
@@ -6,6 +6,7 @@ import {
 import {
   ClearOutlined, ReloadOutlined, EditOutlined, SaveOutlined, CloseOutlined,
   PlusOutlined, DeleteOutlined, DownloadOutlined, CheckOutlined, SyncOutlined,
+  DoubleRightOutlined, DoubleLeftOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -29,6 +30,57 @@ const EDITABLE_FIELDS = ['tooling_item', 'tool_code', 'maker', 'po_no', 'order_q
 // one status card shown in the Outer/Inner Ring row instead of with the rest
 // of the status cards (see the render below).
 const INCOMPLETE_COST = '__RU__';
+
+// Shared border/highlight color for the two cost-related cards (Cost Update
+// Found, Incomplete Cost Info) — same color as each other so they read as a
+// matched pair, distinct from the plain-accent ring/status cards beside them.
+const COST_CARD_COLOR = '#d4720a';
+
+// Received/Waiting/UNUSED/Unknown share this row with Total/Outer/Inner Ring
+// now, so they need their own border color to stay visually distinct from
+// the ring cards sitting right next to them in the same row.
+const STATUS_CARD_COLOR = '#4c6ef5';
+
+// Mirrors the backend's pbringConstants.COST_ALERT sentinel — the one filter
+// that deliberately works with no HW/Process/Machine selected (see the
+// `runSearch` guard below): "show me everything waiting on me" is meant to
+// stand on its own, not require picking a HW first.
+const COST_ALERT = '__COST_FOUND__';
+
+// Mirrors the backend's pbringConstants.NO_PO sentinel — every row missing a
+// PO regardless of status, the full candidate pool "Check for cost updates"
+// scans. Not the same number as Cost Update Found (that's only the subset
+// which matched something in maqdb) or Incomplete Cost Info (that's scoped to
+// status=Received only) — shown alongside both for that reason.
+const NO_PO = '__NOPO__';
+
+// Mirrors the backend's pbringConstants.NO_TOOL_CODE sentinel — rows with no
+// tool_code entered at all, an earlier-stage gap than No PO: a row just added
+// via "Add new HW" starts here, before it even has a code for cost detection
+// to look up.
+const NO_TOOL_CODE = '__NOTOOL__';
+
+// These five statuses collapse into one "Waiting" card. Mirrors the backend's
+// pbringConstants.WAITING sentinel — clicking the card sets `status` to this
+// value, which the backend matches against any of the five, so the table
+// actually filters to their union (not just expand the sub-card row below).
+const WAITING = '__WAITING__';
+const WAITING_GROUP = [
+  'Wait Receive', 'Wait Request Quotation', 'Wait DWG Tooling (BBBU)',
+  'Wait DWG Tooling (ROD THAI)', 'Wait DWG Tooling (ROD KZW)',
+];
+
+// The grouped, one-<Table>-per-Part-No view is only worth it for a HW search
+// (which almost always means one Part No./CN), where the CN banner is useful
+// context. Every other kind of search (ring/status/No PO/etc., often dozens
+// of Part Nos at once) renders as a single flat table instead — both for
+// readability (a page full of 2-row tables is harder to scan than one table)
+// and for performance: "Outer Ring" alone spans ~50 groups, so the grouped
+// view was mounting ~50 separate Table instances (each with its own
+// header/resize-observer/sticky-header work) on every filter change, which is
+// what caused the switching-filter lag. This cap is a last-resort safety net
+// in case a HW ever legitimately spans an unusual number of Part Nos.
+const GROUP_DISPLAY_LIMIT = 12;
 
 // "33" / "HW33" / "hw#33" -> "HW#33" — same loose parse as the prototype's hwVal().
 const hwVal = (raw) => {
@@ -70,7 +122,19 @@ const useColors = () => {
 };
 
 const fmt = (n) => (n == null || n === '' ? '' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }));
+// Currency only (always 2 decimals, even on a whole number) — kept separate
+// from `fmt` since that's also used for Qty, where a trailing ".00" would be
+// wrong (it's a count, not money).
+const fmtMoney = (n) => (n == null || n === '' ? '' : Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const statusTagColor = (s) => (s === 'Received' ? 'success' : s === 'UNUSED' || s === 'Unknown' ? 'default' : 'warning');
+
+// pbring's own controllers reply `{ message }`, but a request never reaches
+// them when `isEngineer`/`isAdmin` (middleware/mtcAuth.js, shared across all
+// of MTC) rejects it first — that 403 body is shaped `{ error }` instead.
+// Falling back to only `message` showed a generic "Failed to ___" for every
+// permission-denied response instead of the real "Access denied: ..." reason,
+// which is exactly the error a user in the wrong department/role hits.
+const apiErrorMessage = (err, fallback) => err.response?.data?.message || err.response?.data?.error || fallback;
 
 /** One filter/status chip — a small bordered stat tile, not a plain Button+Tag. */
 function StatCard({ label, count, selected, onClick, C, color }) {
@@ -83,6 +147,7 @@ function StatCard({ label, count, selected, onClick, C, color }) {
         border: `1px solid ${selected ? accent : (color || C.border)}`,
         background: selected ? accent : C.panel,
         transition: 'all 0.15s',
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10,
       }}
     >
       <div style={{ fontSize: 12, color: selected ? 'rgba(255,255,255,0.85)' : (color || C.textDim), whiteSpace: 'nowrap', fontWeight: color ? 600 : 400 }}>{label}</div>
@@ -99,8 +164,16 @@ function SearchTab({ C }) {
   const [status, setStatus] = useState(null);
   const [ring, setRing] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [waitingOpen, setWaitingOpen] = useState(false);
+  // One-shot override for the "pick a filter first" guard below — set by the
+  // Total card so it always shows the table (not just a count), even on the
+  // very first click when status/ring were already null and clearing them
+  // again is a no-op state change that wouldn't otherwise trigger anything.
+  // Stays true until Clear Filters; harmless to leave set since it only ever
+  // makes the guard MORE permissive, never blocks something that should show.
+  const [showAll, setShowAll] = useState(false);
 
-  const [filterOptions, setFilterOptions] = useState({ hw: [], processCode: [], machine: [], statusCards: [], ringCards: [], costAlertCard: null });
+  const [filterOptions, setFilterOptions] = useState({ hw: [], processCode: [], machine: [], totalCount: 0, statusCards: [], ringCards: [], costAlertCard: null });
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [result, setResult] = useState(null);
   const [loadingSearch, setLoadingSearch] = useState(false);
@@ -110,13 +183,51 @@ function SearchTab({ C }) {
   const [editDraft, setEditDraft] = useState({});
   const [saving, setSaving] = useState(false);
 
+  // First/Last-column buttons on the result table's header. Every currently
+  // mounted <Table> (one in flat view, up to GROUP_DISPLAY_LIMIT in grouped
+  // view) registers itself here via its `ref` callback; React nulls an entry
+  // out on unmount, so this always reflects what's actually on screen.
+  //
+  // Deliberately NOT `tableRef.scrollTo({ left })` (rc-table's own imperative
+  // API): for a `virtual` table (added for the switching-filter lag fix) that
+  // moves the body's internal offset directly but skips the library's own
+  // `triggerScroll()` call — the one that notifies the header to follow along
+  // — so the body jumped but the header stayed put (reported after shipping
+  // the first version of this button). A real user wheel/drag DOES call
+  // `triggerScroll()`, so dispatching a genuine `wheel` event on the virtual
+  // body's own scroll element goes through the same path and keeps both in
+  // sync. `.ant-table-tbody-virtual-holder` is rc-virtual-list's own naming
+  // convention (`${prefixCls}-holder`) for that element, not a made-up guess.
+  // Falls back to `.scrollTo` for a non-virtual table, where the body is a
+  // plain `overflow-x` div and a native 'scroll' event (which setting
+  // `scrollLeft` fires on its own) is what the header already listens for.
+  const toolingTableRefs = useRef(new Map());
+  const registerToolingTableRef = (key) => (el) => {
+    if (el) toolingTableRefs.current.set(key, el);
+    else toolingTableRefs.current.delete(key);
+  };
+  const scrollTableBy = (deltaX) => {
+    toolingTableRefs.current.forEach((t) => {
+      const holder = t.nativeElement?.querySelector(
+        '.ant-table-tbody-virtual-holder, [class*="-tbody-virtual-holder"]'
+      );
+      if (holder) {
+        holder.dispatchEvent(new WheelEvent('wheel', { deltaX, deltaY: 0, bubbles: true, cancelable: true }));
+      } else {
+        t.scrollTo({ left: deltaX > 0 ? Number.MAX_SAFE_INTEGER : 0 });
+      }
+    });
+  };
+  const scrollTableToEnd = () => scrollTableBy(100000);
+  const scrollTableToStart = () => scrollTableBy(-100000);
+
   const loadFilters = useCallback(async () => {
     setLoadingFilters(true);
     try {
       const res = await axios.get(server.PBRING_FILTERS, { params: { hw, pc, mc, status, ring } });
-      setFilterOptions(res.data || { hw: [], processCode: [], machine: [], statusCards: [], ringCards: [], costAlertCard: null });
+      setFilterOptions(res.data || { hw: [], processCode: [], machine: [], totalCount: 0, statusCards: [], ringCards: [], costAlertCard: null });
     } catch (err) {
-      message.error(err.response?.data?.message || 'Failed to load filters');
+      message.error(apiErrorMessage(err, 'Failed to load filters'));
     } finally {
       setLoadingFilters(false);
     }
@@ -126,21 +237,25 @@ function SearchTab({ C }) {
   useEffect(() => { loadFilters(); }, [loadFilters]);
 
   const runSearch = useCallback(async () => {
-    if (!hw && !pc && !mc) { setResult(null); return; }
+    // A status or ring card is its own standalone filter too, same as the
+    // alert card already was — clicking Received/UNUSED/Waiting/a ring card
+    // with no HW/Process/Machine picked used to only refresh that card's own
+    // count (via loadFilters) and leave the table hidden.
+    if (!hw && !pc && !mc && !status && !ring && !showAll && alert !== COST_ALERT) { setResult(null); return; }
     setLoadingSearch(true);
     try {
       const res = await axios.get(server.PBRING_SEARCH, { params: { hw, pc, mc, status, ring, alert } });
       setResult(res.data);
     } catch (err) {
-      message.error(err.response?.data?.message || 'Search failed');
+      message.error(apiErrorMessage(err, 'Search failed'));
     } finally {
       setLoadingSearch(false);
     }
-  }, [hw, pc, mc, status, ring, alert, message]);
+  }, [hw, pc, mc, status, ring, showAll, alert, message]);
 
   useEffect(() => { runSearch(); }, [runSearch]);
 
-  const clearAll = () => { setHw(null); setPc(null); setMc(null); setStatus(null); setRing(null); setAlert(null); };
+  const clearAll = () => { setHw(null); setPc(null); setMc(null); setStatus(null); setRing(null); setAlert(null); setShowAll(false); };
 
   const checkCostUpdates = async () => {
     setDetecting(true);
@@ -150,7 +265,7 @@ function SearchTab({ C }) {
       loadFilters();
       runSearch();
     } catch (err) {
-      message.error(err.response?.data?.message || 'Check failed');
+      message.error(apiErrorMessage(err, 'Check failed'));
     } finally {
       setDetecting(false);
     }
@@ -163,7 +278,7 @@ function SearchTab({ C }) {
       loadFilters();
       runSearch();
     } catch (err) {
-      message.error(err.response?.data?.message || 'Approve failed');
+      message.error(apiErrorMessage(err, 'Approve failed'));
     }
   };
   const rejectDetected = async (record) => {
@@ -173,7 +288,7 @@ function SearchTab({ C }) {
       loadFilters();
       runSearch();
     } catch (err) {
-      message.error(err.response?.data?.message || 'Reject failed');
+      message.error(apiErrorMessage(err, 'Reject failed'));
     }
   };
 
@@ -203,7 +318,7 @@ function SearchTab({ C }) {
       loadFilters();
       runSearch();
     } catch (err) {
-      message.error(err.response?.data?.message || 'Save failed');
+      message.error(apiErrorMessage(err, 'Save failed'));
     } finally {
       setSaving(false);
     }
@@ -217,7 +332,7 @@ function SearchTab({ C }) {
     } catch (err) {
       // The backend refuses to delete a row from the original Excel import —
       // that 400 lands here as a normal, expected message, not a bug.
-      message.error(err.response?.data?.message || 'Delete failed');
+      message.error(apiErrorMessage(err, 'Delete failed'));
     }
   };
   const deleteHw = async () => {
@@ -230,7 +345,7 @@ function SearchTab({ C }) {
       );
       clearAll();
     } catch (err) {
-      message.error(err.response?.data?.message || 'Delete failed');
+      message.error(apiErrorMessage(err, 'Delete failed'));
     }
   };
 
@@ -242,7 +357,7 @@ function SearchTab({ C }) {
   };
 
   const toolingColumns = useMemo(() => [
-    { title: 'HW', dataIndex: 'part_group', width: 70 },
+    { title: 'HW', dataIndex: 'part_group', width: 70, fixed: 'left' },
     { title: 'Process', dataIndex: 'process_code', width: 110 },
     { title: 'M/C', render: (r) => `${r.mc_type || ''} ${r.mc_no || ''}`.trim(), width: 120 },
     {
@@ -352,6 +467,20 @@ function SearchTab({ C }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [editingId, editDraft, saving, loadFilters, runSearch]);
 
+  // Flat view (no Outer/Inner Ring filter picked): too many Part No. groups to
+  // scan as separate mini-tables (e.g. all 149 Cost Update Found rows span
+  // dozens of Part Nos.), so Part No./CN come back as plain columns instead of
+  // a group header and everything renders as one continuous table.
+  const flatColumns = useMemo(() => {
+    const [hwCol, ...rest] = toolingColumns;
+    return [
+      hwCol,
+      { title: 'Part No.', dataIndex: 'part_no', width: 120 },
+      { title: 'CN', dataIndex: 'cn', width: 90 },
+      ...rest,
+    ];
+  }, [toolingColumns]);
+
   // CN and Part No. are the group header (below), not columns — every row
   // under one Part No. shares the same CN by construction (lpb.eng_item
   // resolves it 1:1), so repeating both on every row was pure noise.
@@ -365,8 +494,28 @@ function SearchTab({ C }) {
     return [...groups.entries()];
   }, [result]);
 
+  // Row 1: Total, Outer Ring, Inner Ring.
+  const totalCard = { label: 'Total', count: filterOptions.totalCount || 0 };
+
+  // Row 2: Received, Waiting, UNUSED, Unknown. Every one of these counts
+  // already respects the active ring filter server-side (`getFilters`'s
+  // `cardBase('status')` keeps the ring filter unless ring itself is the
+  // thing being counted) — combined across both rings when none is picked,
+  // scoped to just that ring once one is.
+  const receivedCard = filterOptions.statusCards.find((c) => c.value === 'Received');
+  const waitingSubCards = filterOptions.statusCards.filter((c) => WAITING_GROUP.includes(c.value));
+  const waitingTotal = waitingSubCards.reduce((sum, c) => sum + (c.count || 0), 0);
+  const waitingExpanded = waitingOpen || status === WAITING || WAITING_GROUP.includes(status);
+  const afterCostStatusCards = filterOptions.statusCards.filter((c) => ['UNUSED', 'Unknown'].includes(c.value));
+
+  // Row 4 (bottom): the three cost-related cards, kept together but out of
+  // the main Total/Ring/Status flow above.
   const incompleteCostCard = filterOptions.statusCards.find((c) => c.value === INCOMPLETE_COST);
-  const restStatusCards = filterOptions.statusCards.filter((c) => c.value !== INCOMPLETE_COST);
+  const noToolCodeCard = filterOptions.statusCards.find((c) => c.value === NO_TOOL_CODE);
+  const noPoCard = filterOptions.statusCards.find((c) => c.value === NO_PO);
+
+  const movedUp = new Set([INCOMPLETE_COST, NO_PO, NO_TOOL_CODE, ...WAITING_GROUP, 'Received', 'UNUSED', 'Unknown']);
+  const restStatusCards = filterOptions.statusCards.filter((c) => !movedUp.has(c.value));
 
   return (
     <>
@@ -402,85 +551,194 @@ function SearchTab({ C }) {
         <ReloadOutlined onClick={loadFilters} style={{ cursor: 'pointer', color: C.textDim }} title="Refresh" />
       </Space>
 
-      {filterOptions.costAlertCard && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+      {/* Row 1: Total, Outer Ring, Inner Ring, then Received/Waiting/UNUSED/
+          Unknown appended onto the same row (their own border color keeps
+          them visually distinct from the ring cards beside them). Counts for
+          the latter four already respect the active ring filter server-side
+          (combined when no ring is picked). `flexWrap` keeps the row from
+          running past the toolbar above it — it wraps onto a second line
+          rather than overflowing past "Check for cost updates".
+          Mutually exclusive within the status group: Received/UNUSED/Unknown
+          share `status`, so picking one already clears another, but Waiting
+          is a separate `waitingOpen` toggle — each side has to clear the
+          other's state too, or both could stay highlighted at once. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+        <StatCard
+          label={totalCard.label} count={totalCard.count} C={C}
+          selected={!status && !ring && !waitingOpen}
+          onClick={() => { setShowAll(true); setStatus(null); setRing(null); setWaitingOpen(false); }}
+        />
+        {filterOptions.ringCards.map((c) => (
           <StatCard
-            label={filterOptions.costAlertCard.label} count={filterOptions.costAlertCard.count} C={C}
-            color="#d4720a"
-            selected={alert === filterOptions.costAlertCard.value}
-            onClick={() => setAlert((s) => (s === filterOptions.costAlertCard.value ? null : filterOptions.costAlertCard.value))}
+            key={c.value} label={c.label} count={c.count} C={C}
+            selected={ring === c.value}
+            onClick={() => { setShowAll(true); setRing((s) => (s === c.value ? null : c.value)); }}
           />
-        </div>
-      )}
+        ))}
+        {receivedCard && (
+          <StatCard
+            label={receivedCard.label} count={receivedCard.count} C={C}
+            color={STATUS_CARD_COLOR}
+            selected={status === receivedCard.value}
+            onClick={() => { setShowAll(true); setWaitingOpen(false); setStatus((s) => (s === receivedCard.value ? null : receivedCard.value)); }}
+          />
+        )}
+        {waitingSubCards.length > 0 && (
+          <StatCard
+            label="Waiting" count={waitingTotal} C={C}
+            color={STATUS_CARD_COLOR}
+            selected={waitingExpanded}
+            onClick={() => {
+              setShowAll(true);
+              // Collapsing (already expanded, whether on the aggregate or a
+              // drilled-into sub-status) clears the filter entirely; opening
+              // sets `status` to the aggregate sentinel so the table actually
+              // filters to the union of all five, not just reveal row 3.
+              if (waitingExpanded) { setStatus(null); setWaitingOpen(false); }
+              else { setStatus(WAITING); setWaitingOpen(true); }
+            }}
+          />
+        )}
+        {afterCostStatusCards.map((c) => (
+          <StatCard
+            key={c.value} label={c.label} count={c.count} C={C}
+            color={STATUS_CARD_COLOR}
+            selected={status === c.value}
+            onClick={() => { setShowAll(true); setWaitingOpen(false); setStatus((s) => (s === c.value ? null : c.value)); }}
+          />
+        ))}
+      </div>
 
-      {(filterOptions.ringCards.length > 0 || incompleteCostCard) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
-          {filterOptions.ringCards.map((c) => (
-            <StatCard
-              key={c.value} label={c.label} count={c.count} C={C}
-              selected={ring === c.value}
-              onClick={() => setRing((s) => (s === c.value ? null : c.value))}
-            />
-          ))}
-          {incompleteCostCard && (
-            <StatCard
-              label={incompleteCostCard.label} count={incompleteCostCard.count} C={C}
-              selected={status === incompleteCostCard.value}
-              onClick={() => setStatus((s) => (s === incompleteCostCard.value ? null : incompleteCostCard.value))}
-            />
-          )}
-        </div>
-      )}
-
+      {restStatusCards.length > 0 && (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         {restStatusCards.map((c) => (
           <StatCard
             key={c.value} label={c.label} count={c.count} C={C}
             selected={status === c.value}
-            onClick={() => setStatus((s) => (s === c.value ? null : c.value))}
+            onClick={() => { setShowAll(true); setWaitingOpen(false); setStatus((s) => (s === c.value ? null : c.value)); }}
           />
         ))}
       </div>
+      )}
+
+      {/* Row 3: Waiting's own five sub-statuses, once Waiting is open. */}
+      {waitingExpanded && waitingSubCards.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16, paddingLeft: 16 }}>
+          {waitingSubCards.map((c) => (
+            <StatCard
+              key={c.value} label={c.label} count={c.count} C={C}
+              selected={status === c.value}
+              // Deselecting a specific sub-status zooms back out to the
+              // Waiting aggregate (row stays open) rather than clearing the
+              // filter entirely — "Waiting" itself is what closes it.
+              onClick={() => { setShowAll(true); setStatus((s) => (s === c.value ? WAITING : c.value)); }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Bottom row: the detection cards, kept together but out of the main
+          Total/Ring/Status flow above — ordered by how far along a row is:
+          No Tool Code (earliest — just added, nothing entered yet) -> No PO
+          (has a code, not yet ordered) -> Cost Update Found (maqdb matched
+          one) -> Incomplete Cost Info (Received but still missing a field). */}
+      {(noToolCodeCard || noPoCard || filterOptions.costAlertCard || incompleteCostCard) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+          {noToolCodeCard && (
+            <StatCard
+              label={noToolCodeCard.label} count={noToolCodeCard.count} C={C}
+              color={COST_CARD_COLOR}
+              selected={status === noToolCodeCard.value}
+              onClick={() => { setShowAll(true); setWaitingOpen(false); setStatus((s) => (s === noToolCodeCard.value ? null : noToolCodeCard.value)); }}
+            />
+          )}
+          {noPoCard && (
+            <StatCard
+              label={noPoCard.label} count={noPoCard.count} C={C}
+              color={COST_CARD_COLOR}
+              selected={status === noPoCard.value}
+              onClick={() => { setShowAll(true); setWaitingOpen(false); setStatus((s) => (s === noPoCard.value ? null : noPoCard.value)); }}
+            />
+          )}
+          {filterOptions.costAlertCard && (
+            <StatCard
+              label={filterOptions.costAlertCard.label} count={filterOptions.costAlertCard.count} C={C}
+              color={COST_CARD_COLOR}
+              selected={alert === filterOptions.costAlertCard.value}
+              onClick={() => { setShowAll(true); setAlert((s) => (s === filterOptions.costAlertCard.value ? null : filterOptions.costAlertCard.value)); }}
+            />
+          )}
+          {incompleteCostCard && (
+            <StatCard
+              label={incompleteCostCard.label} count={incompleteCostCard.count} C={C}
+              color={COST_CARD_COLOR}
+              selected={status === incompleteCostCard.value}
+              onClick={() => { setShowAll(true); setWaitingOpen(false); setStatus((s) => (s === incompleteCostCard.value ? null : incompleteCostCard.value)); }}
+            />
+          )}
+        </div>
+      )}
 
       {!result || result.empty ? (
-        <Empty description="Select a HW, Process code, or Machine to show data" style={{ marginTop: 40 }} />
+        <Empty description="Select a HW, Process code, Machine, or click a card above to show data" style={{ marginTop: 40 }} />
       ) : (
         <>
           <Row gutter={16} style={{ marginBottom: 12 }}>
             <Col><Statistic title="Setup Data Sheet" value={result.kpi.sdsParamCount} /></Col>
-            <Col><Statistic title="Conditions from Setup Sheet" value={result.kpi.sdsConditionCount} /></Col>
             <Col><Statistic title="Tooling in list" value={result.kpi.toolingCount} /></Col>
             <Col><Statistic title="Received" value={`${result.kpi.received}/${result.kpi.toolingCount}`} /></Col>
             <Col><Statistic title="Total value (THB)" value={fmt(result.kpi.totalPrice)} /></Col>
           </Row>
-          <Text type="secondary">{result.note}</Text>
+          {result.note && <Text type="secondary">{result.note}</Text>}
 
           <Card
             size="small" style={{ marginBottom: 16 }}
-            title={<Text strong>1) Tooling / Price / Status — {result.tooling.length} item(s)</Text>}
+            title={<Text strong>Tooling PB Ring Status — {result.tooling.length} item(s)</Text>}
+            extra={result.tooling.length > 0 && (
+              <Space size={4}>
+                <Button size="small" icon={<DoubleLeftOutlined />} onClick={scrollTableToStart}>First</Button>
+                <Button size="small" icon={<DoubleRightOutlined />} onClick={scrollTableToEnd}>Last</Button>
+              </Space>
+            )}
           >
-            <div style={{ maxHeight: 480, overflowY: 'auto' }} className="kb-vscroll">
-              {toolingByPart.length === 0 ? <Empty description="No tooling found" /> : toolingByPart.map(([partNo, rows]) => {
-                const groupCn = rows[0]?.cn || '';
-                return (
-                  <div key={partNo} style={{ marginBottom: 16 }}>
-                    <div
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 12, marginBottom: 8,
-                        padding: '6px 16px', borderRadius: 6, background: C.accent,
-                      }}
-                    >
-                      <Text strong style={{ color: '#fff', fontSize: 18 }}>{partNo}</Text>
-                      <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16 }}>CN: {groupCn || '—'}</Text>
+            {toolingByPart.length === 0 ? (
+              <Empty description="No tooling found" />
+            ) : hw && toolingByPart.length <= GROUP_DISPLAY_LIMIT ? (
+              <div style={{ maxHeight: 760, overflowY: 'auto' }} className="kb-vscroll">
+                {toolingByPart.map(([partNo, rows]) => {
+                  const groupCn = rows[0]?.cn || '';
+                  // Single-group result (e.g. a HW search) gets the full height
+                  // to itself; with several groups stacked in the scroller,
+                  // each table keeps a shorter cap so more groups are visible
+                  // at once without the page becoming one giant scroll.
+                  const tableY = toolingByPart.length === 1 ? 680 : 340;
+                  return (
+                    <div key={partNo} style={{ marginBottom: 16 }}>
+                      <div
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 12, marginBottom: 8,
+                          padding: '6px 16px', borderRadius: 6, background: C.accent,
+                        }}
+                      >
+                        <Text strong style={{ color: '#fff', fontSize: 18 }}>{partNo}</Text>
+                        <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16 }}>CN: {groupCn || '—'}</Text>
+                      </div>
+                      <Table
+                        virtual ref={registerToolingTableRef(partNo)}
+                        size="small" rowKey="id" dataSource={rows} columns={toolingColumns}
+                        loading={loadingSearch} pagination={false} scroll={{ x: 1880, y: tableY }}
+                      />
                     </div>
-                    <Table
-                      size="small" rowKey="id" dataSource={rows} columns={toolingColumns}
-                      loading={loadingSearch} pagination={false} scroll={{ x: 1880, y: 340 }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <Table
+                virtual ref={registerToolingTableRef('flat')}
+                size="small" rowKey="id" dataSource={result.tooling} columns={flatColumns}
+                loading={loadingSearch} pagination={false} scroll={{ x: 2000, y: 640 }}
+              />
+            )}
           </Card>
 
           {/* Sections 2/3 (Tool/Wheel/Insert Used, Setup Data Sheet Parameters)
@@ -514,7 +772,7 @@ function AddHwTab() {
   useEffect(() => {
     axios.get(server.PBRING_HISTORY_PROCESS_CODES)
       .then((res) => setProcessCodes(res.data?.processCode || []))
-      .catch((err) => message.error(err.response?.data?.message || 'Failed to load process codes'));
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load process codes')));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -524,7 +782,7 @@ function AddHwTab() {
       const res = await axios.get(server.PBRING_HISTORY_MACHINES, { params: { pc } });
       setMachinesByPc((m) => ({ ...m, [pc]: res.data?.machine || [] }));
     } catch (err) {
-      message.error(err.response?.data?.message || 'Failed to load machines');
+      message.error(apiErrorMessage(err, 'Failed to load machines'));
     }
   };
 
@@ -553,7 +811,7 @@ function AddHwTab() {
       });
       return incoming.length;
     } catch (err) {
-      message.error(err.response?.data?.message || `Failed to load history for ${row.pc}/${row.mc}`);
+      message.error(apiErrorMessage(err, `Failed to load history for ${row.pc}/${row.mc}`));
       return 0;
     }
   };
@@ -619,7 +877,7 @@ function AddHwTab() {
       }
       if (insertedCount > 0) resetForm();
     } catch (err) {
-      message.error(err.response?.data?.message || 'Failed to add items');
+      message.error(apiErrorMessage(err, 'Failed to add items'));
     } finally {
       setBusy(false);
     }
@@ -699,7 +957,7 @@ function SummaryTab() {
       const res = await axios.get(server.PBRING_SUMMARY);
       setData(res.data);
     } catch (err) {
-      message.error(err.response?.data?.message || 'Failed to load summary');
+      message.error(apiErrorMessage(err, 'Failed to load summary'));
     } finally {
       setLoading(false);
     }
@@ -708,27 +966,27 @@ function SummaryTab() {
   useEffect(() => { load(); }, [load]);
 
   const statusColumns = [
-    { title: 'Status', dataIndex: 'status', render: (s) => <Tag color={statusTagColor(s)}>{s}</Tag> },
-    { title: 'Total', dataIndex: 'n', align: 'right' },
-    { title: 'Missing PO', dataIndex: 'po', align: 'right' },
-    { title: 'Missing Unit Price', dataIndex: 'price', align: 'right' },
-    { title: 'Missing Receive Date', dataIndex: 'date', align: 'right' },
-    { title: 'Incomplete Cost Info', dataIndex: 'incomplete', align: 'right' },
-    { title: 'Value (THB)', dataIndex: 'v', align: 'right', render: fmt },
+    { title: 'Status', dataIndex: 'status', sorter: (a, b) => String(a.status).localeCompare(String(b.status)), render: (s) => <Tag color={statusTagColor(s)}>{s}</Tag> },
+    { title: 'Total', dataIndex: 'n', align: 'right', sorter: (a, b) => a.n - b.n },
+    { title: 'Missing PO', dataIndex: 'po', align: 'right', sorter: (a, b) => a.po - b.po },
+    { title: 'Missing Unit Price', dataIndex: 'price', align: 'right', sorter: (a, b) => a.price - b.price },
+    { title: 'Missing Receive Date', dataIndex: 'date', align: 'right', sorter: (a, b) => a.date - b.date },
+    { title: 'Incomplete Cost Info', dataIndex: 'incomplete', align: 'right', sorter: (a, b) => a.incomplete - b.incomplete },
+    { title: 'Value (THB)', dataIndex: 'v', align: 'right', sorter: (a, b) => a.v - b.v, render: fmtMoney },
   ];
   const machineColumns = [
-    { title: 'Machine', dataIndex: 'mc_type' },
-    { title: 'Items', dataIndex: 'n', align: 'right' },
-    { title: 'Value (THB)', dataIndex: 'v', align: 'right', render: fmt },
+    { title: 'Machine', dataIndex: 'mc_type', sorter: (a, b) => String(a.mc_type).localeCompare(String(b.mc_type)) },
+    { title: 'Items', dataIndex: 'n', align: 'right', sorter: (a, b) => a.n - b.n },
+    { title: 'Value (THB)', dataIndex: 'v', align: 'right', sorter: (a, b) => a.v - b.v, render: fmtMoney },
   ];
 
   return (
     <>
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={6}><Card><Statistic title="Total Items" value={data?.totalRows ?? 0} loading={loading} /></Card></Col>
-        <Col span={6}><Card><Statistic title="Total Value (THB)" value={fmt(data?.totalPrice)} loading={loading} /></Card></Col>
-        <Col span={6}><Card><Statistic title="Received" value={data?.received?.count ?? 0} suffix={`(${fmt(data?.received?.totalPrice)})`} loading={loading} /></Card></Col>
-        <Col span={6}><Card><Statistic title="Missing Price" value={data?.missingPrice ?? 0} loading={loading} /></Card></Col>
+        <Col span={6}><Card><Statistic title="Total Value (THB)" value={fmtMoney(data?.totalPrice)} loading={loading} /></Card></Col>
+        <Col span={6}><Card><Statistic title="Received (THB)" value={fmtMoney(data?.received?.totalPrice)} loading={loading} /></Card></Col>
+        <Col span={6}><Card><Statistic title="Waiting (THB)" value={fmtMoney(data?.waiting?.totalPrice)} loading={loading} /></Card></Col>
       </Row>
       <Row gutter={16}>
         <Col span={14}>

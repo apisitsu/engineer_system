@@ -18,7 +18,7 @@
 const { engPool } = require('../../../instance/eng_db');
 const { maqPool } = require('../../../instance/maq_db');
 const { toItemNo } = require('../mtc/utils/cnFormat');
-const { TABLES, STATUS, RING_TYPES, RECEIVED_BUT_INCOMPLETE, COST_ALERT, machineKey } = require('./pbringConstants');
+const { TABLES, STATUS, RING_TYPES, RECEIVED_BUT_INCOMPLETE, COST_ALERT, NO_PO, NO_TOOL_CODE, WAITING, WAITING_STATUSES, machineKey } = require('./pbringConstants');
 const { PbringError } = require('./pbringCostService');
 const { listPending } = require('./pbringCostDetectService');
 
@@ -37,12 +37,20 @@ function missing(r) {
   };
 }
 
+/** No tool_code entered at all yet — UNUSED is a real value, not a blank. */
+function noToolCode(r) {
+  return !isUnused(r) && !String(r.tool_code || '').trim();
+}
+
 /** Shared by `search()`'s row filter and `getFilters()`'s cross-card counts. */
 function matchesStatus(r, status) {
   if (status === RECEIVED_BUT_INCOMPLETE) {
     const m = missing(r);
     return r.status === 'Received' && (m.po || m.price || m.date);
   }
+  if (status === NO_PO) return missing(r).po;
+  if (status === NO_TOOL_CODE) return noToolCode(r);
+  if (status === WAITING) return WAITING_STATUSES.includes(r.status);
   return (r.status || 'Unknown') === status;
 }
 
@@ -70,9 +78,17 @@ async function getFilters({ hw, pc, mc, status, ring }) {
   const mcBase = base.filter((r) => hasPc(r, pc));
   const mcOptions = uniq(mcBase.map((r) => r.mc_type).filter(Boolean));
 
-  // Every card group's counts respect every OTHER active filter but ignore
-  // its own — same "every group but this one" rule as the prototype's
-  // `renderCards()`, now extended from just status to status + ring type.
+  // Scoped only by HW/Process/Machine, ignoring BOTH status and ring — the
+  // stable "everything" denominator for Total and the two Ring cards, so
+  // Outer/Inner Ring always shows its true total and never reacts to a status
+  // card picked below it (Received/Waiting/etc. still react to Ring, just not
+  // the other way around — see Row 2's own `cardBase('status')` below).
+  const hwPcMcBase = all.filter((r) =>
+    (!hw || r.part_group === hw) && hasPc(r, pc) && (!mc || r.mc_type === mc));
+
+  // Status-card counts respect ring (an OTHER active filter) but ignore
+  // status itself — same "every group but this one" rule as the prototype's
+  // `renderCards()`.
   const cardBase = (skip) => all.filter((r) =>
     (!hw || r.part_group === hw) && hasPc(r, pc) && (!mc || r.mc_type === mc)
     && (skip === 'status' || !status || matchesStatus(r, status))
@@ -86,6 +102,10 @@ async function getFilters({ hw, pc, mc, status, ring }) {
     if (s === 'Received' && (m.po || m.price || m.date)) {
       statusCounts[RECEIVED_BUT_INCOMPLETE] = (statusCounts[RECEIVED_BUT_INCOMPLETE] || 0) + 1;
     }
+    // Unlike RECEIVED_BUT_INCOMPLETE, counted across every status, not just
+    // Received — this is the full candidate pool detectMissingCost() scans.
+    if (m.po) statusCounts[NO_PO] = (statusCounts[NO_PO] || 0) + 1;
+    if (noToolCode(r)) statusCounts[NO_TOOL_CODE] = (statusCounts[NO_TOOL_CODE] || 0) + 1;
   });
   const statusCards = STATUS
     .flatMap((s) => (s === 'Received' ? [s, RECEIVED_BUT_INCOMPLETE] : [s]))
@@ -95,9 +115,15 @@ async function getFilters({ hw, pc, mc, status, ring }) {
       count: statusCounts[s] || 0,
     }))
     .filter((c) => c.count > 0 || c.value === RECEIVED_BUT_INCOMPLETE);
+  if (statusCounts[NO_TOOL_CODE] > 0) {
+    statusCards.push({ value: NO_TOOL_CODE, label: 'No Tool Code', count: statusCounts[NO_TOOL_CODE] });
+  }
+  if (statusCounts[NO_PO] > 0) {
+    statusCards.push({ value: NO_PO, label: 'No PO', count: statusCounts[NO_PO] });
+  }
 
   const ringCounts = {};
-  cardBase('ring').forEach((r) => {
+  hwPcMcBase.forEach((r) => {
     if (r.part_name) ringCounts[r.part_name] = (ringCounts[r.part_name] || 0) + 1;
   });
   const ringCards = RING_TYPES
@@ -109,7 +135,6 @@ async function getFilters({ hw, pc, mc, status, ring }) {
   // nothing to show, same as the ring cards' zero-count filter above.
   const pending = await listPending('pending');
   const pendingIds = new Set(pending.map((p) => p.tooling_id));
-  const hwPcMcBase = all.filter((r) => (!hw || r.part_group === hw) && hasPc(r, pc) && (!mc || r.mc_type === mc));
   const alertCount = hwPcMcBase.filter((r) => pendingIds.has(r.id)).length;
   const costAlertCard = alertCount > 0 ? { value: COST_ALERT, label: 'Cost Update Found', count: alertCount } : null;
 
@@ -117,6 +142,9 @@ async function getFilters({ hw, pc, mc, status, ring }) {
     hw: hwOptions.map((v) => ({ value: v, label: v })),
     processCode: pcOptions.map((v) => ({ value: v, label: `${v} — ${pcNameOf[v] || ''}` })),
     machine: mcOptions.map((v) => ({ value: v, label: v })),
+    // Total row count under the current HW/Process/Machine filters only —
+    // ignores status AND ring, same scope as the Ring cards above.
+    totalCount: hwPcMcBase.length,
     statusCards,
     ringCards,
     costAlertCard,
@@ -125,7 +153,13 @@ async function getFilters({ hw, pc, mc, status, ring }) {
 
 /** Section 1/2/3 of the original prototype's search view. */
 async function search({ hw, pc, mc, status, ring, alert }) {
-  if (!hw && !pc && !mc) return { empty: true };
+  // The alert card (maqdb-detected cost updates), a status card, and a ring
+  // card are each deliberately not scoped to HW/Process/Machine the way the
+  // rest of this page is — any of them is meant to work as "show me this set"
+  // on its own. The guard used to only exempt the alert card, so clicking
+  // Received/UNUSED/Waiting/a ring card with no HW/Process/Machine picked
+  // updated that card's own count (via getFilters) but left the table hidden.
+  if (!hw && !pc && !mc && !status && !ring && alert !== COST_ALERT) return { empty: true };
 
   const all = await fetchAllTooling();
   const cnOf = (r) => String(r.cn || '').split(/\s*\/\s*/).filter(Boolean);
@@ -135,7 +169,8 @@ async function search({ hw, pc, mc, status, ring, alert }) {
   let tooling = hwRows.filter((r) => (!mc || r.mc_type === mc) && hasPc(r, pc));
   let note = hw
     ? (cnSet.size ? `HW ${hw} — CN found: ${[...cnSet].join(', ')}` : `HW ${hw} — no CN/Setup Data Sheet found yet (Part No. not in Setup)`)
-    : 'Searched by Machine / Process code (no CN)';
+    : (alert === COST_ALERT && !pc && !mc ? 'All items with a detected cost update, across every HW'
+      : (!pc && !mc && (status || ring) ? '' : 'Searched by Machine / Process code (no CN)'));
 
   if (status) tooling = tooling.filter((r) => matchesStatus(r, status));
   if (ring) tooling = tooling.filter((r) => r.part_name === ring);
@@ -167,7 +202,13 @@ async function search({ hw, pc, mc, status, ring, alert }) {
 
   const totalPrice = tooling.reduce((a, r) => a + (Number(r.total_price) || 0), 0);
   const received = tooling.filter((r) => r.status === 'Received').length;
-  const filled = await autoFillMissingCn(tooling.slice(0, 500));
+  // No slice here any more: a HW-scoped search was always small enough that
+  // 500 was a generous ceiling, but status/ring-only searches (now reachable
+  // with no HW/Process/Machine picked — see the guard above) can legitimately
+  // return over 1,000 rows. `autoFillMissingCn` is a bulk fetch + bulk UPDATE,
+  // so the full set is cheap; the frontend's own virtualized table is what
+  // keeps rendering that many rows fast, not a server-side page size.
+  const filled = await autoFillMissingCn(tooling);
   const toolingPage = filled.map((r) => {
     const p = pendingByToolingId.get(r.id);
     return p ? {
@@ -198,7 +239,13 @@ async function summary() {
   const totalPrice = all.reduce((a, r) => a + (Number(r.total_price) || 0), 0);
   const received = all.filter((r) => r.status === 'Received');
   const receivedPrice = received.reduce((a, r) => a + (Number(r.total_price) || 0), 0);
-  const noPrice = all.filter((r) => !(Number(r.unit_price) > 0)).length;
+  // Replaces the old "Missing Price" KPI, which counted a condition that cut
+  // across every status (so it overlapped with Received and didn't sum to
+  // totalRows — e.g. 408 of the 922 were themselves Received). `status` is a
+  // single field per row, so Received/Waiting/UNUSED/Unknown is a true
+  // partition: count and value both add up to the totals above exactly.
+  const waitingRows = all.filter((r) => WAITING_STATUSES.includes(r.status));
+  const waitingPrice = waitingRows.reduce((a, r) => a + (Number(r.total_price) || 0), 0);
 
   const byStatus = {};
   all.forEach((r) => {
@@ -225,8 +272,10 @@ async function summary() {
     totalRows: all.length,
     totalPrice,
     received: { count: received.length, totalPrice: receivedPrice },
-    missingPrice: noPrice,
-    byStatus: Object.entries(byStatus).map(([status, v]) => ({ status, ...v })).sort((a, b) => b.n - a.n),
+    waiting: { count: waitingRows.length, totalPrice: waitingPrice },
+    // Default order is by value (highest first), same as byMachine below —
+    // not by row count, so the table opens showing where the money is.
+    byStatus: Object.entries(byStatus).map(([status, v]) => ({ status, ...v })).sort((a, b) => b.v - a.v),
     byMachine: Object.entries(byMachine).map(([mc_type, v]) => ({ mc_type, ...v })).sort((a, b) => b.v - a.v),
   };
 }
