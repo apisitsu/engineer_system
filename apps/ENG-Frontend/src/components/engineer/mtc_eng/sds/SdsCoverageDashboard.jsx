@@ -582,7 +582,7 @@ export default function SdsCoverageDashboard() {
     layout: { padding: { top: 20 } },
     scales: {
       x: { stacked: true, ticks: { color: C.textSec, font: { size: 10 }, maxRotation: 45 }, grid: { color: C.gridLine } },
-      y: { stacked: true, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine }, title: { display: true, text: 'New CNs', color: C.textSec, font: { size: 10 } } },
+      y: { stacked: true, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine }, title: { display: true, text: 'New SDS Reqs', color: C.textSec, font: { size: 10 } } },
     },
   };
 
@@ -603,17 +603,27 @@ export default function SdsCoverageDashboard() {
 
   const monthlyStatus = useMemo(() => {
     const all = data?.monthlyStatus || [];
+    const curMonth = new Date().toISOString().slice(0, 7);
     const raw = Object.fromEntries(
       all.filter(r => r.month >= fyeWin.start && r.month <= fyeWin.end).map(r => [r.month, r])
     );
-    const months = fyMonths(fyeWin)
-      .map(key => raw[key] || { month: key, complete: 0, pending: 0, complete_pct: 0 })
-      .map(r => scopeToPartType(r, filterPt));
     // Prepend the previous FY's final cumulative bar (latest month ≤ prevEnd) so the
     // current-FY running total starts from a visible carry-over baseline. `all` is sorted
     // ascending by month, so the last matching row is the FY-end value.
     const prevRows = all.filter(r => r.month <= fyeWin.prevEnd);
     const prevLast = prevRows.length ? prevRows[prevRows.length - 1] : null;
+
+    // This is a CUMULATIVE curve, so a month with no row yet is not necessarily "0" —
+    // the backend only emits a month once a CN is first produced in it, and the current
+    // month can go several days with none. Carry the last known snapshot forward onto
+    // it instead of zeroing the bar out; a genuinely future month (after curMonth) still
+    // has no snapshot to carry and correctly stays at 0/hidden via hasBarData.
+    let carry = prevLast;
+    const months = fyMonths(fyeWin).map((key) => {
+      if (raw[key]) { carry = raw[key]; return scopeToPartType(raw[key], filterPt); }
+      if (key <= curMonth && carry) return scopeToPartType({ ...carry, month: key }, filterPt);
+      return scopeToPartType({ month: key, complete: 0, pending: 0, complete_pct: 0 }, filterPt);
+    });
     if (prevLast) months.unshift({ ...scopeToPartType(prevLast, filterPt), isPrevLast: true, prevLabel: `${fyeWin.prevLabel} end` });
     return months;
   }, [data, fyeWin, filterPt]);
@@ -1231,7 +1241,12 @@ export default function SdsCoverageDashboard() {
             <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
               <Col span={8}>
                 <div style={{ ...cardStyle, height: '100%' }}>
-                  {sectionTitle('New Parts per Month', C)}
+                  {sectionTitle(
+                    <Tooltip title="Counts new (CN × machine × process) combinations, not CNs — one CN first produced on two machines counts as 2, possibly in different months. A combo's month is when it was FIRST produced (since the report's since-date), not a monthly recount.">
+                      <span style={{ cursor: 'help' }}>New SDS Reqs per Month</span>
+                    </Tooltip>,
+                    C
+                  )}
                   <div style={{ height: 240 }}>
                     {monthlyNewParts.length > 0
                       ? <Bar data={newPartsChartData} options={newPartsChartOpts} />
