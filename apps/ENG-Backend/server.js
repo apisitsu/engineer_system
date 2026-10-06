@@ -297,6 +297,12 @@ app.use('/api/engineer/mtc', mtcRoutes);
 const camRoutes = require('./api/engineer/cam/camRoutes');
 app.use('/api/engineer/cam', verifyToken, camRoutes);
 
+// PB Ring tooling monitor/manage — independent of the SDS pipeline / Tooling
+// Select (own pbring_* tables, own route namespace). See .claude plan
+// "PB Ring Tooling Manager -> New MTC Module" for the full design.
+const pbringRoutes = require('./api/engineer/pbring/pbringRoutes');
+app.use('/api/engineer/pbring', verifyToken, pbringRoutes);
+
 const { router: toolingSelectRoutes, syncNewCns } = require('./api/engineer/mtc/tsv2Routes');
 app.use('/api/tooling-select', verifyToken, toolingSelectRoutes);
 

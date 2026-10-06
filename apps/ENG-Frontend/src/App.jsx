@@ -62,6 +62,7 @@ import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/Spe
 import CnEnablePage from './components/engineer/mtc_eng/sds/CnEnablePage';
 import SdsHistoryPage from './components/engineer/mtc_eng/sds/SdsHistoryPage';
 import LotStatusTracker from './components/engineer/mtc_eng/lot_track/LotStatusTracker';
+import PbRingMonitorPage from './components/engineer/mtc_eng/pbring/PbRingMonitorPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import ComparePdfTool from './components/engineer/newprod_eng/ComparePdfTool/ComparePdfTool';
 
@@ -365,6 +366,7 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_SELECT} element={<ToolingSelectPage />} />
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
                   <Route path={MTC_PATHS.PART_MANAGEMENT} element={<SpecProcessManager />} />
+                  <Route path={MTC_PATHS.PB_RING} element={<PbRingMonitorPage />} />
                   <Route path={MTC_PATHS.CN_ENABLE} element={<CnEnablePage />} />
                   {/* CAD/CAM route is above, outside MainLayout — see the note there. */}
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
