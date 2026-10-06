@@ -62,8 +62,15 @@ const HomeMTCEng = () => {
   const fetchSdsCoverage = async () => {
     try {
       const res = await axios.get(`${server.MTC_SDS_V2_REPORT_COVERAGE}`);
-      if (res.status === 202 || res.data?.building) {
-        setSdsBuilding(true);
+      // `building:true` covers two different cases: a true cold start with nothing
+      // cached yet (no `kpi` in the response — show the placeholder), and the far
+      // more common stale-while-revalidate refresh, where the last good numbers ride
+      // along in the SAME response while a rebuild runs quietly in the background.
+      // Bailing out on `building` alone threw the second case's numbers away and
+      // showed "building for the first time" every time the 15-min cache TTL (or a
+      // config edit) kicked off a routine background refresh.
+      if (!res.data?.kpi) {
+        setSdsBuilding(res.status === 202 || !!res.data?.building);
         return;
       }
       setSdsKpi(res.data?.kpi || null);

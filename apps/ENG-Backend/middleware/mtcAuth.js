@@ -56,6 +56,27 @@ const hasFeature = (feature) => {
 };
 
 /**
+ * Membership in the MTC team itself — `req.user.group` (JWT claim, sourced from
+ * `user_group`/`m_user_profile.user_group`), not `department`/`role`. Separate
+ * from `isEngineer`/`isAdmin`, which gate on department: a feature that should
+ * be open to "anyone on the MTC team" (e.g. PB Ring tooling) is not the same
+ * question as "is this person an Engineering-department AD admin".
+ */
+const isMtcTeam = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: 'User context missing. Authentication required.' });
+  }
+  const group = req.user.group || req.user.user_group || '';
+  if (group !== 'MTC') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied: this action is limited to the MTC team.'
+    });
+  }
+  next();
+};
+
+/**
  * The same test `isAdmin` applies, as a plain predicate.
  *
  * A guard can only answer "may this request proceed at all". Some routes need
@@ -80,5 +101,6 @@ module.exports = {
   hasFeature,
   isAdmin: authorize(['AD']),
   isAdminUser,
-  isEngineer: authorize(['AD', 'Engineering'])
+  isEngineer: authorize(['AD', 'Engineering']),
+  isMtcTeam,
 };
