@@ -32,9 +32,16 @@ const authorize = (allowedRoles = []) => {
  * Feature-level permission guard. Passes when the user is a full admin
  * (department/role === 'AD') OR holds the named feature permission in their JWT
  * `perms` array (sourced from m_user_profile.feature_perms). Lets a specific
- * non-admin user administer ONE section (e.g. 'tooling_admin', 'sds_admin')
- * without being granted blanket 'AD' admin everywhere.
- * @param {string} feature - feature key, e.g. 'tooling_admin' | 'sds_admin'
+ * non-admin user administer ONE section (e.g. 'tooling_select_admin',
+ * 'sds_setting_admin') without being granted blanket 'AD' admin everywhere.
+ *
+ * `'all_mtc'` is a standing superset of every hasFeature(...) check in the
+ * backend — the Permissions Config page's "All MTC" grant (2026-10-06). It is
+ * checked here, in the one place every MTC feature flag already routes
+ * through, specifically so it stays bounded to "every hasFeature-gated MTC
+ * route" and never silently grows into isAdmin/isMtcTeam/other guards outside
+ * this function (SDS approval signing, PB Ring approver, etc. are untouched).
+ * @param {string} feature - feature key, e.g. 'tooling_select_admin' | 'sds_setting_admin'
  */
 const hasFeature = (feature) => {
   return (req, res, next) => {
@@ -45,7 +52,7 @@ const hasFeature = (feature) => {
     const userRole = req.user.role || req.user.u_role || '';
     const perms = Array.isArray(req.user.perms) ? req.user.perms : [];
 
-    if (userDept === 'AD' || userRole === 'AD' || perms.includes(feature)) {
+    if (userDept === 'AD' || userRole === 'AD' || perms.includes(feature) || perms.includes('all_mtc')) {
       return next();
     }
     return res.status(403).json({

@@ -12,8 +12,12 @@ const templateBConformance = require('../services/templateBConformance');
 const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 const cache = require('../services/agents/CacheAgent');
-// SDS coverage-report config is part of the SDS admin surface.
-const isAdmin = hasFeature('sds_admin');
+// The "Scope" button on the SDS Coverage Report page (backlog-to-board,
+// auto-stamp config, bulk parameter import, report config). Separate key from
+// Setup Data Sheet's own 'sds_setting_admin' (sdsV2AdminController.js /
+// sdsV2ImageController.js) — the Permissions Config page (2026-10-06) grants
+// these two independently. Also passed by 'all_mtc'.
+const isAdmin = hasFeature('sds_report_admin');
 
 const router = express.Router();
 

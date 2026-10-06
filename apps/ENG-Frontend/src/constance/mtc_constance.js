@@ -24,6 +24,7 @@ export const MTC_PATHS = {
   SDS_SELECTION_COND: '/eng/mtc_eng/sds-v2/selection-condition',
   LOT_TRACK: '/eng/mtc_eng/lot-track',
   PB_RING: '/eng/mtc_eng/pb-ring',
+  PERMISSIONS_CONFIG: '/eng/mtc_eng/permissions-config',
   EMAIL_CONFIG: '/eng/mtc/email-config',
   FORMULA_CONFIG: '/eng/mtc/formulas',
   SELECTION_RULES: '/eng/mtc_eng/selection-rules',
@@ -45,6 +46,7 @@ export const MTC_VERSIONS = {
   'lot-track':                { version: '1.1', updated: '2026-09-07' },
   'general-dwg-report':       { version: '1.0', updated: '2026-09-23' },
   'pb-ring':                  { version: '0.1', updated: '2026-10-03' },
+  'permissions-config':       { version: '1.0', updated: '2026-10-06' },
 };
 
 export const WORKFLOW_STATUS = {
