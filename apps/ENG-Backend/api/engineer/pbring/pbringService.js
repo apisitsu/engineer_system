@@ -164,11 +164,11 @@ async function search({ hw, pc, mc, status, ring, alert }) {
   const all = await fetchAllTooling();
   const cnOf = (r) => String(r.cn || '').split(/\s*\/\s*/).filter(Boolean);
   const hwRows = hw ? all.filter((r) => r.part_group === hw) : all;
-  const cnSet = hw ? new Set(hwRows.flatMap(cnOf)) : null;
+  const cnSetForNote = hw ? new Set(hwRows.flatMap(cnOf)) : null;
 
   let tooling = hwRows.filter((r) => (!mc || r.mc_type === mc) && hasPc(r, pc));
   let note = hw
-    ? (cnSet.size ? `HW ${hw} — CN found: ${[...cnSet].join(', ')}` : `HW ${hw} — no CN/Setup Data Sheet found yet (Part No. not in Setup)`)
+    ? (cnSetForNote.size ? `HW ${hw} — CN found: ${[...cnSetForNote].join(', ')}` : `HW ${hw} — no CN/Setup Data Sheet found yet (Part No. not in Setup)`)
     : (alert === COST_ALERT && !pc && !mc ? 'All items with a detected cost update, across every HW'
       : (!pc && !mc && (status || ring) ? '' : 'Searched by Machine / Process code (no CN)'));
 
@@ -182,23 +182,37 @@ async function search({ hw, pc, mc, status, ring, alert }) {
   const pendingByToolingId = new Map(pending.map((p) => [p.tooling_id, p]));
   if (alert === COST_ALERT) tooling = tooling.filter((r) => pendingByToolingId.has(r.id));
 
+  // CN set for the SDS lookups below — scoped to the FINAL tooling result
+  // (after status/ring/alert, not just hw), and never null/"no filter". It
+  // used to only get built when `hw` was set, so a status/ring-only search
+  // (ring-only is reachable since the guard fix above) left it null, which
+  // made `$1::text[] IS NULL` bypass the CN filter entirely — the query then
+  // ran fully unscoped and always returned an arbitrary top-N slice of the
+  // whole table (e.g. always exactly 200, LIMIT's value, out of 2,942 rows)
+  // no matter what was actually selected.
+  const cnSet = [...new Set(tooling.flatMap(cnOf))];
+
   const paramRows = await engPool.query(
-    `SELECT * FROM ${TABLES.SDS_PARAM}
-      WHERE ($1::text[] IS NULL OR cn = ANY($1))
+    `SELECT *, COUNT(*) OVER() AS total_matches FROM ${TABLES.SDS_PARAM}
+      WHERE cn = ANY($1)
         AND ($2::text IS NULL OR process_code = $2)
         AND ($3::text IS NULL OR mc_key = $3)
       ORDER BY cn, process_code LIMIT 200`,
-    [cnSet ? [...cnSet] : null, pc || null, mc ? machineKey(mc) : null]
+    [cnSet, pc || null, mc ? machineKey(mc) : null]
   );
 
   const condRows = await engPool.query(
-    `SELECT * FROM ${TABLES.SDS_CONDITION}
-      WHERE ($1::text[] IS NULL OR cn = ANY($1))
+    `SELECT *, COUNT(*) OVER() AS total_matches FROM ${TABLES.SDS_CONDITION}
+      WHERE cn = ANY($1)
         AND ($2::text IS NULL OR process_code = $2)
         AND ($3::text IS NULL OR mc_key = $3)
       ORDER BY cn, process_code LIMIT 500`,
-    [cnSet ? [...cnSet] : null, pc || null, mc ? machineKey(mc) : null]
+    [cnSet, pc || null, mc ? machineKey(mc) : null]
   );
+  // `rowCount` on either query above is capped by its own LIMIT; the window
+  // function gives the true match count regardless of how many rows came back.
+  const sdsParamCount = paramRows.rows[0] ? Number(paramRows.rows[0].total_matches) : 0;
+  const sdsConditionCount = condRows.rows[0] ? Number(condRows.rows[0].total_matches) : 0;
 
   const totalPrice = tooling.reduce((a, r) => a + (Number(r.total_price) || 0), 0);
   const received = tooling.filter((r) => r.status === 'Received').length;
@@ -221,8 +235,8 @@ async function search({ hw, pc, mc, status, ring, alert }) {
     empty: false,
     note,
     kpi: {
-      sdsParamCount: paramRows.rowCount,
-      sdsConditionCount: condRows.rowCount,
+      sdsParamCount,
+      sdsConditionCount,
       toolingCount: tooling.length,
       received,
       totalPrice,
