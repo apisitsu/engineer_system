@@ -63,6 +63,7 @@ import CnEnablePage from './components/engineer/mtc_eng/sds/CnEnablePage';
 import SdsHistoryPage from './components/engineer/mtc_eng/sds/SdsHistoryPage';
 import LotStatusTracker from './components/engineer/mtc_eng/lot_track/LotStatusTracker';
 import PbRingMonitorPage from './components/engineer/mtc_eng/pbring/PbRingMonitorPage';
+import PermissionsConfigPage from './components/engineer/mtc_eng/permissions/PermissionsConfigPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import ComparePdfTool from './components/engineer/newprod_eng/ComparePdfTool/ComparePdfTool';
 
@@ -368,6 +369,7 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.PART_MANAGEMENT} element={<SpecProcessManager />} />
                   <Route path={MTC_PATHS.PB_RING} element={<PbRingMonitorPage />} />
                   <Route path={MTC_PATHS.CN_ENABLE} element={<CnEnablePage />} />
+                  <Route path={MTC_PATHS.PERMISSIONS_CONFIG} element={<PermissionsConfigPage />} />
                   {/* CAD/CAM route is above, outside MainLayout — see the note there. */}
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />

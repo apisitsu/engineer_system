@@ -91,6 +91,11 @@ export const server = {
   PBRING_HISTORY_MACHINES: `${apiUrl}api/engineer/pbring/history/machines`, // ?pc=
   PBRING_HISTORY_TEMPLATE: `${apiUrl}api/engineer/pbring/history/template`, // ?pc=&mc=
   PBRING_TOOLING_FROM_HISTORY: `${apiUrl}api/engineer/pbring/tooling/from-history`,
+
+  // Permissions Config — grant/revoke feature_perms (tooling_admin/sds_admin/
+  // general_dwg_admin). Access restricted to AD + an explicit empno allowlist.
+  PERMISSIONS_CONFIG_USERS: `${apiUrl}api/engineer/mtc/permissions-config/users`, // append /:u_code for PUT
+
   TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_SPEC_COUNTS: `${apiUrl}api/tooling-select/spec/counts`,

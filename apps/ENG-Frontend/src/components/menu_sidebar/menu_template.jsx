@@ -17,12 +17,16 @@ const menuItemsMap = {
 
 export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys, selectedKeys }) => {
     const [collapsed, setCollapsed] = useState(false);
-    const { userRole, userDepartment, userSection } = useAuthStore();
+    const { userRole, userDepartment, userSection, empNo } = useAuthStore();
     const location = useLocation();
 
     const isAdmin = userRole === 'AD' || userDepartment === 'AD';
     // userSection actually holds the user's user_group (e.g. "MTC") — see sign_in.jsx.
     const isMtcSection = isAdmin || userSection === 'MTC';
+    // Mirrors the backend allowlist in permissionsConfigController.js — LE485 is
+    // listed explicitly because their AD department is expected to be revoked
+    // later (request 2026-10-06), unlike isAdmin which would lose them then.
+    const canManagePermissions = isAdmin || empNo === 'LE485';
 
     const baseItems = menuItemsMap[type];
     if (!baseItems) return null;
@@ -32,6 +36,7 @@ export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys, selec
         currentItems = baseItems.filter(item => {
             if (item.key === 'admin-config' && !isAdmin) return false;
             if ((item.key === 'tooling-select' || item.key === 'master-data') && !isMtcSection) return false;
+            if (item.key === 'permissions-config' && !canManagePermissions) return false;
             return true;
         });
     } else if (type === 'Process' && !isAdmin) {

@@ -18,13 +18,21 @@
  * write access specifically. Deliberately local to this route file rather than
  * baked into the shared `isMtcTeam`, which other MTC-team-gated features will
  * reuse and must not inherit this exclusion.
+ *
+ * `+ New HW` (from-history) and `Delete all <HW>` are structural actions — they
+ * add or remove a whole part group's rows, not edit one — so the Permissions
+ * Config page (2026-10-06) gates them separately on `isPbringAdmin`
+ * (`hasFeature('pbring_admin')`: full 'AD', the granted 'pbring_admin' perm, or
+ * 'all_mtc') instead of `isPbringWriter`. Routine per-row edits (manual PUT,
+ * single-row delete, cost detect/approve/reject) are UNCHANGED — still whole
+ * MTC team minus `WRITE_DENYLIST`.
  */
 
 const express = require('express');
 const router = express.Router();
 
 const pbringController = require('./pbringController');
-const { isMtcTeam } = require('../../../middleware/mtcAuth');
+const { isMtcTeam, hasFeature } = require('../../../middleware/mtcAuth');
 const { WRITE_DENYLIST } = require('./pbringConstants');
 
 const isPbringWriter = [isMtcTeam, (req, res, next) => {
@@ -37,20 +45,22 @@ const isPbringWriter = [isMtcTeam, (req, res, next) => {
   next();
 }];
 
+const isPbringAdmin = hasFeature('pbring_admin');
+
 router.get('/filters', pbringController.getFilters);
 router.get('/search', pbringController.search);
 router.get('/summary', pbringController.summary);
 router.get('/cn-lookup', pbringController.cnLookup);
 router.put('/tooling/:id', isPbringWriter, pbringController.updateTooling);
 router.delete('/tooling/:id', isPbringWriter, pbringController.deleteTooling);
-router.delete('/hw/:partGroup', isPbringWriter, pbringController.deleteByPartGroup);
+router.delete('/hw/:partGroup', isPbringAdmin, pbringController.deleteByPartGroup);
 
 // Add new HW, from history — read endpoints open to any authenticated user,
-// the actual insert guarded same as the manual edit above.
+// the actual insert requires the 'pbring_admin' grant (see header note).
 router.get('/history/process-codes', pbringController.historyProcessCodes);
 router.get('/history/machines', pbringController.historyMachines);
 router.get('/history/template', pbringController.historyTemplate);
-router.post('/tooling/from-history', isPbringWriter, pbringController.createFromHistory);
+router.post('/tooling/from-history', isPbringAdmin, pbringController.createFromHistory);
 
 // Maqdb cost auto-detect — matches tool_code against lpb.pc_material_purchase
 // (see toolCodeMatch.js / pbringCostDetectService.js). Detect + list are read

@@ -8,8 +8,11 @@ const { TABLES } = require('../mtcConstants');
 const cache = require('../services/agents/CacheAgent');
 const invalidateCache = (cn) => cache.invalidate(`tooling:${String(cn).trim().toUpperCase()}`);
 const { hasFeature } = require('../../../../middleware/mtcAuth');
-// Part-spec management is part of the Tooling Select admin surface.
-const isAdmin = hasFeature('tooling_admin');
+// Part Management — the "Master Data > Part Management" sidebar page.
+// Separate key from Tooling Select's own 'tooling_select_admin' (tsv2Routes.js)
+// even though both mount under /api/tooling-select — the Permissions Config
+// page (2026-10-06) grants these two independently. Also passed by 'all_mtc'.
+const isAdmin = hasFeature('master_data_admin');
 const { searchByCn } = require('../services/sdsV2SearchService');
 const { resolveKubun } = require('../utils/cnKubun');
 const { syncComponentDims } = require('../services/specComponentDims');

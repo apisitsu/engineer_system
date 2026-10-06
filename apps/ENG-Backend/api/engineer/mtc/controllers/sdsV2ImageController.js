@@ -5,12 +5,16 @@ const { TABLES } = require('../mtcConstants');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 const { normalizeTarget, prefixLevel, cnMatchKeys, shapeFamiliesFor } = require('../utils/grindingPrefix');
 
-// SDS image mutations are part of the SDS admin surface — same guard as every other
-// SDS config write (sdsV2AdminController): full 'AD' admin OR the 'sds_admin' feature
-// permission. Reads (GET) stay open to any authenticated user. Without this, an
-// ENG/QA user (the SDS admin page is reachable by those roles) could upload, replace
+// SDS image mutations share a key with the Excel Config / grid editor
+// (sdsV2AdminController's template-config/template-grid* routes) — both were
+// the original "Excel Config, Images" ask (2026-10-06), kept separate from the
+// rest of Setup Data Sheet "Setting" (machine-types/mappings/parameters/etc)
+// so it can be granted narrowly, e.g. to a Leader. Full 'AD' admin OR the
+// 'sds_excel_image_admin' feature permission also pass (and 'all_mtc').
+// Reads (GET) stay open to any authenticated user. Without this, an ENG/QA
+// user (the SDS admin page is reachable by those roles) could upload, replace
 // or delete tooling / grinding images that print onto operator setup sheets.
-const isAdmin = hasFeature('sds_admin');
+const isAdmin = hasFeature('sds_excel_image_admin');
 
 const router = express.Router();
 

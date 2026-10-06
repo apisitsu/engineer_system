@@ -112,6 +112,7 @@ export const mtc = createMenu([
     // "Full Report" buttons on their home-page cards (home_mtc.jsx) — SDS History
     // moved to a "History" button on the Setup Data Sheet page itself (SdsV2Page.jsx,
     // next to Setting).
+    { label: "Permissions Config", path: MTC_PATHS.PERMISSIONS_CONFIG, key: "permissions-config" },
 ]);
 
 export const all = createMenu([
