@@ -303,6 +303,11 @@ app.use('/api/engineer/cam', verifyToken, camRoutes);
 const pbringRoutes = require('./api/engineer/pbring/pbringRoutes');
 app.use('/api/engineer/pbring', verifyToken, pbringRoutes);
 
+// Who may grant/revoke feature_perms — see permissionsConfigController.js header
+// for why this is gated tighter than plain isAdmin.
+const permissionsConfigRoutes = require('./api/engineer/mtc/controllers/permissionsConfigController');
+app.use('/api/engineer/mtc/permissions-config', verifyToken, permissionsConfigRoutes);
+
 const { router: toolingSelectRoutes, syncNewCns } = require('./api/engineer/mtc/tsv2Routes');
 app.use('/api/tooling-select', verifyToken, toolingSelectRoutes);
 
@@ -357,6 +362,12 @@ app.use('/api/sds/v2/report', sdsV2ReportController);
 
 // Backward Compatibility for Tooling Inspect
 const legacyMtcController = require('./api/engineer/mtc/controllers/legacyMtcController');
+const { hasFeature: hasMtcFeature } = require('./middleware/mtcAuth');
+// Add Request / Add Return / Update Data / row Update previously had NO guard
+// beyond verifyToken — any logged-in user could write. Gated 2026-10-06 via the
+// Permissions Config page's 'tooling_inspect_admin' grant (full 'AD' or 'all_mtc'
+// also pass, per hasFeature()). Reads stay open to any authenticated user.
+const toolingInspectAdmin = hasMtcFeature('tooling_inspect_admin');
 app.route('/api/tooling_inspect/getlist').get(verifyToken, legacyMtcController.ToolingInspectGetlist);
 app.route('/api/tooling_inspect/dashboard_stats').get(verifyToken, legacyMtcController.ToolingDashboadtGetlist);
 app.route('/api/tooling_inspect/result_dashboard').get(verifyToken, legacyMtcController.ToolingResultDashboard);
@@ -364,12 +375,12 @@ app.route('/api/tooling_inspect/available_fye').get(verifyToken, legacyMtcContro
 app.route('/api/tooling_inspect/dwg_require_getlist').get(verifyToken, legacyMtcController.ToolDWGRequestGetList);
 
 // Protected Modification endpoints
-app.route('/api/tooling_inspect/dwg_require_add').post(verifyToken, legacyMtcController.ToolDWGRequestAdd);
-app.route('/api/tooling_inspect/dwg_require_update').put(verifyToken, legacyMtcController.ToolDWGRequestUpdate);
-app.route('/api/tooling_inspect/return_add').post(verifyToken, legacyMtcController.ToolingReturnAdd);
-app.route('/api/tooling_inspect/inspect_update').post(verifyToken, legacyMtcController.ToolingInspectUpdate);
+app.route('/api/tooling_inspect/dwg_require_add').post(verifyToken, toolingInspectAdmin, legacyMtcController.ToolDWGRequestAdd);
+app.route('/api/tooling_inspect/dwg_require_update').put(verifyToken, toolingInspectAdmin, legacyMtcController.ToolDWGRequestUpdate);
+app.route('/api/tooling_inspect/return_add').post(verifyToken, toolingInspectAdmin, legacyMtcController.ToolingReturnAdd);
+app.route('/api/tooling_inspect/inspect_update').post(verifyToken, toolingInspectAdmin, legacyMtcController.ToolingInspectUpdate);
 app.route('/api/tooling_inspect/status_preview').get(verifyToken, legacyMtcController.ToolingStatusPreview);
-app.route('/api/tooling_inspect/sync_csv').post(verifyToken, legacyMtcController.ToolingSyncCSV);
+app.route('/api/tooling_inspect/sync_csv').post(verifyToken, toolingInspectAdmin, legacyMtcController.ToolingSyncCSV);
 app.route('/api/master/wc').get(verifyToken, legacyMtcController.GetWCCodes);
 
 

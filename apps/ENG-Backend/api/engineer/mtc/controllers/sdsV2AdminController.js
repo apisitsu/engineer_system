@@ -5,9 +5,25 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const { NON_GRIND_KUBUN } = require('../utils/cnKubun');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
-// SDS admin mutations: full 'AD' admin OR a user holding the 'sds_admin'
-// feature permission (granular, non-AD). See hasFeature().
-const isAdmin = hasFeature('sds_admin');
+// Setup Data Sheet "Setting" surface — machine-types, mappings, parameters,
+// machine-tools, machine-codes, visible-machines, the audit sub-tabs other than
+// CN Enable: full 'AD' admin OR a user holding the 'sds_setting_admin' feature
+// permission (granular, non-AD; also passed by 'all_mtc'). See hasFeature().
+// NOTE: template-config/template-grid* are a SEPARATE key — isSdsExcelImageAdmin,
+// below.
+const isAdmin = hasFeature('sds_setting_admin');
+// The CN Enable sidebar page (CnEnablePage.jsx -> AuditTab, GET /audit/data-integrity
+// only) is a SEPARATE key under Master Data, not under Setting — granted
+// independently via the Permissions Config page (2026-10-06).
+const isMasterDataAdmin = hasFeature('master_data_admin');
+// Excel Config + grid editor (/template-config*, /template-grid*, /template-grids*,
+// /machine-types/grid-assignments, /machine-types/:id/grid-template) is its own
+// key, separate from the rest of Setting — split out 2026-10-06 so it can be
+// granted (e.g. to a Leader) without also handing out machine-types/mappings/
+// parameters/machine-tools/machine-codes/visible-machines. Tooling images
+// (sdsV2ImageController.js) share this key — both were the original "Excel
+// Config, Images" ask.
+const isSdsExcelImageAdmin = hasFeature('sds_excel_image_admin');
 const cache = require('../services/agents/CacheAgent');
 const { invalidateCoverageCache } = require('./sdsV2ReportController');
 const sdsBoardRef = require('../utils/sdsBoardRef');
@@ -1025,8 +1041,8 @@ router.put('/visible-machines', isAdmin, async (req, res) => {
 
 // ── Audit: Data Integrity ────────────────────────────────────────────────────
 
-/** GET /api/sds/v2/admin/audit/data-integrity */
-router.get('/audit/data-integrity', isAdmin, async (req, res) => {
+/** GET /api/sds/v2/admin/audit/data-integrity — the CN Enable page */
+router.get('/audit/data-integrity', isMasterDataAdmin, async (req, res) => {
   try {
     const cfg = await getAuditConfig();
     const targetProcessCodes  = cfg.process_codes;
@@ -1307,7 +1323,7 @@ async function ensureGridTemplateTable() {
 /** GET /api/sds/v2/admin/template-config
  *  Returns all CSS config rows merged with defaults, plus machine-type list.
  */
-router.get('/template-config', isAdmin, async (req, res) => {
+router.get('/template-config', isSdsExcelImageAdmin, async (req, res) => {
   try {
     await ensureTemplateCssTable();
     const r = await engPool.query(
@@ -1332,7 +1348,7 @@ router.get('/template-config', isAdmin, async (req, res) => {
  *  Body: { configs: [{ config_key, config_value }] }
  *  Upserts rows; flushes SDS cache AND headless CSS cache so PDFs pick up changes immediately.
  */
-router.put('/template-config', isAdmin, flushSds, async (req, res) => {
+router.put('/template-config', isSdsExcelImageAdmin, flushSds, async (req, res) => {
   const { configs } = req.body;
   if (!Array.isArray(configs) || !configs.length) {
     return res.status(400).json({ error: 'configs array required' });
@@ -1377,7 +1393,7 @@ router.put('/template-config', isAdmin, flushSds, async (req, res) => {
  *  Returns sds_parameter rows where cn IS NULL (machine-level config), optionally
  *  filtered by machine_type_name. Also returns sds_excel_mapping rows.
  */
-router.get('/template-config/common-params', isAdmin, async (req, res) => {
+router.get('/template-config/common-params', isSdsExcelImageAdmin, async (req, res) => {
   const { machine_type_name } = req.query;
   try {
     const paramQ = machine_type_name
@@ -1420,7 +1436,7 @@ router.get('/template-config/common-params', isAdmin, async (req, res) => {
  *  Returns the Excel-like blank-template grid layout (cells, borders, fills)
  *  stored as a single JSON blob under config_key 'grid-layout'. null if never saved.
  */
-router.get('/template-grid', isAdmin, async (req, res) => {
+router.get('/template-grid', isSdsExcelImageAdmin, async (req, res) => {
   try {
     await ensureGridTemplateTable();
     const r = await engPool.query(
@@ -1442,7 +1458,7 @@ router.get('/template-grid', isAdmin, async (req, res) => {
  *  exactly mirrors the real Excel template — column widths, row heights, borders,
  *  fills (and merge ranges). Used by the "Import xlsx" action / first-load default.
  */
-router.get('/template-grid/from-xlsx', isAdmin, async (req, res) => {
+router.get('/template-grid/from-xlsx', isSdsExcelImageAdmin, async (req, res) => {
   try {
     const grid = await parseSdsXlsxGrid();
     res.json({ grid });
@@ -1458,7 +1474,7 @@ router.get('/template-grid/from-xlsx', isAdmin, async (req, res) => {
  *  that case. A real multi-machine export routinely holds 20+ sheets, one per machine —
  *  see the note on parseXlsxGridFromBuffer for why blindly reading sheet 1 is wrong.
  */
-router.post('/template-grid/from-xlsx-upload/sheets', isAdmin, async (req, res) => {
+router.post('/template-grid/from-xlsx-upload/sheets', isSdsExcelImageAdmin, async (req, res) => {
   if (!req.files || !req.files.xlsx) return res.status(400).json({ error: 'xlsx file is required (field: xlsx)' });
   const file = Array.isArray(req.files.xlsx) ? req.files.xlsx[0] : req.files.xlsx;
   if (!/\.xlsx$/i.test(file.name || '')) return res.status(400).json({ error: 'file must be .xlsx' });
@@ -1482,7 +1498,7 @@ router.post('/template-grid/from-xlsx-upload/sheets', isAdmin, async (req, res) 
  *  sds_grid_template; the caller still has to click Save to persist it, exactly like
  *  the existing "Import xlsx" flow.
  */
-router.post('/template-grid/from-xlsx-upload', isAdmin, async (req, res) => {
+router.post('/template-grid/from-xlsx-upload', isSdsExcelImageAdmin, async (req, res) => {
   if (!req.files || !req.files.xlsx) return res.status(400).json({ error: 'xlsx file is required (field: xlsx)' });
   const file = Array.isArray(req.files.xlsx) ? req.files.xlsx[0] : req.files.xlsx;
   if (!/\.xlsx$/i.test(file.name || '')) return res.status(400).json({ error: 'file must be .xlsx' });
@@ -1500,7 +1516,7 @@ router.post('/template-grid/from-xlsx-upload', isAdmin, async (req, res) => {
  *  multi-template PUT /template-grids/:id it is the legacy singular of, so the
  *  coverage cache and any grid-derived SDS cache pick up the edit immediately.
  */
-router.put('/template-grid', isAdmin, flushSds, async (req, res) => {
+router.put('/template-grid', isSdsExcelImageAdmin, flushSds, async (req, res) => {
   const { grid } = req.body;
   if (!grid || typeof grid !== 'object' || Array.isArray(grid)) {
     return res.status(400).json({ error: 'grid object required' });
@@ -1534,7 +1550,7 @@ router.put('/template-grid', isAdmin, flushSds, async (req, res) => {
 // layouts coexist and be assigned per machine (sds_machine_type_code.grid_template_id).
 
 /** GET /api/sds/v2/admin/template-grids — list templates (metadata only, no grid_json) */
-router.get('/template-grids', isAdmin, async (req, res) => {
+router.get('/template-grids', isSdsExcelImageAdmin, async (req, res) => {
   try {
     await ensureGridTemplateTable();
     const r = await engPool.query(
@@ -1551,7 +1567,7 @@ router.get('/template-grids', isAdmin, async (req, res) => {
 });
 
 /** GET /api/sds/v2/admin/template-grids/:id — one template with its grid */
-router.get('/template-grids/:id', isAdmin, async (req, res) => {
+router.get('/template-grids/:id', isSdsExcelImageAdmin, async (req, res) => {
   try {
     await ensureGridTemplateTable();
     const r = await engPool.query(
@@ -1568,7 +1584,7 @@ router.get('/template-grids/:id', isAdmin, async (req, res) => {
 });
 
 /** POST /api/sds/v2/admin/template-grids — create { name, grid?, copyFromId? } */
-router.post('/template-grids', isAdmin, flushSds, async (req, res) => {
+router.post('/template-grids', isSdsExcelImageAdmin, flushSds, async (req, res) => {
   const { name, grid, copyFromId } = req.body;
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
   try {
@@ -1599,7 +1615,7 @@ router.post('/template-grids', isAdmin, flushSds, async (req, res) => {
 });
 
 /** PUT /api/sds/v2/admin/template-grids/:id — update { name?, grid? } */
-router.put('/template-grids/:id', isAdmin, flushSds, async (req, res) => {
+router.put('/template-grids/:id', isSdsExcelImageAdmin, flushSds, async (req, res) => {
   const { name, grid } = req.body;
   if (name == null && grid == null) return res.status(400).json({ error: 'name or grid required' });
   if (grid != null && (typeof grid !== 'object' || Array.isArray(grid))) {
@@ -1626,7 +1642,7 @@ router.put('/template-grids/:id', isAdmin, flushSds, async (req, res) => {
 });
 
 /** PUT /api/sds/v2/admin/template-grids/:id/default — make this the default template */
-router.put('/template-grids/:id/default', isAdmin, flushSds, async (req, res) => {
+router.put('/template-grids/:id/default', isSdsExcelImageAdmin, flushSds, async (req, res) => {
   const client = await engPool.connect();
   try {
     await ensureGridTemplateTable();
@@ -1648,7 +1664,7 @@ router.put('/template-grids/:id/default', isAdmin, flushSds, async (req, res) =>
 });
 
 /** DELETE /api/sds/v2/admin/template-grids/:id — delete (default is protected) */
-router.delete('/template-grids/:id', isAdmin, flushSds, async (req, res) => {
+router.delete('/template-grids/:id', isSdsExcelImageAdmin, flushSds, async (req, res) => {
   try {
     await ensureGridTemplateTable();
     const row = await engPool.query(`SELECT is_default FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE id = $1`, [req.params.id]);
@@ -1666,7 +1682,7 @@ router.delete('/template-grids/:id', isAdmin, flushSds, async (req, res) => {
  *  Active machine types with their assigned template id (self-heals the column).
  *  Kept separate from the public /machine-types list so that endpoint never depends
  *  on the multi-template migration having run. */
-router.get('/machine-types/grid-assignments', isAdmin, async (req, res) => {
+router.get('/machine-types/grid-assignments', isSdsExcelImageAdmin, async (req, res) => {
   try {
     await ensureGridTemplateTable();
     const r = await engPool.query(
@@ -1682,7 +1698,7 @@ router.get('/machine-types/grid-assignments', isAdmin, async (req, res) => {
 });
 
 /** PUT /api/sds/v2/admin/machine-types/:id/grid-template — assign { grid_template_id|null } */
-router.put('/machine-types/:id/grid-template', isAdmin, flushSds, async (req, res) => {
+router.put('/machine-types/:id/grid-template', isSdsExcelImageAdmin, flushSds, async (req, res) => {
   const { grid_template_id } = req.body;
   try {
     await ensureGridTemplateTable();

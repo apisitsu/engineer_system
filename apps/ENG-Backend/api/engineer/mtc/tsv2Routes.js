@@ -3,9 +3,13 @@
 const express = require('express');
 const router  = express.Router();
 const { hasFeature } = require('../../../middleware/mtcAuth');
-// Tooling Select admin mutations: full 'AD' admin OR a user holding the
-// 'tooling_admin' feature permission (granular, non-AD). See hasFeature().
-const isAdmin = hasFeature('tooling_admin');
+// Tooling Select admin mutations (machines/limits/formulas/rules/inventory/
+// partno-map/board-config — the "Setting" button on the Tooling Select page):
+// full 'AD' admin OR a user holding the 'tooling_select_admin' feature
+// permission (granular, non-AD; also passed by 'all_mtc'). See hasFeature().
+// Part Management (/spec) is a SEPARATE key, 'master_data_admin' — see
+// specController.js — even though it is mounted on this same router.
+const isAdmin = hasFeature('tooling_select_admin');
 
 const machineCtrl     = require('./controllers/machineController');
 const limitCtrl       = require('./controllers/limitController');
