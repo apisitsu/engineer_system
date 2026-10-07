@@ -451,14 +451,21 @@ async function buildCoverage() {
         GROUP BY control_no, machine, process
       `, [exclItemNos, since, wcArr, procCodes, prefixRegex]).catch(() => ({ rows: [] })),
 
-      // 12. Machine master from rodpc — machine_code → m_model (machine type name)
-      //     Used as base; sds_machine_code (query 9) overrides for SDS-curated names
+      // 12. Machine master from rodpc — machine_code → m_model (machine type name).
+      //     Used as base; sds_machine_code (query 9) overrides for SDS-curated names.
+      //     Deliberately NOT scoped by `wc` (unlike the production-record queries): this
+      //     is a name lookup, not a production filter, and a machine's CURRENT wc in
+      //     m_machine can differ from the wc recorded on the production transaction that
+      //     put it in scope (e.g. HSG-01/SPG-19 carry wc 'KP', SPG-20 carries 'PB' — none
+      //     in the report's work_centers scope — yet all three appear in in-scope
+      //     production rows). Filtering here dropped them from machineCodeMap entirely,
+      //     so `machineTypeName` fell back to null instead of the raw machine_code,
+      //     and the report never resolved HSG-01 → KVD-300CRII. Fetch every machine.
       rodpcPool.query(`
         SELECT machine_code, TRIM(m_model) AS m_model
         FROM m_machine
-        WHERE wc = ANY($1)
-          AND m_model IS NOT NULL AND TRIM(m_model) != ''
-      `, [wcArr]).catch(() => ({ rows: [] })),
+        WHERE m_model IS NOT NULL AND TRIM(m_model) != ''
+      `).catch(() => ({ rows: [] })),
     ]);
 
     // Every query above degrades to `.catch(() => ({ rows: [] }))` on a connection error —
