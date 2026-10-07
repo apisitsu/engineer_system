@@ -6,7 +6,10 @@
  * needed beyond the global `verifyToken` the parent router already applies.
  */
 
-const { loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn } = require('./pbringGridService');
+const {
+  loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
+  listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
+} = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 
 async function getPdf(req, res) {
@@ -47,4 +50,57 @@ async function getHasData(req, res) {
   }
 }
 
-module.exports = { getPdf, getHasData };
+async function getTemplates(req, res) {
+  try {
+    res.json(await listTemplates());
+  } catch (err) {
+    console.error('[pbring:grid:admin:templates]', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to list templates' });
+  }
+}
+
+async function getMachineTypes(req, res) {
+  try {
+    res.json(await listMachineTypes());
+  } catch (err) {
+    console.error('[pbring:grid:admin:machine-types]', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to list machine types' });
+  }
+}
+
+async function putMachineTemplate(req, res) {
+  try {
+    const row = await assignMachineTemplate(req.params.id, req.body?.grid_template_id);
+    if (!row) return res.status(404).json({ success: false, error: 'Machine type not found' });
+    res.json(row);
+  } catch (err) {
+    console.error('[pbring:grid:admin:assign]', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to assign template' });
+  }
+}
+
+async function putTemplateDefault(req, res) {
+  try {
+    const ok = await setDefaultTemplate(req.params.id);
+    if (!ok) return res.status(404).json({ success: false, error: 'Template not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[pbring:grid:admin:default]', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to set default' });
+  }
+}
+
+async function postReimport(req, res) {
+  try {
+    const results = await reimportTemplates(req.body?.templateNames, req.user?.empno);
+    res.json({ success: true, results });
+  } catch (err) {
+    console.error('[pbring:grid:admin:reimport]', err);
+    res.status(500).json({ success: false, error: err.message || 'Re-import failed' });
+  }
+}
+
+module.exports = {
+  getPdf, getHasData,
+  getTemplates, getMachineTypes, putMachineTemplate, putTemplateDefault, postReimport,
+};

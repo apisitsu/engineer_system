@@ -93,6 +93,10 @@ export const server = {
   PBRING_TOOLING_FROM_HISTORY: `${apiUrl}api/engineer/pbring/tooling/from-history`,
   PBRING_GRID_HAS_DATA: `${apiUrl}api/engineer/pbring/grid/has-data`, // ?cn=
   PBRING_GRID_PDF: `${apiUrl}api/engineer/pbring/grid/pdf`, // ?cn=&machine_type_name=&process_code=
+  PBRING_GRID_ADMIN_TEMPLATES: `${apiUrl}api/engineer/pbring/grid/admin/templates`,
+  PBRING_GRID_ADMIN_MACHINE_TYPES: `${apiUrl}api/engineer/pbring/grid/admin/machine-types`, // append /:id (PUT)
+  PBRING_GRID_ADMIN_TEMPLATE_DEFAULT: `${apiUrl}api/engineer/pbring/grid/admin/templates`, // append /:id/default (PUT)
+  PBRING_GRID_ADMIN_REIMPORT: `${apiUrl}api/engineer/pbring/grid/admin/reimport`,
 
   // Permissions Config — grant/revoke feature_perms (tooling_admin/sds_admin/
   // general_dwg_admin). Access restricted to AD + an explicit empno allowlist.

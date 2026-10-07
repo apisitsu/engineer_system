@@ -19,7 +19,7 @@
  */
 
 const { engPool } = require('../../../instance/eng_db');
-const { classifyParam } = require('../mtc/db_migrations/lib/pbringGridImport');
+const { classifyParam, importAllTemplates, TEMPLATE_NAMES } = require('../mtc/db_migrations/lib/pbringGridImport');
 
 function escHtml(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -269,4 +269,85 @@ async function hasDataForCn(cn) {
   return { exists: machines.length > 0, machines };
 }
 
-module.exports = { loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn };
+/**
+ * Admin: lightweight management, not a pixel editor — list templates/machines,
+ * (re)assign a template to a machine, set default, and re-run the xlsx import
+ * when the source workbook changes. No cell-by-cell editing: the 18 imported
+ * templates were verified to render correctly with zero hand-correction
+ * needed, so there is nothing today a full Excel-style grid editor would be
+ * doing (see the plan file's Phase 5.6 note).
+ */
+
+/** GET admin: templates list with how many machines each is assigned to. */
+async function listTemplates() {
+  const { rows } = await engPool.query(
+    `SELECT gt.id, gt.name, gt.is_default, gt.updated_at,
+            (SELECT COUNT(*) FROM pbring_machine_type m WHERE m.grid_template_id = gt.id) AS assigned_count
+       FROM pbring_grid_template gt
+      ORDER BY gt.is_default DESC, gt.name`
+  );
+  return rows;
+}
+
+/** GET admin: machine types with their assigned template id/name. */
+async function listMachineTypes() {
+  const { rows } = await engPool.query(
+    `SELECT mt.id, mt.machine_type_name, mt.source_sheet_name, mt.is_active,
+            mt.grid_template_id, gt.name AS grid_template_name
+       FROM pbring_machine_type mt
+       LEFT JOIN pbring_grid_template gt ON gt.id = mt.grid_template_id
+      ORDER BY mt.machine_type_name`
+  );
+  return rows;
+}
+
+/** PUT admin: assign (or clear, with null) a machine's grid template. */
+async function assignMachineTemplate(machineTypeId, gridTemplateId) {
+  const { rows } = await engPool.query(
+    `UPDATE pbring_machine_type SET grid_template_id = $1, updated_at = now() WHERE id = $2
+     RETURNING id, machine_type_name, grid_template_id`,
+    [gridTemplateId || null, machineTypeId]
+  );
+  return rows[0] || null;
+}
+
+/** PUT admin: make one template the default (fallback for a machine with none assigned). */
+async function setDefaultTemplate(templateId) {
+  const client = await engPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`UPDATE pbring_grid_template SET is_default = FALSE WHERE is_default`);
+    const { rows } = await client.query(
+      `UPDATE pbring_grid_template SET is_default = TRUE, updated_at = now() WHERE id = $1 RETURNING id`,
+      [templateId]
+    );
+    if (!rows[0]) { await client.query('ROLLBACK'); return false; }
+    await client.query('COMMIT');
+    return true;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * POST admin: re-run the xlsx import — the whole 18-machine roster by default,
+ * or a subset via `templateNames`. Same importAllTemplates the one-time
+ * migration uses (see lib/pbringGridImport.js); upserts in place by template
+ * name, so re-running after the source workbook changes updates the existing
+ * rows rather than creating new ones.
+ */
+async function reimportTemplates(templateNames, empno) {
+  const names = Array.isArray(templateNames) && templateNames.length
+    ? templateNames.filter((n) => TEMPLATE_NAMES.includes(n))
+    : TEMPLATE_NAMES;
+  if (!names.length) throw new Error('No valid template names to import');
+  return importAllTemplates({ templateNames: names, createdBy: empno ? `admin:${empno}` : undefined });
+}
+
+module.exports = {
+  loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
+  listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
+};

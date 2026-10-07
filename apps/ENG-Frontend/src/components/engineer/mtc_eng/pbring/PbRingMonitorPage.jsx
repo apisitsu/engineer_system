@@ -6,13 +6,14 @@ import {
 import {
   ClearOutlined, ReloadOutlined, EditOutlined, SaveOutlined, CloseOutlined,
   PlusOutlined, DeleteOutlined, DownloadOutlined, CheckOutlined, SyncOutlined,
-  DoubleRightOutlined, DoubleLeftOutlined,
+  DoubleRightOutlined, DoubleLeftOutlined, StarFilled, StarOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { useTheme } from '../../../../theme';
+import { useAuthStore } from '../../../../stores/authStore';
 
 // Same status list as the backend's pbringConstants.STATUS — kept in sync by hand,
 // same way the prototype's own STATUS array was a plain shared constant.
@@ -1004,18 +1005,150 @@ function SummaryTab() {
   );
 }
 
+// Phase 5.6 — lightweight management for the grid-template PDF system, not a
+// pixel editor. The 18 imported templates were verified (zero hand-correction
+// needed after a full render sweep), so there's nothing today a cell-by-cell
+// Excel-style editor (like SdsBlankTemplateGrid.jsx, ~1,081 lines) would be
+// doing — list templates/machines, (re)assign, set default, and re-run the
+// xlsx import when the source workbook changes. See the plan file.
+function GridTemplatesTab() {
+  const { message, modal } = App.useApp();
+  const [templates, setTemplates] = useState([]);
+  const [machines, setMachines] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [reimporting, setReimporting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [t, m] = await Promise.all([
+        axios.get(server.PBRING_GRID_ADMIN_TEMPLATES),
+        axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES),
+      ]);
+      setTemplates(t.data || []);
+      setMachines(m.data || []);
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Failed to load grid templates'));
+    } finally {
+      setLoading(false);
+    }
+  }, [message]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const assignTemplate = async (machineId, gridTemplateId) => {
+    try {
+      await axios.put(`${server.PBRING_GRID_ADMIN_MACHINE_TYPES}/${machineId}`, { grid_template_id: gridTemplateId });
+      message.success('Template reassigned');
+      load();
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Failed to reassign template'));
+    }
+  };
+
+  const setDefault = async (templateId) => {
+    try {
+      await axios.put(`${server.PBRING_GRID_ADMIN_TEMPLATE_DEFAULT}/${templateId}/default`);
+      message.success('Default template set');
+      load();
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Failed to set default'));
+    }
+  };
+
+  const reimport = () => {
+    modal.confirm({
+      title: 'Re-import all 18 templates from Excel?',
+      content: 'Re-reads SDS_TemplatesV3.4.2.xlsx and overwrites the grid layout + cell mapping for every machine. Use this after the source workbook has been updated.',
+      okText: 'Re-import',
+      onOk: async () => {
+        setReimporting(true);
+        try {
+          const r = await axios.post(server.PBRING_GRID_ADMIN_REIMPORT, {});
+          message.success(`Re-imported ${r.data?.results?.length || 0} machine(s)`);
+          load();
+        } catch (err) {
+          message.error(apiErrorMessage(err, 'Re-import failed'));
+        } finally {
+          setReimporting(false);
+        }
+      },
+    });
+  };
+
+  const machineColumns = [
+    { title: 'Machine', dataIndex: 'machine_type_name', key: 'machine_type_name' },
+    { title: 'Source Sheet', dataIndex: 'source_sheet_name', key: 'source_sheet_name' },
+    {
+      title: 'Grid Template', key: 'template',
+      render: (_, row) => (
+        <Select
+          size="small"
+          style={{ width: 260 }}
+          value={row.grid_template_id || undefined}
+          placeholder="(none)"
+          allowClear
+          options={templates.map((t) => ({ value: t.id, label: t.name }))}
+          onChange={(val) => assignTemplate(row.id, val ?? null)}
+        />
+      ),
+    },
+    { title: 'Active', dataIndex: 'is_active', key: 'is_active', render: (v) => (v ? <Tag color="success">Active</Tag> : <Tag>Inactive</Tag>) },
+  ];
+
+  const templateColumns = [
+    { title: 'Template', dataIndex: 'name', key: 'name' },
+    { title: 'Assigned machines', dataIndex: 'assigned_count', key: 'assigned_count' },
+    { title: 'Updated', dataIndex: 'updated_at', key: 'updated_at', render: (v) => (v ? dayjs(v).format('DD/MM/YYYY HH:mm') : '-') },
+    {
+      title: 'Default', key: 'default',
+      render: (_, row) => (
+        <Button
+          type="text" size="small"
+          icon={row.is_default ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+          onClick={() => !row.is_default && setDefault(row.id)}
+        >
+          {row.is_default ? 'Default' : 'Set default'}
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <Space style={{ marginBottom: 12 }}>
+        <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>Refresh</Button>
+        <Button icon={<SyncOutlined />} onClick={reimport} loading={reimporting}>Re-import from Excel</Button>
+      </Space>
+      <Card size="small" title="Machines" style={{ marginBottom: 12 }}>
+        <Table size="small" rowKey="id" dataSource={machines} columns={machineColumns} loading={loading} pagination={false} />
+      </Card>
+      <Card size="small" title="Grid Templates">
+        <Table size="small" rowKey="id" dataSource={templates} columns={templateColumns} loading={loading} pagination={false} />
+      </Card>
+    </div>
+  );
+}
+
 export default function PbRingMonitorPage() {
   const C = useColors();
+  const userRole = useAuthStore((s) => s.userRole);
+  const userDepartment = useAuthStore((s) => s.userDepartment);
+  const userPerms = useAuthStore((s) => s.userPerms);
+  const isPbringAdmin = userRole === 'AD' || userDepartment === 'AD'
+    || (userPerms || []).includes('pbring_admin') || (userPerms || []).includes('all_mtc');
+
+  const tabItems = [
+    { key: 'search', label: 'Search (HW / Process / Machine)', children: <SearchTab C={C} /> },
+    { key: 'add-hw', label: '+ New HW', children: <AddHwTab /> },
+    { key: 'summary', label: 'Summary', children: <SummaryTab /> },
+  ];
+  if (isPbringAdmin) {
+    tabItems.push({ key: 'grid-templates', label: 'Grid Templates (PDF)', children: <GridTemplatesTab /> });
+  }
 
   const bodyContent = (
-    <Tabs
-      defaultActiveKey="search"
-      items={[
-        { key: 'search', label: 'Search (HW / Process / Machine)', children: <SearchTab C={C} /> },
-        { key: 'add-hw', label: '+ New HW', children: <AddHwTab /> },
-        { key: 'summary', label: 'Summary', children: <SummaryTab /> },
-      ]}
-    />
+    <Tabs defaultActiveKey="search" items={tabItems} />
   );
 
   return (

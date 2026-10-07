@@ -3,13 +3,20 @@
 /**
  * Shared ExcelJS helpers for importing the PB Ring SDS template workbook into
  * `pbring_grid_template`/`pbring_excel_mapping`. Not a migration itself — sits
- * next to migrationLog.js, required by 20261009_pbring_import_grid_templates.js.
+ * next to migrationLog.js, required by 20261009_pbring_import_grid_templates.js
+ * AND by the admin "re-import" route (pbringGridController.js) — the two must
+ * stay byte-identical, so `importAllTemplates`/`importOneMachine` here are the
+ * single place the actual DB-writing logic lives.
  *
  * `gridFromWorksheet` is a duplicate of `sdsV2AdminController.js`'s function of
  * the same name (lines ~62-114) — pure ExcelJS cell reading, no SDS-specific
  * logic, kept as its own copy per the project's zero-coupling rule for pbring
  * (see CLAUDE.md "Why strict separation matters").
  */
+
+const fs = require('fs');
+const ExcelJS = require('exceljs');
+const { engPool } = require('../../../../../instance/eng_db');
 
 const COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -212,4 +219,158 @@ function extractMappings(ws, rows, cols) {
   return out;
 }
 
-module.exports = { gridFromWorksheet, extractMappings, classifyParam, colToLetter };
+// ---- Full import (migration + admin "re-import" route share this) ----
+
+const DEFAULT_TEMPLATE_PATH = 'C:\\User DATA\\PB_Ring_SDS_Project\\SDS_TemplatesV3.4.2.xlsx';
+
+// The 18 visible, highlighted TemplateName values (xlsx tab names) confirmed
+// live against pbring_tooling's actual machine roster. See
+// 20261009_pbring_import_grid_templates.js for how this list was decided.
+const TEMPLATE_NAMES = [
+  'bfd_qsm200m', 'bfd_qt200_500u', 'hsg_kvd300', 'hsg_kvd350', 'cgm_omiya',
+  'cgm_ohmiya20br200', 'cgm_ohmiya18br150', 'cgm_nissin', 'idg_ksb22', 'idg_ksr22s2',
+  'gvg_ksr22s2', 'idg_15ksb80', 'gvg_ksr80d', 'gvg_ks350r2', 'gvg_ks500rf',
+  'spf_ksh22', 'spf_ksh150', 'notch_gs64pfii',
+];
+
+// The naive "strip category prefix, uppercase" rule only matches the real
+// mc_key for 10 of the 18 sheets — see 20261009_pbring_import_grid_templates.js
+// for the live-verified reasoning behind each override.
+const MACHINE_TYPE_NAME_OVERRIDE = {
+  idg_15ksb80: 'KSB80',
+  notch_gs64pfii: 'GS64PF',
+  cgm_nissin: 'HIGRIND1D',
+  cgm_ohmiya18br150: 'OC18BR150',
+  cgm_ohmiya20br200: 'OC20BR200',
+  bfd_qsm200m: 'QTSMART200M',
+  bfd_qt200_500u: 'QUICKTURN200500U',
+  gvg_ksr22s2: 'KSR22S2_GVG',
+};
+
+/** "HSG_kvd300" -> "KVD300" (strip the category prefix up to the first underscore, uppercase). */
+function machineTypeNameFromSheetName(sheetName, templateName) {
+  if (templateName && MACHINE_TYPE_NAME_OVERRIDE[templateName]) return MACHINE_TYPE_NAME_OVERRIDE[templateName];
+  const idx = sheetName.indexOf('_');
+  const tail = idx === -1 ? sheetName : sheetName.slice(idx + 1);
+  return tail.toUpperCase();
+}
+
+async function readMappingSheet(wb) {
+  const ws = wb.getWorksheet('_Mapping');
+  const pairs = [];
+  ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return; // header: SheetName, TemplateName
+    const sheetName = row.getCell(1).value;
+    const templateName = row.getCell(2).value;
+    if (sheetName && templateName) pairs.push({ sheetName: String(sheetName), templateName: String(templateName) });
+  });
+  return pairs;
+}
+
+/** INSERT in chunks — never a per-row loop (see .claude/rules/db-patterns.md). */
+async function bulkInsertMappings(rows) {
+  if (!rows.length) return 0;
+  const cols = ['machine_type_name', 'cell_address', 'param_key', 'source', 'tool_number', 'condition_field'];
+  const c = cols.length;
+  const placeholders = rows.map((_, ri) => `(${Array.from({ length: c }, (__, ci) => `$${ri * c + ci + 1}`).join(',')})`).join(',');
+  const values = rows.flatMap((r) => [r.machine_type_name, r.cell_address, r.param_key, r.source, r.tool_number || null, r.condition_field || null]);
+  await engPool.query(`INSERT INTO pbring_excel_mapping (${cols.join(',')}) VALUES ${placeholders}`, values);
+  return rows.length;
+}
+
+/**
+ * Imports ONE machine's sheet: grid_json + machine_type row + excel_mapping
+ * rows, in a transaction. Shared by the migration and the admin re-import
+ * route — both must call this rather than reimplementing it, so a workbook
+ * re-import behaves identically from either caller.
+ */
+async function importOneMachine(wb, byTemplateName, templateName, { createdBy } = {}) {
+  const sheetName = byTemplateName.get(templateName) || templateName;
+  const machineTypeName = machineTypeNameFromSheetName(sheetName, templateName);
+
+  const ws = wb.getWorksheet(templateName);
+  if (!ws) throw new Error(`Workbook has no worksheet tab named "${templateName}"`);
+  const dims = ws.dimensions;
+  const rows = dims ? dims.bottom : 56;
+  const cols = dims ? dims.right : 50;
+
+  const grid = gridFromWorksheet(ws, rows, cols);
+  const mappings = extractMappings(ws, rows, cols).map((m) => ({ ...m, machine_type_name: machineTypeName }));
+
+  const client = await engPool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ON CONFLICT (name) DO UPDATE, not a bare INSERT — re-running this (the
+    // admin "re-import" route's whole purpose) used to collide on the unique
+    // name and fail outright. Upserting in place also means re-import never
+    // orphans a template row: pbring_machine_type.grid_template_id already
+    // points at this same name's id from the previous run, and UPDATE leaves
+    // is_default untouched since the clause never sets it.
+    const { rows: gtRows } = await client.query(
+      `INSERT INTO pbring_grid_template (name, grid_json, is_default, created_by)
+       VALUES ($1, $2, false, $3)
+       ON CONFLICT (name) DO UPDATE SET grid_json = EXCLUDED.grid_json, updated_by = $3, updated_at = now()
+       RETURNING id`,
+      [`${machineTypeName} (imported v3.4.2)`, JSON.stringify(grid), createdBy || 'import:pbring-sds-template-v3.4.2']
+    );
+    const gridTemplateId = gtRows[0].id;
+
+    await client.query(
+      `INSERT INTO pbring_machine_type (machine_type_name, source_sheet_name, grid_template_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (machine_type_name) DO UPDATE
+         SET source_sheet_name = EXCLUDED.source_sheet_name, grid_template_id = EXCLUDED.grid_template_id, updated_at = now()`,
+      [machineTypeName, sheetName, gridTemplateId]
+    );
+
+    await client.query('DELETE FROM pbring_excel_mapping WHERE machine_type_name = $1', [machineTypeName]);
+
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+
+  // Bulk-insert mapping rows outside the transaction's per-row path (still
+  // one statement — dozens of rows per machine, not thousands).
+  const mappingCount = await bulkInsertMappings(mappings);
+
+  return {
+    machineTypeName, sheetName, templateName,
+    cellCount: Object.keys(grid.cells).length,
+    mergeCount: grid.merges.length,
+    mappingCount,
+  };
+}
+
+/**
+ * Full re-import: opens the workbook once, imports every name in
+ * `templateNames` (defaults to the full 18-machine roster). `createdBy` tags
+ * the new `pbring_grid_template` rows with who triggered it (admin re-import)
+ * vs the original migration's fixed tag.
+ */
+async function importAllTemplates({ templatePath = process.env.PBRING_SDS_TEMPLATE_PATH || DEFAULT_TEMPLATE_PATH, templateNames = TEMPLATE_NAMES, createdBy } = {}) {
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`PB Ring SDS template workbook not found: ${templatePath} (set PBRING_SDS_TEMPLATE_PATH)`);
+  }
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(templatePath);
+  const mappingPairs = await readMappingSheet(wb);
+  const byTemplateName = new Map(mappingPairs.map((p) => [p.templateName, p.sheetName]));
+
+  const results = [];
+  for (const templateName of templateNames) {
+    results.push(await importOneMachine(wb, byTemplateName, templateName, { createdBy }));
+  }
+  return results;
+}
+
+module.exports = {
+  gridFromWorksheet, extractMappings, classifyParam, colToLetter,
+  TEMPLATE_NAMES, MACHINE_TYPE_NAME_OVERRIDE, DEFAULT_TEMPLATE_PATH,
+  machineTypeNameFromSheetName, readMappingSheet, bulkInsertMappings,
+  importOneMachine, importAllTemplates,
+};

@@ -79,4 +79,13 @@ router.post('/cost/pending/:id/reject', isPbringWriter, pbringController.rejectP
 router.get('/grid/pdf', pbringGridController.getPdf);
 router.get('/grid/has-data', pbringGridController.getHasData);
 
+// Grid-template admin (Phase 5.6) — lightweight management, not a pixel
+// editor: list/assign/default + re-run the xlsx import. Gated on
+// isPbringAdmin like the other structural actions above (+New HW, Delete HW).
+router.get('/grid/admin/templates', isPbringAdmin, pbringGridController.getTemplates);
+router.get('/grid/admin/machine-types', isPbringAdmin, pbringGridController.getMachineTypes);
+router.put('/grid/admin/machine-types/:id', isPbringAdmin, pbringGridController.putMachineTemplate);
+router.put('/grid/admin/templates/:id/default', isPbringAdmin, pbringGridController.putTemplateDefault);
+router.post('/grid/admin/reimport', isPbringAdmin, pbringGridController.postReimport);
+
 module.exports = router;
