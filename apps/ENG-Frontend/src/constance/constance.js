@@ -9,8 +9,19 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 
 // // // ----------- DEV -----------
+const getDynamicApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return "http://localhost:2005/";
+    }
+  }
+  return "http://plbmp129:2005/";
+};
+
+export const apiUrl = getDynamicApiUrl();
 // export const apiUrl = "http://localhost:2005/";
-export const apiUrl = "http://plbmp129:2005/";
+// export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://10.121.50.38:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
 

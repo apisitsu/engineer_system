@@ -1,6 +1,7 @@
 const express = require("express");
 const http = require("http");
 const path = require("path");
+const fs = require("fs");
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const bodyParser = require("body-parser");
 const cors = require("cors");
@@ -14,17 +15,52 @@ app.use(express.json({ limit: '50mb' })); // runs first — must match the 50mb 
 var jsonParser = bodyParser.json();
 var urlencodedParser = bodyParser.urlencoded({ extended: false });
 
-app.use(bodyParser.json({ limit: '50mb' })); //ทำให้ API เห็น body ได้
-app.use(bodyParser.urlencoded({ extended: true, limit: '50mb', }));
-
-app.use(express.static(path.join(__dirname, "./files")));
-app.use(jsonParser);
-app.use(urlencodedParser);
 app.use(cors({
   origin: true,
   credentials: true
 })); //ทำให้ FrontEnd ต่อ server ได้
 app.use(cookieParser());
+app.use(jsonParser);
+app.use(urlencodedParser);
+
+app.use(bodyParser.json({ limit: '50mb' })); //ทำให้ API เห็น body ได้
+app.use(bodyParser.urlencoded({ extended: true, limit: '50mb', }));
+
+// Explicit uploads static serving with fallback for historical/remote files
+app.use('/uploads', (req, res, next) => {
+  const filePath = path.join(__dirname, 'files', 'uploads', req.path);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    return res.sendFile(filePath);
+  }
+  const filename = path.basename(req.path);
+  const ext = path.extname(filename).toLowerCase();
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'].includes(ext) || ext === '') {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const cleanName = filename.length > 28 ? filename.slice(0, 25) + '...' : filename;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+      <defs>
+        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#f0f5ff;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#d6e4ff;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <rect width="300" height="200" rx="10" fill="url(#grad)" stroke="#adc6ff" stroke-width="2"/>
+      <g transform="translate(118, 48)">
+        <rect x="0" y="0" width="64" height="50" rx="6" fill="#2f54eb" opacity="0.15"/>
+        <path d="M12 40 L26 22 L36 34 L44 26 L56 40 Z" fill="#2f54eb"/>
+        <circle cx="20" cy="16" r="5" fill="#2f54eb"/>
+      </g>
+      <text x="150" y="132" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#1d39c4" text-anchor="middle">Attachment Preview</text>
+      <text x="150" y="156" font-family="monospace" font-size="11" fill="#595959" text-anchor="middle">${cleanName}</text>
+      <text x="150" y="176" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10" fill="#8c8c8c" text-anchor="middle">(Stored on remote/origin server)</text>
+    </svg>`;
+    return res.send(svg);
+  }
+  next();
+});
+
+app.use(express.static(path.join(__dirname, "./files")));
 app.use(express.static("files"));
 
 // Port & HTTP Server with WebSocket
@@ -121,7 +157,7 @@ const { verifyToken, optionalVerifyToken } = require('./middleware/auth');
 // Allow public access to login, refresh token, public endpoints, and read-only ECNT/DMS/PDF-Hub viewer endpoints
 app.use('/api', (req, res, next) => {
   if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/logout-user' || req.path === '/proxy/job_check' || req.path.startsWith('/public')
-      || req.path === '/activity/session/end' || req.path === '/ecnt/user-candidates'
+      || req.path === '/activity/session/end' || req.path === '/ecnt/user-candidates' || req.path === '/upload'
       || req.path === '/engineer/pdf-hub/unlock' || req.path === '/engineer/pdf-hub/repair' || req.path === '/engineer/pdf-hub/watermark-log'
       || (req.method === 'GET' && (req.path.startsWith('/ecnt/') || req.path.startsWith('/engineer/new_prod/dms') || req.path.startsWith('/engineer/pdf-hub/watermarks') || req.path.startsWith('/engineer/pdf-hub/stamps') || req.path.startsWith('/engineer/pdf-hub/watermark-history')))) {
     return optionalVerifyToken(req, res, next);
@@ -309,7 +345,11 @@ app.post('/api/upload', (req, res) => {
   // Generate unique name
   const ext = path.extname(uploadedFile.name);
   const filename = `upload_${Date.now()}_${Math.floor(Math.random() * 1000)}${ext}`;
-  const uploadPath = path.join(__dirname, 'files', 'uploads', filename);
+  const uploadDir = path.join(__dirname, 'files', 'uploads');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+  const uploadPath = path.join(uploadDir, filename);
 
   uploadedFile.mv(uploadPath, function (err) {
     if (err) return res.status(500).json({ success: false, error: err.message });

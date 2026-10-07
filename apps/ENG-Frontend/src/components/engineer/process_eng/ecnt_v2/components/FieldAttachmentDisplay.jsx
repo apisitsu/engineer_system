@@ -21,8 +21,11 @@ export default function FieldAttachmentDisplay({ attachments = [], fieldName }) 
     const getFullUrl = (url) => {
         if (!url) return '';
         if (url.startsWith('http')) return url;
-        return `${server.URL}${url}`;
+        const base = (server.URL || server.API_URL || '').replace(/\/$/, '');
+        return `${base}${url}`;
     };
+
+    const imageFallback = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Crect width='72' height='72' fill='%23f5f5f5' stroke='%23d9d9d9' rx='4'/%3E%3Cpath d='M20 48l10-12 8 9 10-14 12 17H20z' fill='%23bfbfbf'/%3E%3Ccircle cx='28' cy='24' r='4' fill='%23bfbfbf'/%3E%3Ctext x='36' y='64' font-size='8' text-anchor='middle' fill='%238c8c8c' font-family='sans-serif'%3EUnavailable%3C/text%3E%3C/svg%3E";
 
     return (
         <div style={{ marginTop: 8, padding: '8px 10px', background: '#fafafa', borderRadius: 6, border: '1px solid #f0f0f0' }}>
@@ -41,6 +44,7 @@ export default function FieldAttachmentDisplay({ attachments = [], fieldName }) 
                                     alt={item.file_name}
                                     width={72}
                                     height={72}
+                                    fallback={imageFallback}
                                     style={{ objectFit: 'cover', borderRadius: 4, border: '1px solid #d9d9d9', cursor: 'pointer' }}
                                 />
                             );

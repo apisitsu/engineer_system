@@ -33,8 +33,13 @@ export default function AttachableField({
             const formData = new FormData();
             formData.append('file', file);
 
-            const res = await axios.post(`${server.URL}/api/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+            const token = localStorage.getItem("token");
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const res = await axios.post(`${baseUrl}/api/upload`, formData, {
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
                 withCredentials: true
             });
 
@@ -85,8 +90,11 @@ export default function AttachableField({
     const getFullUrl = (url) => {
         if (!url) return '';
         if (url.startsWith('http')) return url;
-        return `${server.URL}${url}`;
+        const base = (server.URL || server.API_URL || '').replace(/\/$/, '');
+        return `${base}${url}`;
     };
+
+    const imageFallback = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='68' height='68' viewBox='0 0 68 68'%3E%3Crect width='68' height='68' fill='%23f5f5f5' stroke='%23d9d9d9' rx='4'/%3E%3Cpath d='M18 46l10-12 8 9 10-14 12 17H18z' fill='%23bfbfbf'/%3E%3Ccircle cx='26' cy='24' r='4' fill='%23bfbfbf'/%3E%3C/svg%3E";
 
     return (
         <div style={{ marginBottom: 14 }}>
@@ -140,10 +148,11 @@ export default function AttachableField({
                                 return (
                                     <div key={idx} style={{ position: 'relative', width: 68, height: 68 }}>
                                         <Image
-                                             src={getFullUrl(item.file_url)}
+                                            src={getFullUrl(item.file_url)}
                                             alt={item.file_name}
                                             width={68}
                                             height={68}
+                                            fallback={imageFallback}
                                             style={{ objectFit: 'cover', borderRadius: 4, border: '1px solid #d9d9d9' }}
                                         />
                                         <div 
