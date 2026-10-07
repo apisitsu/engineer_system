@@ -270,12 +270,14 @@ async function hasDataForCn(cn) {
 }
 
 /**
- * Admin: lightweight management, not a pixel editor — list templates/machines,
- * (re)assign a template to a machine, set default, and re-run the xlsx import
- * when the source workbook changes. No cell-by-cell editing: the 18 imported
- * templates were verified to render correctly with zero hand-correction
- * needed, so there is nothing today a full Excel-style grid editor would be
- * doing (see the plan file's Phase 5.6 note).
+ * Admin: machine<->template assignment (used by the "Grid Templates" tab on
+ * the PB Ring Monitor page) plus full template CRUD + xlsx parsing (used by
+ * PbRingGridTemplateEditor.jsx, the full Excel-style layout editor — a
+ * duplicate of SdsBlankTemplateGrid.jsx's editing surface, not SDS's
+ * "Excel Parameter Config" per-CN value grid, which has no PB Ring
+ * equivalent: every {{param}} resolves automatically from
+ * pbring_sds_param/pbring_sds_condition, there is no manual per-CN override
+ * step here).
  */
 
 /** GET admin: templates list with how many machines each is assigned to. */
@@ -347,7 +349,119 @@ async function reimportTemplates(templateNames, empno) {
   return importAllTemplates({ templateNames: names, createdBy: empno ? `admin:${empno}` : undefined });
 }
 
+// ---- Full template CRUD (PbRingGridTemplateEditor.jsx) ----
+
+/** GET admin: one template with its parsed grid. */
+async function getTemplateById(id) {
+  const { rows } = await engPool.query(
+    `SELECT id, name, is_default, grid_json, updated_at FROM pbring_grid_template WHERE id = $1`,
+    [id]
+  );
+  if (!rows[0]) return null;
+  let grid = null;
+  try { grid = JSON.parse(rows[0].grid_json); } catch (_) { grid = null; }
+  return { id: rows[0].id, name: rows[0].name, is_default: rows[0].is_default, grid, updated_at: rows[0].updated_at };
+}
+
+/** POST admin: create a new template — { name, grid? } or { name, copyFromId }. */
+async function createTemplate({ name, grid, copyFromId }, empno) {
+  if (!name || !String(name).trim()) throw new Error('name is required');
+  let gridJson;
+  if (grid && typeof grid === 'object' && !Array.isArray(grid)) {
+    gridJson = JSON.stringify(grid);
+  } else if (copyFromId) {
+    const src = await engPool.query(`SELECT grid_json FROM pbring_grid_template WHERE id = $1`, [copyFromId]);
+    gridJson = src.rows[0]?.grid_json;
+  }
+  if (!gridJson) {
+    const def = await engPool.query(`SELECT grid_json FROM pbring_grid_template WHERE is_default LIMIT 1`);
+    gridJson = def.rows[0]?.grid_json || JSON.stringify({ rows: 56, cols: 48, borders: {}, fills: {}, cells: {}, merges: [] });
+  }
+  const { rows } = await engPool.query(
+    `INSERT INTO pbring_grid_template (name, grid_json, is_default, created_by)
+     VALUES ($1, $2, FALSE, $3) RETURNING id, name, is_default, updated_at`,
+    [String(name).trim(), gridJson, empno || null]
+  );
+  return rows[0];
+}
+
+/** PUT admin: update a template's name and/or grid. */
+async function updateTemplate(id, { name, grid }, empno) {
+  if (name == null && grid == null) throw new Error('name or grid required');
+  if (grid != null && (typeof grid !== 'object' || Array.isArray(grid))) throw new Error('grid must be an object');
+  const sets = [], vals = [];
+  if (name != null) { vals.push(String(name).trim()); sets.push(`name = $${vals.length}`); }
+  if (grid != null) { vals.push(JSON.stringify(grid)); sets.push(`grid_json = $${vals.length}`); }
+  vals.push(empno || null); sets.push(`updated_by = $${vals.length}`);
+  vals.push(id);
+  const { rows } = await engPool.query(
+    `UPDATE pbring_grid_template SET ${sets.join(', ')}, updated_at = now() WHERE id = $${vals.length}
+     RETURNING id, name, is_default, updated_at`,
+    vals
+  );
+  return rows[0] || null;
+}
+
+/** DELETE admin: remove a template (the default is protected; assigned machines keep their FK, which ON DELETE SET NULL clears). */
+async function deleteTemplate(id) {
+  const { rows } = await engPool.query(`SELECT is_default FROM pbring_grid_template WHERE id = $1`, [id]);
+  if (!rows[0]) return { ok: false, reason: 'not_found' };
+  if (rows[0].is_default) return { ok: false, reason: 'is_default' };
+  await engPool.query(`DELETE FROM pbring_grid_template WHERE id = $1`, [id]);
+  return { ok: true };
+}
+
+/**
+ * Parse an admin-uploaded .xlsx (any workbook) into the editor grid model,
+ * from an in-memory buffer — same shape/bounds logic as
+ * sdsV2AdminController.parseXlsxGridFromBuffer. `sheet` selects a worksheet
+ * by 1-based index or exact name, defaulting to the first.
+ */
+const UPLOAD_MAX_ROWS = 120, UPLOAD_MAX_COLS = 52;
+async function parseXlsxGridFromBuffer(buffer, sheet) {
+  const ExcelJS = require('exceljs');
+  const { gridFromWorksheet: gfw } = require('../mtc/db_migrations/lib/pbringGridImport');
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  let ws = wb.worksheets[0];
+  if (sheet != null && String(sheet).trim() !== '') {
+    const s = String(sheet).trim();
+    const byIndex = /^\d+$/.test(s) ? wb.worksheets[Number(s) - 1] : null;
+    ws = byIndex || wb.worksheets.find((w) => w.name === s) || ws;
+  }
+  if (!ws) throw new Error('workbook has no worksheets');
+  // ws.dimensions nests the real used-range under .model ({top,left,bottom,right}) —
+  // reading .bottom/.right straight off ws.dimensions is always undefined.
+  const dim = (ws.dimensions && ws.dimensions.model) || {};
+  const rows = Math.min(UPLOAD_MAX_ROWS, Math.max(1, dim.bottom || ws.rowCount || 56));
+  const cols = Math.min(UPLOAD_MAX_COLS, Math.max(1, dim.right || ws.columnCount || 48));
+  return gfw(ws, rows, cols);
+}
+
+/** Lists worksheet names in an uploaded .xlsx (no cell parsing) for the sheet-picker modal. */
+async function listXlsxSheets(buffer) {
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  return wb.worksheets.map((ws, i) => ({ index: i + 1, name: ws.name }));
+}
+
+/**
+ * Blank-template preview: renders a template's grid exactly as stored, with
+ * NO value substitution — every {{param}} literal stays visible. Unlike the
+ * live render route (buildPbRingValueMap + applyValuesToGrid), this needs no
+ * cn/machine/process at all, so an admin can preview a template's layout the
+ * moment it's created, before any machine is even assigned to it.
+ */
+async function renderBlankTemplateHtml(id) {
+  const tpl = await getTemplateById(id);
+  if (!tpl) return null;
+  return buildGridPdfHtml(tpl.grid);
+}
+
 module.exports = {
   loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
+  getTemplateById, createTemplate, updateTemplate, deleteTemplate,
+  parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
 };

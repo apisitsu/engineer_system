@@ -9,6 +9,8 @@
 const {
   loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
+  getTemplateById, createTemplate, updateTemplate, deleteTemplate,
+  parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 
@@ -100,7 +102,102 @@ async function postReimport(req, res) {
   }
 }
 
+// ---- Full template CRUD + xlsx upload (PbRingGridTemplateEditor.jsx) ----
+
+async function getTemplate(req, res) {
+  try {
+    const tpl = await getTemplateById(req.params.id);
+    if (!tpl) return res.status(404).json({ error: 'Template not found' });
+    res.json(tpl);
+  } catch (err) {
+    console.error('[pbring:grid:admin:template:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load template' });
+  }
+}
+
+async function postTemplate(req, res) {
+  try {
+    const row = await createTemplate(req.body || {}, req.user?.empno);
+    res.json(row);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A template with that name already exists' });
+    console.error('[pbring:grid:admin:template:create]', err);
+    res.status(400).json({ error: err.message || 'Failed to create template' });
+  }
+}
+
+async function putTemplate(req, res) {
+  try {
+    const row = await updateTemplate(req.params.id, req.body || {}, req.user?.empno);
+    if (!row) return res.status(404).json({ error: 'Template not found' });
+    res.json(row);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A template with that name already exists' });
+    console.error('[pbring:grid:admin:template:update]', err);
+    res.status(400).json({ error: err.message || 'Failed to update template' });
+  }
+}
+
+async function deleteTemplateRoute(req, res) {
+  try {
+    const result = await deleteTemplate(req.params.id);
+    if (!result.ok && result.reason === 'not_found') return res.status(404).json({ error: 'Template not found' });
+    if (!result.ok && result.reason === 'is_default') {
+      return res.status(400).json({ error: 'Cannot delete the default template — set another default first' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[pbring:grid:admin:template:delete]', err);
+    res.status(500).json({ error: err.message || 'Failed to delete template' });
+  }
+}
+
+function getUploadedXlsx(req) {
+  if (!req.files || !req.files.xlsx) return null;
+  const file = Array.isArray(req.files.xlsx) ? req.files.xlsx[0] : req.files.xlsx;
+  if (!/\.xlsx$/i.test(file.name || '')) return null;
+  return file;
+}
+
+async function postXlsxUploadSheets(req, res) {
+  const file = getUploadedXlsx(req);
+  if (!file) return res.status(400).json({ error: 'xlsx file is required (field: xlsx)' });
+  try {
+    res.json({ sheets: await listXlsxSheets(file.data) });
+  } catch (err) {
+    res.status(400).json({ error: `Could not parse workbook: ${err.message}` });
+  }
+}
+
+async function postXlsxUpload(req, res) {
+  const file = getUploadedXlsx(req);
+  if (!file) return res.status(400).json({ error: 'xlsx file is required (field: xlsx)' });
+  try {
+    const grid = await parseXlsxGridFromBuffer(file.data, req.body?.sheet);
+    res.json({ grid });
+  } catch (err) {
+    res.status(400).json({ error: `Could not parse workbook: ${err.message}` });
+  }
+}
+
+/** GET admin: blank preview PDF for one template — no cn/machine/process, placeholders shown literally. */
+async function getTemplateBlankPdf(req, res) {
+  try {
+    const html = await renderBlankTemplateHtml(req.params.id);
+    if (!html) return res.status(404).json({ error: 'Template not found' });
+    const pdf = await renderPdf(html);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="pbring-template-blank.pdf"');
+    res.send(pdf);
+  } catch (err) {
+    console.error('[pbring:grid:admin:template:blank-pdf]', err);
+    res.status(500).json({ error: err.message || 'Failed to render preview' });
+  }
+}
+
 module.exports = {
   getPdf, getHasData,
   getTemplates, getMachineTypes, putMachineTemplate, putTemplateDefault, postReimport,
+  getTemplate, postTemplate, putTemplate, deleteTemplate: deleteTemplateRoute,
+  postXlsxUploadSheets, postXlsxUpload, getTemplateBlankPdf,
 };

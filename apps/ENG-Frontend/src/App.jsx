@@ -56,6 +56,7 @@ import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
 import SdsCoverageDashboard from './components/engineer/mtc_eng/sds/SdsCoverageDashboard';
 import SdsTemplateConfigPage from './components/engineer/mtc_eng/sds/SdsTemplateConfigPage';
+import PbRingTemplateConfigPage from './components/engineer/mtc_eng/pbring/PbRingTemplateConfigPage';
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page';
 import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage';
 import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/SpecProcessManager';
@@ -368,6 +369,7 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
                   <Route path={MTC_PATHS.PART_MANAGEMENT} element={<SpecProcessManager />} />
                   <Route path={MTC_PATHS.PB_RING} element={<PbRingMonitorPage />} />
+                  <Route path={MTC_PATHS.PB_RING_TEMPLATE_CONFIG} element={<PbRingTemplateConfigPage />} />
                   <Route path={MTC_PATHS.CN_ENABLE} element={<CnEnablePage />} />
                   <Route path={MTC_PATHS.PERMISSIONS_CONFIG} element={<PermissionsConfigPage />} />
                   {/* CAD/CAM route is above, outside MainLayout — see the note there. */}

@@ -9,8 +9,10 @@ import {
   DoubleRightOutlined, DoubleLeftOutlined, StarFilled, StarOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { useNavigate } from 'react-router-dom';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
+import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { useTheme } from '../../../../theme';
 import { useAuthStore } from '../../../../stores/authStore';
@@ -1005,14 +1007,15 @@ function SummaryTab() {
   );
 }
 
-// Phase 5.6 — lightweight management for the grid-template PDF system, not a
-// pixel editor. The 18 imported templates were verified (zero hand-correction
-// needed after a full render sweep), so there's nothing today a cell-by-cell
-// Excel-style editor (like SdsBlankTemplateGrid.jsx, ~1,081 lines) would be
-// doing — list templates/machines, (re)assign, set default, and re-run the
-// xlsx import when the source workbook changes. See the plan file.
+// Phase 5.6 — machine<->template assignment + default + bulk re-import from
+// the source workbook. Layout editing itself (borders/fonts/merges/cell
+// text) is a separate page — PbRingTemplateConfigPage.jsx, a duplicate of
+// SDS's own SdsBlankTemplateGrid.jsx editing surface — reached via the "Edit
+// Templates" button below, same split as the live SDS admin keeps between
+// machine/template assignment and the grid layout editor.
 function GridTemplatesTab() {
   const { message, modal } = App.useApp();
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1119,6 +1122,7 @@ function GridTemplatesTab() {
       <Space style={{ marginBottom: 12 }}>
         <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>Refresh</Button>
         <Button icon={<SyncOutlined />} onClick={reimport} loading={reimporting}>Re-import from Excel</Button>
+        <Button icon={<EditOutlined />} onClick={() => navigate(MTC_PATHS.PB_RING_TEMPLATE_CONFIG)}>Edit Templates</Button>
       </Space>
       <Card size="small" title="Machines" style={{ marginBottom: 12 }}>
         <Table size="small" rowKey="id" dataSource={machines} columns={machineColumns} loading={loading} pagination={false} />

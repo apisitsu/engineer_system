@@ -79,13 +79,24 @@ router.post('/cost/pending/:id/reject', isPbringWriter, pbringController.rejectP
 router.get('/grid/pdf', pbringGridController.getPdf);
 router.get('/grid/has-data', pbringGridController.getHasData);
 
-// Grid-template admin (Phase 5.6) — lightweight management, not a pixel
-// editor: list/assign/default + re-run the xlsx import. Gated on
-// isPbringAdmin like the other structural actions above (+New HW, Delete HW).
+// Grid-template admin (Phase 5.6) — machine<->template assignment, default,
+// and re-run the xlsx import. Gated on isPbringAdmin like the other
+// structural actions above (+New HW, Delete HW).
 router.get('/grid/admin/templates', isPbringAdmin, pbringGridController.getTemplates);
 router.get('/grid/admin/machine-types', isPbringAdmin, pbringGridController.getMachineTypes);
 router.put('/grid/admin/machine-types/:id', isPbringAdmin, pbringGridController.putMachineTemplate);
 router.put('/grid/admin/templates/:id/default', isPbringAdmin, pbringGridController.putTemplateDefault);
 router.post('/grid/admin/reimport', isPbringAdmin, pbringGridController.postReimport);
+
+// Full template CRUD + xlsx upload — PbRingGridTemplateEditor.jsx, a
+// duplicate of SdsBlankTemplateGrid.jsx's editing surface (own route
+// namespace, own tables — zero coupling with sds_grid_template/sds_excel_mapping).
+router.get('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.getTemplate);
+router.post('/grid/admin/templates', isPbringAdmin, pbringGridController.postTemplate);
+router.put('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.putTemplate);
+router.delete('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.deleteTemplate);
+router.post('/grid/admin/templates/from-xlsx-upload/sheets', isPbringAdmin, pbringGridController.postXlsxUploadSheets);
+router.post('/grid/admin/templates/from-xlsx-upload', isPbringAdmin, pbringGridController.postXlsxUpload);
+router.get('/grid/admin/templates/:id/pdf-blank', isPbringAdmin, pbringGridController.getTemplateBlankPdf);
 
 module.exports = router;
