@@ -330,10 +330,14 @@ export default function InspectionResultDashboard() {
                     },
                 },
                 {
+                    // Not red: the "Delay" bar is also red, so a red dashed line reads as
+                    // invisible (same hue, no contrast) wherever a tall Delay segment
+                    // crosses its height — confirmed this is a colour-clash, not a z-order
+                    // problem: forcing `order` to an extreme value changed nothing.
                     type: 'line',
                     label: 'Target 90%',
                     data: labels.map(() => 90),
-                    borderColor: hexToRgba(C.red, 0.85),
+                    borderColor: hexToRgba(C.purple, 0.9),
                     borderWidth: 1.5,
                     borderDash: [6, 4],
                     pointRadius: 0,
@@ -344,6 +348,24 @@ export default function InspectionResultDashboard() {
             ]
         };
     };
+
+    const monthlyChartData = buildMonthlyChart();
+
+    // Keep the tallest bar at or below the screen height the Target line sits at on the
+    // right axis (90/115 of the chart) — without an explicit max here, Chart.js
+    // auto-scales this axis to the data alone, which can land the tallest bar ABOVE
+    // where "90%" actually sits on the differently-scaled right axis. Same fix as
+    // SdsCoverageDashboard's Cumulative Coverage Status chart.
+    const yLeftMax = (() => {
+        const stackTotals = monthlyChartData.datasets[0].data.map((v, i) =>
+            (v || 0) + (monthlyChartData.datasets[1].data[i] || 0));
+        const barMax = Math.max(1, ...stackTotals);
+        // Round UP to a "nice" gridline, but the rounding step itself scales with the
+        // data — a fixed step overshoots badly on small counts (see the identical note
+        // on GeneralDwgReport's yLeftMax).
+        const step = barMax < 10 ? 1 : barMax < 50 ? 5 : barMax < 200 ? 10 : barMax < 1000 ? 50 : 500;
+        return Math.ceil((barMax * 115 / 90) / step) * step;
+    })();
 
     const monthlyChartOpts = {
         responsive: true,
@@ -387,6 +409,8 @@ export default function InspectionResultDashboard() {
                 type: 'linear',
                 position: 'left',
                 stacked: true,
+                min: 0,
+                max: yLeftMax,
                 ticks: { color: C.textSec, font: { size: 10 } },
                 grid: { color: C.gridLine }
             },
@@ -620,7 +644,7 @@ export default function InspectionResultDashboard() {
                                 <div style={{ ...cardStyle, height: 310 }}>
                                     {sectionTitle(`Monthly Trend — FYE${fye}`, C)}
                                     <div style={{ height: 255 }}>
-                                        <Bar data={buildMonthlyChart()} options={monthlyChartOpts} />
+                                        <Bar data={monthlyChartData} options={monthlyChartOpts} />
                                     </div>
                                 </div>
                             </Col>

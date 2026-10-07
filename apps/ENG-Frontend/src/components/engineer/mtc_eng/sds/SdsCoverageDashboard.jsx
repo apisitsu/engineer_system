@@ -107,11 +107,9 @@ const hexToRgba = (hex, a) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-// Fiscal year (Apr 1 – Mar 31). FYE N = Apr (N+1999) → Mar (N+2000). The backend now
-// sends this as `data.fye`; this is the fallback so an older cached payload still
-// windows the FY-scoped charts on the right period instead of a stale hardcoded one.
-const computeFyeWindow = (ref = new Date()) => {
-  const num = (ref.getMonth() + 1) >= 4 ? ref.getFullYear() - 1999 : ref.getFullYear() - 2000;
+// Fiscal year (Apr 1 – Mar 31). FYE N = Apr (N+1999) → Mar (N+2000) — same convention
+// as InspectionResultDashboard / GeneralDwgReport's FYE selector.
+const fyeWindowForNum = (num) => {
   const sy = num + 1999;
   const pad = (v) => String(v).padStart(2, '0');
   return {
@@ -120,6 +118,14 @@ const computeFyeWindow = (ref = new Date()) => {
     prevStart: `${sy - 1}-04`, prevEnd: `${sy}-03`,
     label: `FYE${pad(num)}`, prevLabel: `FYE${pad(num - 1)}`,
   };
+};
+
+// The backend sends the CURRENT fye as `data.fye`; this derives the same window
+// client-side as the default FYE selection and as a fallback for an older cached
+// payload with no `data.fye` at all.
+const computeFyeWindow = (ref = new Date()) => {
+  const num = (ref.getMonth() + 1) >= 4 ? ref.getFullYear() - 1999 : ref.getFullYear() - 2000;
+  return fyeWindowForNum(num);
 };
 
 // The FY's calendar months as 'YYYY-MM', Apr → Mar (local-time safe — no toISOString,
@@ -335,6 +341,7 @@ export default function SdsCoverageDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [fye, setFye] = useState(() => computeFyeWindow().num);
   const [filterPt, setFilterPt] = useState('');
   const [filterMc, setFilterMc] = useState('');
   const [filterReason, setFilterReason] = useState('');
@@ -487,9 +494,28 @@ export default function SdsCoverageDashboard() {
     return new Date(+y, +mo - 1, 1).toLocaleString('en', { month: 'short' }) + ' ' + y.slice(2);
   };
 
-  // The FY window for the FY-scoped charts: the backend's `data.fye`, or a client-side
-  // fallback so an older cached payload still renders the current FY (not a stale one).
-  const fyeWin = useMemo(() => data?.fye || computeFyeWindow(), [data]);
+  // FYE dropdown — the underlying payload already carries full history (since the
+  // report scope's since_date, not just the current FY), so switching FYE needs no
+  // extra fetch: just re-window the same `data.monthlyStatus`/`monthlyNewParts`
+  // client-side. Options are derived from the months actually present in the data
+  // (matches the FYE selects on Tooling Inspection and General DWG Request, which
+  // fetch their option list from the backend — here it's free from data already in hand).
+  const fyeOptions = useMemo(() => {
+    const months = (data?.monthlyStatus || []).map(r => r.month).filter(Boolean);
+    const toFyeNum = (m) => { const [y, mo] = m.split('-').map(Number); return mo >= 4 ? y - 1999 : y - 2000; };
+    const nums = new Set(months.map(toFyeNum));
+    nums.add(fye); // keep the current selection visible even before data loads
+    return [...nums].sort((a, b) => b - a);
+  }, [data, fye]);
+  const fyeWin = useMemo(() => fyeWindowForNum(fye), [fye]);
+
+  // Month dropdown — the same "First produced" filter a bar click already sets
+  // (`filterMonth`), offered as an explicit picker too (matches the FYE/Month
+  // selects on the Tooling Inspection and General DWG Request reports).
+  const monthFilterOptions = useMemo(() => ([
+    { label: 'All Months', value: '' },
+    ...fyMonths(fyeWin).map(key => ({ label: fmtMonth(key), value: key })),
+  ]), [fyeWin]);
 
   // ── Monthly New Parts chart ───────────────────────────────────────────────────
   const monthlyNewParts = useMemo(() => {
@@ -735,6 +761,7 @@ export default function SdsCoverageDashboard() {
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
+        order: 3,
       },
       {
         type: 'bar',
@@ -745,6 +772,7 @@ export default function SdsCoverageDashboard() {
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
+        order: 3,
       },
       {
         type: 'bar',
@@ -755,6 +783,7 @@ export default function SdsCoverageDashboard() {
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
+        order: 3,
       },
       {
         // Invisible marker, plotted on the same CN axis ('y') as the bars, at exactly
@@ -774,7 +803,7 @@ export default function SdsCoverageDashboard() {
         borderWidth: 0,
         fill: false,
         yAxisID: 'y',
-        order: -1, // drawn after the bars (lower `order` draws on top) so the text isn't hidden under a segment
+        order: 2, // below the % line and Target, above the bars (lower `order` draws on top) so the text isn't hidden under a segment
         datalabels: {
           display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]),
           formatter: (v, ctx) => {
@@ -807,6 +836,7 @@ export default function SdsCoverageDashboard() {
         pointBorderColor: C.orange,
         tension: 0.3,
         yAxisID: 'y1',
+        order: 1, // above the bars and the Total marker, below Target (lower `order` draws on top)
         // Two labels stacked above each bar (count, %), plus delta vs the prior bar
         // pushed into the GAP to its left — reads as "the change crossing into this
         // bar" sitting between the two bars being compared, not stacked on either one.
@@ -862,10 +892,22 @@ export default function SdsCoverageDashboard() {
         pointRadius: 0,
         tension: 0,
         yAxisID: 'y1',
+        order: 0, // lowest in this chart — always drawn last, on top of the bars and every other line
       },
     ],
     };
   }, [monthlyStatus, filterMonth]);
+
+  // See the `max` comment on the left 'y' scale below: keeps the tallest bar at or below
+  // the screen height the target line sits at on the right axis (90/115 of the chart).
+  const yMax = useMemo(() => {
+    const barMax = Math.max(1, ...monthlyStatus.map(r => (r.complete || 0) + (r.pending || 0)));
+    // Round UP to a "nice" gridline, but the rounding step itself scales with the data —
+    // a fixed step overshoots badly on small counts (same fix applied to the Tooling
+    // Inspection and General DWG Request reports' equivalent charts).
+    const step = barMax < 10 ? 1 : barMax < 50 ? 5 : barMax < 200 ? 10 : barMax < 1000 ? 50 : 500;
+    return Math.ceil((barMax * 115 / 90) / step) * step;
+  }, [monthlyStatus]);
 
   const statusChartOpts = {
     // Only months that have bars are selectable — the empty future placeholders and the
@@ -919,6 +961,15 @@ export default function SdsCoverageDashboard() {
       y: {
         stacked: true,
         position: 'left',
+        min: 0,
+        // Without an explicit max, Chart.js auto-scales this axis to the tallest bar alone
+        // (e.g. a 4,000 gridline against a ~3,700 bar), which lands that bar at ~92% of the
+        // chart height — ABOVE the 90% target line, which sits at 90/115 ≈ 78% up the RIGHT
+        // axis (that axis's own headroom is below). The two axes don't share a scale, so
+        // "90%" on one and "92% of this axis's own max" on the other are different screen
+        // heights. `yMax` (computed below from the same data, by the same 115/90 ratio)
+        // keeps the tallest bar at or below wherever the target line actually sits.
+        max: yMax,
         ticks: { color: C.textSec, font: { size: 10 } },
         grid: { color: C.gridLine },
         title: { display: true, text: 'CNs', color: C.textSec, font: { size: 10 } },
@@ -971,8 +1022,13 @@ export default function SdsCoverageDashboard() {
     const reasons = [...new Set(listRows.map(r => r.pending_reason).filter(Boolean))].sort();
     const hasLimitAnomaly = listRows.some(r => r.limit_excluded);
     const hasComplete = listRows.some(r => r.coverage_level === 'COMPLETE');
+    const hasPending = listRows.some(r => r.coverage_level !== 'COMPLETE');
     return [{ value: '', label: 'All Reasons' },
       ...(hasComplete ? [{ value: 'COMPLETE', label: 'Complete (PDF ready)' }] : []),
+      // Only useful when the list is a mix (a month cohort) — the default "CNs
+      // Requiring Action" list is pending-only already, so this would just repeat
+      // "All Reasons" there and is left out.
+      ...(hasComplete && hasPending ? [{ value: 'PENDING', label: 'Pending (all reasons)' }] : []),
       ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r })),
       ...(hasLimitAnomaly ? [{ value: 'LIMIT_ANOMALY', label: 'Limit Anomaly' }] : [])];
   }, [listRows]);
@@ -983,6 +1039,7 @@ export default function SdsCoverageDashboard() {
       if (filterMc && r.machine_type_name !== filterMc) return false;
       if (filterReason === 'LIMIT_ANOMALY') { if (!r.limit_excluded) return false; }
       else if (filterReason === 'COMPLETE') { if (r.coverage_level !== 'COMPLETE') return false; }
+      else if (filterReason === 'PENDING') { if (r.coverage_level === 'COMPLETE') return false; }
       else if (filterReason && r.pending_reason !== filterReason) return false;
       return true;
     });
@@ -1093,6 +1150,12 @@ export default function SdsCoverageDashboard() {
                 )}
               </div>
               <Space>
+                <Text style={{ color: C.textSec, fontSize: 12 }}>FYE</Text>
+                <Select size="small" value={fye} onChange={v => { setFye(v); clearSelection(); }} style={{ width: 90 }}
+                  options={fyeOptions.map(n => ({ label: `FYE${n}`, value: n }))} popupMatchSelectWidth={false} />
+                <Text style={{ color: C.textSec, fontSize: 12 }}>Month</Text>
+                <Select size="small" value={filterMonth} onChange={setFilterMonth} style={{ width: 130 }}
+                  options={monthFilterOptions} popupMatchSelectWidth={false} />
                 <Button icon={<SettingOutlined />} onClick={() => setScopeOpen(true)} size="small"
                   title="Edit report scope (part types, process codes, work centers) — admin"
                   style={{ background: C.card, borderColor: C.border, color: C.textPri }}>Scope</Button>
