@@ -32,6 +32,7 @@ const express = require('express');
 const router = express.Router();
 
 const pbringController = require('./pbringController');
+const pbringGridController = require('./pbringGridController');
 const { isMtcTeam, hasFeature } = require('../../../middleware/mtcAuth');
 const { WRITE_DENYLIST } = require('./pbringConstants');
 
@@ -71,5 +72,11 @@ router.post('/cost/detect', isPbringWriter, pbringController.detectCost);
 router.get('/cost/pending', pbringController.listPendingCost);
 router.post('/cost/pending/:id/approve', isPbringWriter, pbringController.approvePendingCost);
 router.post('/cost/pending/:id/reject', isPbringWriter, pbringController.rejectPendingCost);
+
+// Grid-template PDF (Phase 5) — own machine registry/grid/mapping tables,
+// own warm-Puppeteer renderer (pdfRender.js), zero coupling with sds_*/
+// tooling_*. Both read-only; verifyToken from the global mount is enough.
+router.get('/grid/pdf', pbringGridController.getPdf);
+router.get('/grid/has-data', pbringGridController.getHasData);
 
 module.exports = router;

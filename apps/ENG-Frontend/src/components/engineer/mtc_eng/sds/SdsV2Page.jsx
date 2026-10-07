@@ -111,6 +111,12 @@ const SdsV2Page = () => {
   // of blanking every machine when the history source is unavailable.
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
+  // PB Ring auto-detect — fully independent pbring_* pipeline, see
+  // pbringGridService.hasDataForCn. Fired in parallel with the real SDS search,
+  // never gates it, and swallows its own failures (see runSearch).
+  const [pbRingCombos, setPbRingCombos] = useState([]); // [{machine_type_name, process_code, has_template}]
+  const [pbRingPicker, setPbRingPicker] = useState(false);
+
   // PDF modal state
   const [pdfModal, setPdfModal] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -174,6 +180,12 @@ const SdsV2Page = () => {
     setTsData(null);
     setCnHistory(null);
     setHistoryLoaded(false);
+    setPbRingCombos([]);
+    // Fire-and-forget, parallel to the real search — a PB Ring failure must never
+    // affect the SDS search the user actually asked for.
+    axios.get(server.PBRING_GRID_HAS_DATA, { params: { cn: cnVal } })
+      .then((r) => { if (r?.data?.exists) setPbRingCombos(r.data.machines || []); })
+      .catch(() => {});
     try {
       const [searchRes, mtRes, tsRes, mtConfigRes, histRes, vmRes] = await Promise.all([
         axios.get(server.MTC_SDS_V2_SEARCH, { params: { cn: cnVal } }),
@@ -201,6 +213,26 @@ const SdsV2Page = () => {
   };
 
   const handleSearch = () => runSearch(cn.trim());
+
+  // Opens the PB Ring PDF directly when there's exactly one (machine, process)
+  // combo for this CN; otherwise lets the user pick one first.
+  const openPbRingPdf = (combo) => {
+    // window.open bypasses the axios interceptors that attach the auth header
+    // on normal calls, so the token travels as a query param — same fallback
+    // middleware/auth.js already supports for file-download links, same
+    // pattern handleGeneratePdf above uses for the live SDS PDF.
+    const params = new URLSearchParams({
+      cn: data.cn,
+      machine_type_name: combo.machine_type_name,
+      process_code: combo.process_code,
+      token: localStorage.getItem('token') || '',
+    }).toString();
+    window.open(`${server.PBRING_GRID_PDF}?${params}`, '_blank');
+  };
+  const handlePbRingButtonClick = () => {
+    if (pbRingCombos.length === 1) return openPbRingPdf(pbRingCombos[0]);
+    setPbRingPicker(true);
+  };
 
   const openPdfModal = (processRow) => {
     setSelectedProcess(processRow);
@@ -1157,6 +1189,15 @@ const SdsV2Page = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
+                  {pbRingCombos.length > 0 && (
+                    <Button
+                      icon={<FilePdfOutlined />}
+                      size="large"
+                      onClick={handlePbRingButtonClick}
+                    >
+                      PB Ring PDF
+                    </Button>
+                  )}
                   <Button
                     icon={<HistoryOutlined />}
                     size="large"
@@ -1416,6 +1457,27 @@ const SdsV2Page = () => {
             </Text>
           </Space>
         )}
+      </Modal>
+
+      <Modal
+        title="PB Ring PDF — select machine / process"
+        open={pbRingPicker}
+        onCancel={() => setPbRingPicker(false)}
+        footer={null}
+        destroyOnHidden
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {pbRingCombos.map((combo) => (
+            <Button
+              key={`${combo.machine_type_name}-${combo.process_code}`}
+              block
+              icon={<FilePdfOutlined />}
+              onClick={() => { setPbRingPicker(false); openPbRingPdf(combo); }}
+            >
+              {combo.machine_type_name} · Process {combo.process_code}
+            </Button>
+          ))}
+        </Space>
       </Modal>
 
       <Modal
