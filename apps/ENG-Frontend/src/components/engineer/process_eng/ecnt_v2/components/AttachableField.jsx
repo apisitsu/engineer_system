@@ -16,6 +16,7 @@ const isImageFile = (file) => {
 
 export default function AttachableField({
     name,
+    fieldName,
     label,
     placeholder,
     rows = 3,
@@ -38,8 +39,9 @@ export default function AttachableField({
             });
 
             if (res.data && res.data.success) {
+                const targetFieldName = fieldName || (Array.isArray(name) ? name.join('_') : String(name || 'attachment'));
                 const newAttachment = {
-                    field_name: name,
+                    field_name: targetFieldName,
                     block_number: blockNumber,
                     file_name: res.data.file_name,
                     file_url: res.data.file_url,

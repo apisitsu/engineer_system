@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, Checkbox, Row, Col, Collapse, Radio, DatePicker, Typography, Space, Alert } from 'antd';
 import { App } from 'antd';
+import { LinkOutlined } from '@ant-design/icons';
 import axios from 'axios';
+import moment from 'moment';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import AttachableField from './components/AttachableField';
@@ -10,7 +12,15 @@ import { dispatchStageWorkflowEmail } from '../../../../services/ecntEmailServic
 const { TextArea } = Input;
 const { Text } = Typography;
 
-export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onClose, onSuccess }) {
+export default function CreateECNModal({ 
+    open, 
+    linkedEcr, 
+    initialEcnData = null, 
+    isEditMode = false, 
+    systemConfig = {}, 
+    onClose, 
+    onSuccess 
+}) {
     const { message: antdMessage } = App.useApp();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
@@ -32,20 +42,67 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
     const hasOtd = Form.useWatch(['impact', 'has_otd'], form);
 
     useEffect(() => {
-        if (open && linkedEcr) {
-            form.setFieldsValue({
-                ecr_id: linkedEcr.id,
-                title_of_change: linkedEcr.title_of_change || '',
-                reason_of_change: linkedEcr.reason_of_change || '',
-                before_change: linkedEcr.dwg_before_change || linkedEcr.usage_before_change || linkedEcr.prog_before_change || '',
-                after_change: linkedEcr.dwg_after_change || linkedEcr.usage_after_change || linkedEcr.prog_after_change || '',
-                dwg_suspended: true,
-                impact: {
-                    customer_name: linkedEcr.customer_name || '',
+        if (open) {
+            if (isEditMode && initialEcnData) {
+                const imp = initialEcnData.impact || initialEcnData.impact_assessment || {};
+                form.setFieldsValue({
+                    ecn_no: initialEcnData.ecn_no,
+                    dwg_suspended: initialEcnData.dwg_suspended !== undefined ? initialEcnData.dwg_suspended : true,
+                    title_of_change: initialEcnData.title_of_change || '',
+                    reason_of_change: initialEcnData.reason_of_change || '',
+                    scope_of_implementation: initialEcnData.scope_of_implementation || '',
+                    before_change: initialEcnData.before_change || '',
+                    after_change: initialEcnData.after_change || '',
+                    impact: {
+                        ...imp,
+                        customer_notification_date: imp.customer_notification_date ? moment(imp.customer_notification_date) : null,
+                        customer_change_notice_date: imp.customer_change_notice_date ? moment(imp.customer_change_notice_date) : null,
+                        customer_approved_date: imp.customer_approved_date ? moment(imp.customer_approved_date) : null,
+                        kzw_notification_date: imp.kzw_notification_date ? moment(imp.kzw_notification_date) : null,
+                        kzw_doc_received_date: imp.kzw_doc_received_date ? moment(imp.kzw_doc_received_date) : null,
+                        sale_drawing_finish_date: imp.sale_drawing_finish_date ? moment(imp.sale_drawing_finish_date) : null,
+                        traceability_details: {
+                            ...(imp.traceability_details || {}),
+                            finish_date: imp.traceability_details?.finish_date ? moment(imp.traceability_details.finish_date) : null
+                        },
+                        wip_stock_details: {
+                            ...(imp.wip_stock_details || {}),
+                            finish_date: imp.wip_stock_details?.finish_date ? moment(imp.wip_stock_details.finish_date) : null
+                        },
+                        otd_details: {
+                            ...(imp.otd_details || {}),
+                            estimated_completion_date: imp.otd_details?.estimated_completion_date ? moment(imp.otd_details.estimated_completion_date) : null
+                        }
+                    }
+                });
+
+                if (initialEcnData.attachments && Array.isArray(initialEcnData.attachments)) {
+                    const grouped = {};
+                    initialEcnData.attachments.forEach(a => {
+                        const fn = a.field_name || 'general';
+                        if (!grouped[fn]) grouped[fn] = [];
+                        grouped[fn].push(a);
+                    });
+                    setFieldAttachments(grouped);
+                } else {
+                    setFieldAttachments({});
                 }
-            });
+            } else if (linkedEcr) {
+                form.setFieldsValue({
+                    ecr_id: linkedEcr.id,
+                    title_of_change: linkedEcr.title_of_change || '',
+                    reason_of_change: linkedEcr.reason_of_change || '',
+                    before_change: linkedEcr.dwg_before_change || linkedEcr.usage_before_change || linkedEcr.prog_before_change || '',
+                    after_change: linkedEcr.dwg_after_change || linkedEcr.usage_after_change || linkedEcr.prog_after_change || '',
+                    dwg_suspended: true,
+                    impact: {
+                        customer_name: linkedEcr.customer_name || '',
+                    }
+                });
+                setFieldAttachments({});
+            }
         }
-    }, [open, linkedEcr, form]);
+    }, [open, linkedEcr, initialEcnData, isEditMode, form]);
 
     const handleSubmit = async () => {
         try {
@@ -56,43 +113,51 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
             const payload = {
                 ...values,
                 attachments: allFieldAttachments,
-                ecr_id: linkedEcr.id,
+                ecr_id: linkedEcr?.id || initialEcnData?.ecr_id,
                 engineer_assigned: empNo || userName || 'NATHAPORN YAMMANUS',
-                request_by: linkedEcr.request_by,
-                department: linkedEcr.department
+                request_by: linkedEcr?.request_by || initialEcnData?.request_by,
+                department: linkedEcr?.department || initialEcnData?.department
             };
             const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
             const token = localStorage.getItem("token");
-            const res = await axios.post(`${baseUrl}/api/ecnt/ecn`, payload, { 
-                withCredentials: true,
-                headers: token ? { Authorization: `Bearer ${token}` } : {}
-            });
-            
-            antdMessage.success("ECN Created Successfully (Block 5 Complete -> Pending Eng Mgr ECN)");
 
-            // Fire-and-forget email notification to Eng Mgr
-            try {
-                const ecnId = res.data?.id || res.data?.data?.id;
-                dispatchStageWorkflowEmail({
-                    stageCode: 'STAGE_3',
-                    docData: {
-                        id: ecnId,
-                        ecn_no: values.ecn_no,
-                        title_of_change: linkedEcr.title_of_change,
-                        customer_name: linkedEcr.customer_name,
-                        department: linkedEcr.department,
-                        request_by_name: linkedEcr.request_by_name
-                    },
-                    documentType: 'ECN',
-                    actionTaken: 'FORMULATE_ECN',
-                    systemConfig
-                }).catch(e => console.warn("[CreateECNModal] Email dispatch background error:", e));
-            } catch(e) {}
+            if (isEditMode && initialEcnData) {
+                await axios.put(`${baseUrl}/api/ecnt/ecn/${initialEcnData.id}/resubmit`, payload, {
+                    withCredentials: true,
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                antdMessage.success("ECN Details Resubmitted Successfully (Block 5 Complete -> Pending Eng Mgr ECN)");
+            } else {
+                const res = await axios.post(`${baseUrl}/api/ecnt/ecn`, payload, { 
+                    withCredentials: true,
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                antdMessage.success("ECN Created Successfully (Block 5 Complete -> Pending Eng Mgr ECN)");
+
+                // Fire-and-forget email notification to Eng Mgr
+                try {
+                    const ecnId = res.data?.id || res.data?.data?.id;
+                    dispatchStageWorkflowEmail({
+                        stageCode: 'STAGE_3',
+                        docData: {
+                            id: ecnId,
+                            ecn_no: values.ecn_no,
+                            title_of_change: linkedEcr?.title_of_change,
+                            customer_name: linkedEcr?.customer_name,
+                            department: linkedEcr?.department,
+                            request_by_name: linkedEcr?.request_by_name
+                        },
+                        documentType: 'ECN',
+                        actionTaken: 'FORMULATE_ECN',
+                        systemConfig
+                    }).catch(e => console.warn("[CreateECNModal] Email dispatch background error:", e));
+                } catch(e) {}
+            }
 
             form.resetFields();
             if (onSuccess) onSuccess();
         } catch (error) {
-            console.error("Create ECN Error:", error);
+            console.error("Create/Resubmit ECN Error:", error);
             antdMessage.error(error?.response?.data?.error || "Validation Failed. Please check required fields.");
         } finally {
             setLoading(false);
@@ -101,13 +166,19 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
 
     return (
         <Modal
-            title={<span style={{ fontSize: '18px', fontWeight: 600 }}>Block 5: Create Engineering Change Notice (ECN)</span>}
+            title={
+                <span style={{ fontSize: '18px', fontWeight: 600 }}>
+                    {isEditMode 
+                        ? 'Block 5 Rework: Edit & Revise Engineering Change Notice (ECN)' 
+                        : 'Block 5: Create Engineering Change Notice (ECN)'}
+                </span>
+            }
             open={open}
             onCancel={onClose}
             onOk={handleSubmit}
             confirmLoading={loading}
             width={950}
-            okText="Submit ECN to Eng Mgr"
+            okText={isEditMode ? "Resubmit ECN to Eng Mgr" : "Submit ECN to Eng Mgr"}
             destroyOnClose
         >
             <Form form={form} layout="vertical">
@@ -115,11 +186,15 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                 <Alert 
                     message={
                         <Space direction="vertical" size={2}>
-                            <Text strong>Linked Reference: {linkedEcr?.ecr_no || 'ECR #' + linkedEcr?.id}</Text>
+                            <Text strong>
+                                {isEditMode 
+                                    ? `ECN No: ${initialEcnData?.ecn_no || `#${initialEcnData?.id}`} (Linked ECR: ${initialEcnData?.ecr_no || initialEcnData?.ecr_id || 'N/A'})` 
+                                    : `Linked Reference: ${linkedEcr?.ecr_no || 'ECR #' + linkedEcr?.id}`}
+                            </Text>
                             <Text type="secondary">
-                                Requester: {linkedEcr?.request_by_name} ({linkedEcr?.department}) | 
-                                Customer: {linkedEcr?.customer_name || 'N/A'} | 
-                                Project: {linkedEcr?.project_code || 'N/A'}
+                                Requester: {linkedEcr?.request_by_name || initialEcnData?.request_by_name} ({linkedEcr?.department || initialEcnData?.department}) | 
+                                Customer: {linkedEcr?.customer_name || initialEcnData?.customer_name || 'N/A'} | 
+                                Project: {linkedEcr?.project_code || initialEcnData?.project_code || 'N/A'}
                             </Text>
                         </Space>
                     }
@@ -299,12 +374,12 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                     {/* 8 Affected Areas Checklist */}
                     <Collapse.Panel header="2. 8 Affected Areas Checklist" key="affected_areas">
                         {/* 1. Traceability */}
-                        <div style={{ marginBottom: 10, padding: 8, background: '#fcfcfc', border: '1px solid #f0f0f0', borderRadius: 4 }}>
+                        <div style={{ marginBottom: 12, padding: 12, background: '#fcfcfc', border: '1px solid #e8e8e8', borderRadius: 6 }}>
                             <Form.Item name={['impact', 'has_traceability']} valuePropName="checked" noStyle>
-                                <Checkbox strong>1. Traceability (track production history / Lot recall)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>1. Traceability (track production history / Lot recall)</Checkbox>
                             </Form.Item>
                             {hasTraceability && (
-                                <Row gutter={8} style={{ marginTop: 8 }}>
+                                <Row gutter={8} style={{ marginTop: 10 }}>
                                     <Col span={16}>
                                         <Form.Item name={['impact', 'traceability_details', 'lot_no']} label="Recalled Lot No. (Contact PC)">
                                             <Input placeholder="Lot No. to recall..." />
@@ -315,17 +390,44 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                                             <DatePicker style={{ width: '100%' }} />
                                         </Form.Item>
                                     </Col>
+                                    <Col span={24}>
+                                        <Form.Item name={['impact', 'traceability_details', 'google_sheet_url']} label="Google Sheet / Online Link (Lot Traceability List)">
+                                            <Input 
+                                                prefix={<LinkOutlined />} 
+                                                placeholder="https://docs.google.com/spreadsheets/d/..." 
+                                                addonAfter={
+                                                    form.getFieldValue(['impact', 'traceability_details', 'google_sheet_url']) ? (
+                                                        <a href={form.getFieldValue(['impact', 'traceability_details', 'google_sheet_url'])} target="_blank" rel="noopener noreferrer">
+                                                            Open 🔗
+                                                        </a>
+                                                    ) : null
+                                                }
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={24}>
+                                        <AttachableField
+                                            name={['impact', 'traceability_details', 'notes']}
+                                            fieldName="traceability"
+                                            label="Traceability Evidences & Attachments"
+                                            placeholder="Attach lot list or recall evidence (press Ctrl+V to paste screenshot)..."
+                                            rows={2}
+                                            attachments={fieldAttachments['traceability'] || []}
+                                            onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, traceability: atts }))}
+                                            blockNumber={5}
+                                        />
+                                    </Col>
                                 </Row>
                             )}
                         </div>
 
                         {/* 2. WIP / Stock */}
-                        <div style={{ marginBottom: 10, padding: 8, background: '#fcfcfc', border: '1px solid #f0f0f0', borderRadius: 4 }}>
+                        <div style={{ marginBottom: 12, padding: 12, background: '#fcfcfc', border: '1px solid #e8e8e8', borderRadius: 6 }}>
                             <Form.Item name={['impact', 'has_wip_stock']} valuePropName="checked" noStyle>
-                                <Checkbox strong>2. WIP, Stock, Back log (All target model list)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>2. WIP, Stock, Back log (All target model list)</Checkbox>
                             </Form.Item>
                             {hasWipStock && (
-                                <Row gutter={8} style={{ marginTop: 8 }}>
+                                <Row gutter={8} style={{ marginTop: 10 }}>
                                     <Col span={16}>
                                         <Form.Item name={['impact', 'wip_stock_details', 'models']} label="Target Models / Disposition Detail">
                                             <Input placeholder="Specify affected models / disposition..." />
@@ -335,6 +437,33 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                                         <Form.Item name={['impact', 'wip_stock_details', 'finish_date']} label="Confirm Finish Date">
                                             <DatePicker style={{ width: '100%' }} />
                                         </Form.Item>
+                                    </Col>
+                                    <Col span={24}>
+                                        <Form.Item name={['impact', 'wip_stock_details', 'google_sheet_url']} label="Google Sheet / Online Link (WIP & Stock Evaluation)">
+                                            <Input 
+                                                prefix={<LinkOutlined />} 
+                                                placeholder="https://docs.google.com/spreadsheets/d/..." 
+                                                addonAfter={
+                                                    form.getFieldValue(['impact', 'wip_stock_details', 'google_sheet_url']) ? (
+                                                        <a href={form.getFieldValue(['impact', 'wip_stock_details', 'google_sheet_url'])} target="_blank" rel="noopener noreferrer">
+                                                            Open 🔗
+                                                        </a>
+                                                    ) : null
+                                                }
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={24}>
+                                        <AttachableField
+                                            name={['impact', 'wip_stock_details', 'notes']}
+                                            fieldName="wip_stock"
+                                            label="WIP & Stock Evidences & Attachments"
+                                            placeholder="Attach target model list or disposition evidence (press Ctrl+V to paste screenshot)..."
+                                            rows={2}
+                                            attachments={fieldAttachments['wip_stock'] || []}
+                                            onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, wip_stock: atts }))}
+                                            blockNumber={5}
+                                        />
                                     </Col>
                                 </Row>
                             )}

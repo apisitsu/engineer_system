@@ -41,7 +41,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                 is_usage: !!initialData.is_usage,
             });
 
-            if (initialData.attachments && Array.isArray(initialData.attachments)) {
+            if (initialData.attachments && Array.isArray(initialData.attachments) && initialData.attachments.length > 0) {
                 const grouped = {};
                 initialData.attachments.forEach(a => {
                     if (a.field_name) {
@@ -50,6 +50,28 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                     }
                 });
                 setFieldAttachments(grouped);
+            } else if (initialData.id) {
+                // Defensive fallback to fetch attachments if not passed directly in initialData
+                const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+                const token = localStorage.getItem("token");
+                axios.get(`${baseUrl}/api/ecnt/ecr/${initialData.id}`, {
+                    withCredentials: true,
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                }).then(res => {
+                    const atts = res.data?.attachments || [];
+                    if (atts.length > 0) {
+                        const grouped = {};
+                        atts.forEach(a => {
+                            if (a.field_name) {
+                                if (!grouped[a.field_name]) grouped[a.field_name] = [];
+                                grouped[a.field_name].push(a);
+                            }
+                        });
+                        setFieldAttachments(grouped);
+                    }
+                }).catch(err => {
+                    console.warn("[EcrRequireView] Fallback fetch attachments failed:", err);
+                });
             }
         } else {
             form.resetFields();

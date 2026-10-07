@@ -231,6 +231,7 @@ app.route('/api/ecnt/ecr/:id/resubmit').put(verifyToken, engEcntV2.resubmitEcr);
 app.route('/api/ecnt/ecn').get(optionalVerifyToken, engEcntV2.getEcnList).post(verifyToken, engEcntV2.createEcn);
 app.route('/api/ecnt/ecn/:id').get(optionalVerifyToken, engEcntV2.getEcnById);
 app.route('/api/ecnt/ecn/:id/action').put(verifyToken, engEcntV2.actionEcn);
+app.route('/api/ecnt/ecn/:id/resubmit').put(verifyToken, engEcntV2.resubmitEcn);
 
 // Master PIC & Task Queues
 app.route('/api/ecnt/master-pic').get(optionalVerifyToken, engEcntV2.getMasterPic);

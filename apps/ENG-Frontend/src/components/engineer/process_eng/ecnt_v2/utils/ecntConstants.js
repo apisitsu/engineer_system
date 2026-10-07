@@ -41,6 +41,19 @@ export const ECNT_STAGES = [
         bg: '#fff7e6'
     },
     {
+        code: 'STAGE_2_RISK',
+        title: '3. ECR Risk Assessment',
+        shortTitle: 'Risk assessment',
+        description: 'Lead Engineer (พี่โอ) reviews technical changes and conducts Risk Assessment',
+        phase: 'ECR',
+        type: 'DECISION',
+        picRole: 'Eng. Assigned',
+        picName: 'NATHAPORN YAMMANUS',
+        slaHours: 24,
+        color: '#13c2c2',
+        bg: '#e6fffb'
+    },
+    {
         code: 'STAGE_3',
         title: '3. Eng Dept Mgr ECR Review',
         shortTitle: 'Eng Mgr ECR',

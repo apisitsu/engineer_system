@@ -4,10 +4,41 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-10-01
-- **Active Goal:** Tumble Process System: Integrated Inline Sub-Header Filter Row Deployed Across All 3 Tables (Tumble Models, Process Conditions, Condition Parts); Production Build Verified.
+- **Last Update:** 2026-10-07
+- **Active Goal:** ECNT V2: Complete 11-Feature System Upgrade from Factory Document Feedback (Stage Stepper Refinement, Block 5 & 9 Google Sheets Integration, Dedicated Rework Modals, View Full Details Dialogs, Attachment Sync & Clean Architecture); Production Build Verified.
 
-- **Tumble Process System: Integrated Inline Sub-Header Filter Row Across All 3 Tables (2026-10-01):**
+- **ECNT V2: Factory Engineering Process & Workflow Enhancement (11 Items Complete) (2026-10-07):**
+  - **1. Block 3 Label Realignment:**
+    - Updated Reviewer detail request label in Block 3 (Dept Mgr Approval) to `Detail request to requester` (replacing verbose legacy text).
+  - **2. Reviewer Detail Request Notes in Rework Alerts (`last_rmd_comment`):**
+    - Added database column `last_rmd_comment` to `ecnt2_ecr` and `ecnt2_ecn`.
+    - Captured and rendered reviewer notes in prominent amber alert boxes for both ECR and ECN rework states, providing clear guidance on why a revision is requested.
+  - **3. ECR Revision Attachment Resilience & Zero-Orphan Sync:**
+    - Fixed attachment disappearance on "Edit & Resubmit ECR" by passing full attachment array and adding defensive fetch fallback in `EcrRequireView.jsx`.
+    - Updated backend `resubmitEcr` to delete removed attachment IDs (`DELETE FROM ecnt2_attachment WHERE id NOT IN (...)`) and insert only new files, preventing duplicate entries.
+  - **4. Workflow Stepper Partitioning & Risk Assessment Stage:**
+    - Aligned stepper stages with factory practice: 5 steps for ECR and 7 steps for ECN.
+    - Added `STAGE_2_RISK` ("Risk Assessment (Lead Engineer)") between Dept Mgr approval and Concern sign-off, assigned to Nathaporn Yammanus (พี่โอ).
+  - **5. Block 5 Impact Assessment Google Sheet & Attachment Fields:**
+    - Added `google_sheet_url` to `ecnt2_impact_assessment`.
+    - Added interactive Google Sheet link inputs with `🔗 Open` launcher buttons and `AttachableField` uploaders for Traceability and WIP/Stock sections in `CreateECNModal.jsx`.
+  - **6. Stepper vs Block Number Synchronization:**
+    - Fixed step index offset across `StageStepper.jsx` and `WorkflowStageFlowPanel.jsx` to map 1:1 with paper engineering blocks.
+  - **7. Dedicated ECN Block 5 Rework Modal & Backend Engine:**
+    - Built comprehensive "Edit & Revise ECN" modal in `CreateECNModal.jsx` supporting edit mode for scope, impact checklists, and links.
+    - Implemented `PUT /api/ecnt/ecn/:id/resubmit` endpoint handling updates, attachment synchronization, and advancing workflow to `STAGE_5` (Pending Eng Mgr ECN).
+  - **8. Redundant RMD Form Field Removal:**
+    - Cleaned up `WorkflowActionCard.jsx`, restricting `request_to_requester` input exclusively to approval blocks that support rework (Blocks 3, 4, 6) and removing it from terminal/sign-off blocks (Blocks 7, 8, 9, 10).
+  - **9. Block-by-Block "View Full Details" (ดูรายละเอียดฉบับเต็ม):**
+    - Integrated `ดูรายละเอียดฉบับเต็ม` button across all 7 workspace block panel headers in `EcntWorkspaceView.jsx`.
+    - Created modal dialog presenting untruncated technical texts, specification tables, Google Sheet links, and high-resolution image previews.
+  - **10. Block 9 FAI Summary Google Sheet Integration:**
+    - Added `google_sheet_url` to `ecnt2_fai_summary`.
+    - Enabled Google Sheet report link and attachment uploads in Block 9 form and rendered them in Section 6 FAI Results.
+  - **11. Effective Stepper Node Done Color:**
+    - Updated `StageStepper.jsx` so that when an ECN reaches `ECN Effective` / `Closed`, the terminal "Effective" node transitions to green (`finish` state).
+  - **12. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 warnings in ECNT components).
   - **1. Inline 2-Tier Header Filter Row Architecture:**
     - Repositioned search/filter inputs directly between column header titles and table data rows in a dedicated 2-tier table header matching standard ERP/WinForms grid UX.
     - Uniformly implemented across all three engineering configuration tabs:

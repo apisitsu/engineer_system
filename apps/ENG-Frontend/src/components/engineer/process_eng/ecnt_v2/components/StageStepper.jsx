@@ -25,17 +25,43 @@ export default function StageStepper({
     // Standard linear stages without rework sub-stages
     const standardStages = ECNT_STAGES.filter(s => s.type !== 'RETURN_LOOP');
 
+    // Document is officially closed & effective
+    const isDocClosed = ['ECN EFFECTIVE', 'EFFECTIVE', 'CLOSED', 'ECR ONLY CLOSED'].includes((docData?.process_status || '').toUpperCase());
+
+    // Separate pipeline stages for ECR vs ECN
+    const stagesForView = documentType === 'ECR'
+        ? standardStages.filter(s => ['STAGE_1', 'STAGE_2', 'STAGE_2_RISK', 'STAGE_3', 'STAGE_4'].includes(s.code))
+        : standardStages.filter(s => ['STAGE_4', 'STAGE_5', 'STAGE_6', 'STAGE_7', 'STAGE_8', 'STAGE_9', 'STAGE_10'].includes(s.code));
+
+    // Map active stage code so that currentBlock matches the active stage node:
+    let resolvedStageCode = currentStageCode;
+    if (documentType === 'ECN') {
+        const blk = Number(docData?.current_block || 5);
+        if (blk === 5) resolvedStageCode = 'STAGE_4';
+        else if (blk === 6) resolvedStageCode = 'STAGE_5';
+        else if (blk === 7) resolvedStageCode = 'STAGE_6';
+        else if (blk === 8) resolvedStageCode = 'STAGE_7';
+        else if (blk === 9) resolvedStageCode = 'STAGE_8';
+        else if (blk === 10) resolvedStageCode = 'STAGE_9';
+        else if (blk === 11) resolvedStageCode = 'STAGE_10';
+    } else {
+        if (docData?.process_status === 'Pending Risk Assessment' || docData?.current_stage_code === 'STAGE_2_RISK') resolvedStageCode = 'STAGE_2_RISK';
+        else if (docData?.process_status === 'Pending Eng Mgr' || docData?.current_block === 4) resolvedStageCode = 'STAGE_3';
+        else if (docData?.process_status === 'Issued ECN' || docData?.current_block === 5) resolvedStageCode = 'STAGE_4';
+    }
+
     // Find any active return loops
     const activeReturnStage = stageHistory.find(h => h.status === 'ACTIVE' && h.stage_type === 'RETURN_LOOP');
-    const hasReturnLoop = !!activeReturnStage;
+    const hasReturnLoop = !isDocClosed && !!activeReturnStage;
 
-    const currentStageIndex = standardStages.findIndex(s => s.code === currentStageCode);
+    const currentStageIndex = isDocClosed ? stagesForView.length : stagesForView.findIndex(s => s.code === resolvedStageCode);
 
     // Helper: Determine PIC summary for each stage
     const getStagePicSummary = (stageCode) => {
         let stageKey = 'STAGE_1';
         if (stageCode === 'STAGE_1') stageKey = 'STAGE_1';
         else if (stageCode === 'STAGE_2') stageKey = 'STAGE_2';
+        else if (stageCode === 'STAGE_2_RISK') stageKey = 'STAGE_2_RISK';
         else if (stageCode === 'STAGE_3') stageKey = 'STAGE_3';
         else if (stageCode === 'STAGE_4') stageKey = 'STAGE_4';
         else if (stageCode === 'STAGE_5') stageKey = 'STAGE_5';
@@ -62,7 +88,13 @@ export default function StageStepper({
             const mgr = cfg?.dept_mgr_mapping?.[docData?.department];
             return { primaryName: mgr?.name || `${docData?.department || 'Dept'} Mgr`, extraCount: 0, rule: 'ANY' };
         }
-        if (stageKey === 'STAGE_3' || stageKey === 'STAGE_5') {
+        if (stageKey === 'STAGE_2_RISK') {
+            return { primaryName: 'พี่โอ (PE Assigned)', extraCount: 0, rule: 'ANY' };
+        }
+        if (stageKey === 'STAGE_3') {
+            return { primaryName: cfg?.eng_mgr?.name || 'พี่แจ็ค (Eng Mgr)', extraCount: 0, rule: 'ANY' };
+        }
+        if (stageKey === 'STAGE_5') {
             return { primaryName: cfg?.eng_mgr?.name || 'Teerapol K.', extraCount: 0, rule: 'ANY' };
         }
         if (stageKey === 'STAGE_4' || stageKey === 'STAGE_8') {
@@ -136,9 +168,9 @@ export default function StageStepper({
 
             {/* Horizontal Stage Stepper Bar with PIC Pills */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', overflowX: 'auto', paddingBottom: 6 }}>
-                {standardStages.map((stage, idx) => {
-                    const isPassed = currentStageIndex > idx;
-                    const isCurrent = currentStageIndex === idx && !hasReturnLoop;
+                {stagesForView.map((stage, idx) => {
+                    const isPassed = isDocClosed ? true : (currentStageIndex > idx);
+                    const isCurrent = !isDocClosed && (currentStageIndex === idx && !hasReturnLoop);
                     const picSummary = getStagePicSummary(stage.code);
 
                     let icon = null;
@@ -233,7 +265,7 @@ export default function StageStepper({
                                 </div>
                             </Tooltip>
 
-                            {idx < standardStages.length - 1 && (
+                            {idx < stagesForView.length - 1 && (
                                 <div style={{ 
                                     flex: 1, 
                                     height: 2, 

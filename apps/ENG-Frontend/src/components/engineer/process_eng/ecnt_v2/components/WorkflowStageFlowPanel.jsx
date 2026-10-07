@@ -19,14 +19,15 @@ const { Text } = Typography;
 const STAGES_CONFIG = [
     { key: 'STAGE_1', number: 1, title: 'Requester', block: 1, docPhase: 'ECR', defaultRole: 'Requester' },
     { key: 'STAGE_2', number: 2, title: 'Department Manager', block: 3, docPhase: 'ECR', defaultRole: 'Dept Manager' },
-    { key: 'STAGE_3', number: 3, title: 'Engineering Dept Manager', block: 4, docPhase: 'ECR', defaultRole: 'Eng. Dept Manager' },
-    { key: 'STAGE_4', number: 4, title: 'Person in charge (Assigned Engineer)', block: 4, docPhase: 'ECR_ECN', defaultRole: 'Eng. Assigned' },
-    { key: 'STAGE_5', number: 5, title: 'Eng Dept Mgr (ECN Review)', block: 6, docPhase: 'ECN', defaultRole: 'Eng. Dept Manager' },
-    { key: 'STAGE_6', number: 6, title: 'QC MSA Evaluator', block: 7, docPhase: 'ECN', defaultRole: 'QC MSA' },
-    { key: 'STAGE_7', number: 7, title: 'QC FAI Evaluator', block: 8, docPhase: 'ECN', defaultRole: 'QC FAI' },
-    { key: 'STAGE_8', number: 8, title: 'Lead Engineer (Summary & Tasks Setup)', block: 9, docPhase: 'ECN', defaultRole: 'Eng. Assigned' },
-    { key: 'STAGE_9', number: 9, title: 'Multi-Department Concern Approvals', block: 10, docPhase: 'ECN', isConcernMultiDept: true },
-    { key: 'STAGE_10', number: 10, title: 'Plant Executive / Official Close', block: 11, docPhase: 'ECN', defaultRole: 'Eng. Dept Manager / Top' }
+    { key: 'STAGE_2_RISK', number: 3, title: 'Lead Engineer (Risk Assessment - พี่โอ)', block: 3.5, docPhase: 'ECR', defaultRole: 'Eng. Assigned' },
+    { key: 'STAGE_3', number: 4, title: 'Engineering Dept Manager (พี่แจ็ค)', block: 4, docPhase: 'ECR', defaultRole: 'Eng. Dept Manager' },
+    { key: 'STAGE_4', number: 5, title: 'ECN Creation (Assigned Engineer - พี่โอ)', block: 5, docPhase: 'ECR_ECN', defaultRole: 'Eng. Assigned' },
+    { key: 'STAGE_5', number: 6, title: 'Eng Dept Mgr (ECN Review)', block: 6, docPhase: 'ECN', defaultRole: 'Eng. Dept Manager' },
+    { key: 'STAGE_6', number: 7, title: 'QC MSA Evaluator', block: 7, docPhase: 'ECN', defaultRole: 'QC MSA' },
+    { key: 'STAGE_7', number: 8, title: 'QC FAI Evaluator', block: 8, docPhase: 'ECN', defaultRole: 'QC FAI' },
+    { key: 'STAGE_8', number: 9, title: 'Lead Engineer (Summary & Tasks Setup)', block: 9, docPhase: 'ECN', defaultRole: 'Eng. Assigned' },
+    { key: 'STAGE_9', number: 10, title: 'Multi-Department Concern Approvals', block: 10, docPhase: 'ECN', isConcernMultiDept: true },
+    { key: 'STAGE_10', number: 11, title: 'Plant Executive / Official Close', block: 11, docPhase: 'ECN', defaultRole: 'Eng. Dept Manager / Top' }
 ];
 
 export default function WorkflowStageFlowPanel({
@@ -113,17 +114,24 @@ export default function WorkflowStageFlowPanel({
                 dept: docData?.department,
                 role: 'MGR'
             }];
+        } else if (stageKey === 'STAGE_2_RISK') {
+            defaultList = [{
+                emp_no: 'eng_assigned',
+                name: 'Nathaporn Yammanus (พี่โอ)',
+                dept: 'ENG',
+                role: 'Lead PE'
+            }];
         } else if (stageKey === 'STAGE_3' || stageKey === 'STAGE_5') {
             defaultList = [stageAssigneesCfg?.eng_mgr || {
                 emp_no: 'eng_mgr',
-                name: 'Teerapol Kantapoom',
+                name: 'Teerapol Kantapoom (พี่แจ็ค)',
                 dept: 'ENG',
                 role: 'MGR'
             }];
         } else if (stageKey === 'STAGE_4') {
             defaultList = [{
                 emp_no: docData?.assigned_to || 'eng_assigned',
-                name: docData?.assigned_to || 'NATHAPORN YAMMANUS',
+                name: docData?.assigned_to || 'NATHAPORN YAMMANUS (พี่โอ)',
                 dept: 'ENG',
                 role: 'PE'
             }];
@@ -137,13 +145,13 @@ export default function WorkflowStageFlowPanel({
         } else if (stageKey === 'STAGE_8') {
             defaultList = [{
                 emp_no: docData?.engineer_assigned || docData?.assigned_to || 'eng_assigned',
-                name: docData?.engineer_assigned || docData?.assigned_to || 'NATHAPORN YAMMANUS',
+                name: docData?.engineer_assigned || docData?.assigned_to || 'NATHAPORN YAMMANUS (พี่โอ)',
                 dept: 'ENG',
                 role: 'PE'
             }];
         } else if (stageKey === 'STAGE_10') {
             defaultList = [
-                stageAssigneesCfg?.eng_mgr || { emp_no: 'eng_mgr', name: 'Teerapol Kantapoom', dept: 'ENG', role: 'MGR' }
+                stageAssigneesCfg?.eng_mgr || { emp_no: 'eng_mgr', name: 'Teerapol Kantapoom (พี่แจ็ค)', dept: 'ENG', role: 'MGR' }
             ];
         }
 
@@ -170,6 +178,7 @@ export default function WorkflowStageFlowPanel({
     const getCurrentStageKey = () => {
         const code = docData?.current_stage_code || '';
         if (code.includes('STAGE_1')) return 'STAGE_1';
+        if (code.includes('STAGE_2_RISK') || docData?.process_status === 'Pending Risk Assessment') return 'STAGE_2_RISK';
         if (code.includes('STAGE_2')) return 'STAGE_2';
         if (code.includes('STAGE_3')) return 'STAGE_3';
         if (code.includes('STAGE_4')) return 'STAGE_4';
