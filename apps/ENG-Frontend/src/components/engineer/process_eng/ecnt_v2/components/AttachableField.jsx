@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Form, Input, Upload, Button, Space, Typography, Tag, Spin, Tooltip, message as antdMessage, Modal } from 'antd';
 import { PaperClipOutlined, FileOutlined, LoadingOutlined, EyeOutlined } from '@ant-design/icons';
-import axios from 'axios';
 import { server, GAS_DRIVE_URL } from '../../../../../constance/constance';
 import { uploadEcntFileToDrive, openGoogleDriveAuthWindow } from '../../../../../utils/uploadFileToDrive';
 import { AttachmentPreviewModal, getFileType, getFileUrl } from '../../../kanban/CardDetail/AttachmentViewManager';
@@ -33,6 +32,14 @@ export default function AttachableField({
     };
 
     const uploadFile = async (file) => {
+        // Open helper popup synchronously within user click/interaction gesture
+        let popup = null;
+        try {
+            popup = window.open('about:blank', 'gas_upload', 'width=460,height=420,left=350,top=150');
+        } catch (e) {
+            popup = null;
+        }
+
         setUploading(true);
         const targetFieldName = fieldName || (Array.isArray(name) ? name.join('_') : String(name || 'attachment'));
 
@@ -45,114 +52,80 @@ export default function AttachableField({
         });
 
         try {
-            // Priority 1: Google Drive via GAS (Frontend direct to Google Apps Script)
-            if (GAS_DRIVE_URL) {
-                let popup = null;
-                try {
-                    popup = window.open('about:blank', 'gas_upload', 'width=460,height=380,left=300,top=120');
-                } catch (e) {
-                    popup = null;
-                }
-
-                try {
-                    const gasRes = await uploadEcntFileToDrive(file, {
-                        ecrNo,
-                        ecnNo,
-                        blockNumber,
-                        fieldName: targetFieldName
-                    }, { popup });
-
-                    if (gasRes && gasRes.success) {
-                        const newAttachment = {
-                            field_name: targetFieldName,
-                            block_number: blockNumber,
-                            file_name: gasRes.fileName || file.name,
-                            file_url: gasRes.webViewLink,
-                            file_type: gasRes.mimeType || file.type || '',
-                            file_size: gasRes.fileSize || file.size || null,
-                            drive_file_id: gasRes.fileId,
-                            drive_folder_url: gasRes.folderUrl
-                        };
-                        if (onAttachmentsChange) {
-                            onAttachmentsChange([...attachments, newAttachment]);
-                        }
-                        antdMessage.success({
-                            content: `อัปโหลด ${file.name} ไปยัง Google Drive สำเร็จ`,
-                            key: msgKey,
-                            duration: 3
-                        });
-                        return;
-                    }
-                } catch (gasErr) {
-                    if (popup && !popup.closed) {
-                        try { popup.close(); } catch (e) {}
-                    }
-                    console.warn("[AttachableField] Google Drive upload error/fallback:", gasErr.message);
-                    if (gasErr.isAuthRequired) {
-                        Modal.confirm({
-                            title: 'จำเป็นต้องยืนยันสิทธิ์ Google Drive',
-                            content: (
-                                <div>
-                                    <p>ไม่สามารถอัปโหลดไฟล์ในเบื้องหลังได้ เนื่องจากระบบต้องการการเข้าสู่ระบบหรืออนุญาตสิทธิ์ Google Apps Script ก่อน</p>
-                                    <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>
-                                        รายละเอียด: {gasErr.message}
-                                    </p>
-                                </div>
-                            ),
-                            okText: '🔑 เปิดหน้าต่างยืนยันสิทธิ์ (Popup)',
-                            cancelText: 'ปิด',
-                            onOk: () => {
-                                openGoogleDriveAuthWindow();
-                            }
-                        });
-                    }
-                }
+            // Google Drive via GAS (Frontend direct to Google Apps Script Web App)
+            if (!GAS_DRIVE_URL) {
+                throw new Error('GAS_DRIVE_URL is not configured');
             }
 
-            // Priority 2: Fallback to local server multipart upload
-            antdMessage.loading({
-                content: `กำลังส่งไฟล์ ${file.name} ไปยังระบบเซิร์ฟเวอร์...`,
-                key: msgKey,
-                duration: 0
+            const targetEcr = ecrNo || 'ECNT_General';
+
+            console.log('%c[AttachableField] 📎 uploadFile called:', 'color:#8b5cf6;font-weight:bold;', {
+                fieldName: targetFieldName,
+                fileName: file.name,
+                fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+                fileType: file.type,
+                ecrNo: targetEcr,
+                ecnNo,
+                blockNumber,
+                popupOpened: Boolean(popup && !popup.closed)
             });
 
-            const formData = new FormData();
-            formData.append('file', file);
+            const gasRes = await uploadEcntFileToDrive(file, {
+                ecrNo: targetEcr,
+                ecnNo,
+                blockNumber,
+                fieldName: targetFieldName
+            }, { popup });
 
-            const token = localStorage.getItem("token");
-            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
-            const res = await axios.post(`${baseUrl}/api/upload`, formData, {
-                headers: { 
-                    'Content-Type': 'multipart/form-data',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {})
-                },
-                withCredentials: true
-            });
+            console.log('%c[AttachableField] 📥 uploadEcntFileToDrive result:', 'color:#8b5cf6;', gasRes);
 
-            if (res.data && res.data.success) {
+            if (gasRes && gasRes.success) {
                 const newAttachment = {
                     field_name: targetFieldName,
                     block_number: blockNumber,
-                    file_name: res.data.file_name,
-                    file_url: res.data.file_url,
-                    file_type: file.type || '',
-                    file_size: file.size || null
+                    file_name: gasRes.fileName || file.name,
+                    file_url: gasRes.webViewLink,
+                    file_type: gasRes.mimeType || file.type || '',
+                    file_size: gasRes.fileSize || file.size || null,
+                    drive_file_id: gasRes.fileId,
+                    drive_folder_url: gasRes.folderUrl
                 };
                 if (onAttachmentsChange) {
                     onAttachmentsChange([...attachments, newAttachment]);
                 }
                 antdMessage.success({
-                    content: `แนบไฟล์ ${file.name} เรียบร้อยแล้ว`,
+                    content: `อัปโหลด ${file.name} ไปยัง Google Drive สำเร็จ`,
                     key: msgKey,
                     duration: 3
                 });
+                return;
+            } else {
+                throw new Error(gasRes?.error || 'Google Drive upload failed');
             }
-        } catch (err) {
-            console.error("[AttachableField] Upload error:", err);
+        } catch (gasErr) {
+            console.error("[AttachableField] Google Drive upload error:", gasErr);
+            if (gasErr.isAuthRequired) {
+                Modal.confirm({
+                    title: 'จำเป็นต้องยืนยันสิทธิ์ Google Drive',
+                    content: (
+                        <div>
+                            <p>ไม่สามารถอัปโหลดไฟล์ในเบื้องหลังได้ เนื่องจากระบบต้องการการเข้าสู่ระบบหรืออนุญาตสิทธิ์ Google Apps Script ก่อน</p>
+                            <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>
+                                รายละเอียด: {gasErr.message}
+                            </p>
+                        </div>
+                    ),
+                    okText: '🔑 เปิดหน้าต่างยืนยันสิทธิ์ (Popup)',
+                    cancelText: 'ปิด',
+                    onOk: () => {
+                        openGoogleDriveAuthWindow();
+                    }
+                });
+            }
             antdMessage.error({
-                content: `อัปโหลดล้มเหลว: ${err.message || 'Server error'}`,
+                content: `ไม่สามารถอัปโหลดไปยัง Google Drive ได้: ${gasErr.message || 'กรุณาลองใหม่อีกครั้ง'}`,
                 key: msgKey,
-                duration: 4
+                duration: 5
             });
         } finally {
             setUploading(false);
@@ -243,8 +216,116 @@ export default function AttachableField({
                         const fileName = item.file_name || item.name || `File_${idx + 1}`;
                         const type = getFileType(fullUrl, fileName);
                         const isImg = type === 'image';
+                        const isDrive = Boolean(item.drive_file_id) || 
+                            (item.file_url && item.file_url.includes('drive.google.com')) || 
+                            (fullUrl && fullUrl.includes('drive.google.com'));
 
-                        if (isImg) {
+                        if (isImg && isDrive) {
+                            return (
+                                <div key={idx} style={{ position: 'relative' }}>
+                                    <Tooltip title={`Google Drive Image: ${fileName} (Click to preview)`}>
+                                        <div 
+                                            onClick={() => handleItemClick(item)}
+                                            style={{ 
+                                                width: 76, 
+                                                height: 68, 
+                                                borderRadius: 6, 
+                                                overflow: 'hidden', 
+                                                border: '1px solid #93c5fd', 
+                                                cursor: 'pointer', 
+                                                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                position: 'relative',
+                                                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                                                transition: 'all 0.2s ease',
+                                                padding: '4px 6px'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.borderColor = '#2563eb';
+                                                e.currentTarget.style.transform = 'translateY(-1px)';
+                                                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(37,99,235,0.2)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.borderColor = '#93c5fd';
+                                                e.currentTarget.style.transform = 'none';
+                                                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
+                                            }}
+                                        >
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: 2,
+                                                left: 4,
+                                                fontSize: 8,
+                                                fontWeight: 700,
+                                                color: '#1d4ed8',
+                                                letterSpacing: '0.3px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 2
+                                            }}>
+                                                📁 DRIVE
+                                            </div>
+                                            <div style={{ fontSize: 20, marginTop: 8, lineHeight: 1 }}>🖼️</div>
+                                            <div style={{
+                                                fontSize: 10,
+                                                color: '#1e40af',
+                                                fontWeight: 600,
+                                                maxWidth: 68,
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                                marginTop: 2
+                                            }}>
+                                                {fileName.split('.').pop()?.toUpperCase() || 'IMG'}
+                                            </div>
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: 0,
+                                                left: 0,
+                                                right: 0,
+                                                background: '#2563eb',
+                                                color: '#fff',
+                                                fontSize: 8,
+                                                fontWeight: 600,
+                                                textAlign: 'center',
+                                                padding: '1px 0'
+                                            }}>
+                                                Preview
+                                            </div>
+                                        </div>
+                                    </Tooltip>
+                                    <div 
+                                        onClick={() => handleDelete(idx)}
+                                        style={{
+                                            position: 'absolute',
+                                            top: -6,
+                                            right: -6,
+                                            background: '#ff4d4f',
+                                            color: '#fff',
+                                            width: 18,
+                                            height: 18,
+                                            borderRadius: '50%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            fontSize: 10,
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                            zIndex: 10
+                                        }}
+                                        title="Delete attachment"
+                                    >
+                                        ✕
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        if (isImg && !isDrive) {
+                            const directImgUrl = getFileUrl({ ...item, file_path: fullUrl });
                             return (
                                 <div key={idx} style={{ position: 'relative', width: 68, height: 68 }}>
                                     <Tooltip title={`Click to preview: ${fileName}`}>
@@ -253,15 +334,16 @@ export default function AttachableField({
                                             style={{ 
                                                 width: 68, 
                                                 height: 68, 
-                                                borderRadius: 4, 
+                                                borderRadius: 6, 
                                                 overflow: 'hidden', 
                                                 border: '1px solid #cbd5e1', 
                                                 cursor: 'pointer',
-                                                background: '#fff'
+                                                background: '#fff',
+                                                boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
                                             }}
                                         >
                                             <img
-                                                src={getFileUrl({ ...item, file_path: fullUrl })}
+                                                src={directImgUrl}
                                                 alt={fileName}
                                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                                 onError={(e) => { e.currentTarget.src = imageFallback; }}

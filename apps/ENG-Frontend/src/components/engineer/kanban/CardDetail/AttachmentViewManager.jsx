@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Button, Space, Typography, Image, Tooltip } from 'antd';
+import { Modal, Button, Space, Typography, Image, Tooltip, Tag } from 'antd';
 import { MdZoomIn, MdZoomOut, MdOpenInNew, MdClose, MdFileDownload } from 'react-icons/md';
 import { FiPaperclip } from 'react-icons/fi';
 import { server } from '../../../../constance/constance';
@@ -69,10 +69,17 @@ export const getFileType = (url, name) => {
 export const getFileUrl = (att) => {
     if (!att) return '';
 
+    let candidate = '';
+    if (typeof att === 'string') {
+        candidate = att;
+    } else {
+        candidate = att.file_path || att.file_url || att.url || '';
+    }
+
     let rawUrl = '';
-    // If it's already a full URL
-    if (att.file_path?.startsWith('http')) {
-        rawUrl = att.file_path;
+    // If it's already a full URL or data URI / blob URL
+    if (candidate.startsWith('http://') || candidate.startsWith('https://') || candidate.startsWith('data:') || candidate.startsWith('blob:')) {
+        rawUrl = candidate;
     } else if (att.link_data) {
         // Handle linkData for link attachments (some might be JSON)
         try {
@@ -83,10 +90,11 @@ export const getFileUrl = (att) => {
         }
     }
 
-    if (!rawUrl && att.file_path) {
-        // Fix relative paths for files stored on server
-        const cleanPath = att.file_path.replace(/^public[/\\]/, '').replace(/\\/g, '/');
-        rawUrl = `${server.API_URL}${cleanPath}`;
+    if (!rawUrl && candidate) {
+        // Fix relative paths for files stored on server (e.g. /uploads/... or public/...)
+        const cleanPath = candidate.replace(/^public[/\\]/, '').replace(/\\/g, '/');
+        const basePath = (server.URL || server.API_URL || '').replace(/\/$/, '');
+        rawUrl = `${basePath}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     }
 
     if (!rawUrl) return '';
@@ -97,13 +105,7 @@ export const getFileUrl = (att) => {
         const fileIdMatch = rawUrl.match(/\/d\/([^/?#]+)/) || rawUrl.match(/[?&]id=([^/&?#]+)/);
         if (fileIdMatch && fileIdMatch[1]) {
             const fileId = fileIdMatch[1];
-            const type = getFileType(rawUrl, att.file_name || att.name);
-
-            if (type === 'image') {
-                // Direct link for <img> tags
-                return `https://drive.google.com/uc?id=${fileId}&export=view`;
-            }
-            // PDF and other documents work best with /preview URL in an iframe
+            // Google Drive /preview iframe provides full-featured preview for all file types (images, pdfs, docs)
             return `https://drive.google.com/file/d/${fileId}/preview`;
         }
     }
@@ -242,12 +244,33 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme = {
 
     if (!attachment) return null;
 
+    const rawCandidate = attachment.file_path || attachment.file_url || attachment.url || (typeof attachment === 'string' ? attachment : '');
     const fileUrl = getFileUrl(attachment);
     const fileName = attachment.file_name || attachment.name || 'Attachment';
-    const type = getFileType(attachment.file_path || fileUrl, fileName);
+    const type = getFileType(rawCandidate || fileUrl, fileName);
+    const isGoogleDrive = Boolean(
+        (fileUrl && fileUrl.includes('drive.google.com')) ||
+        (rawCandidate && rawCandidate.includes('drive.google.com')) ||
+        attachment.drive_file_id
+    );
+
+    let effectiveUrl = fileUrl;
+    if (isGoogleDrive && (!effectiveUrl || !effectiveUrl.includes('drive.google.com'))) {
+        const dId = attachment.drive_file_id || (rawCandidate.match(/\/d\/([^/?#]+)/) || rawCandidate.match(/[?&]id=([^/&?#]+)/))?.[1];
+        if (dId) {
+            effectiveUrl = `https://drive.google.com/file/d/${dId}/preview`;
+        }
+    }
 
     const handleOpenNewTab = () => {
-        window.open(fileUrl, '_blank', 'noreferrer');
+        if (isGoogleDrive) {
+            const driveId = attachment.drive_file_id || (effectiveUrl.match(/\/d\/([^/?#]+)/) || effectiveUrl.match(/[?&]id=([^/&?#]+)/))?.[1];
+            if (driveId) {
+                window.open(`https://drive.google.com/file/d/${driveId}/view`, '_blank', 'noreferrer');
+                return;
+            }
+        }
+        window.open(effectiveUrl, '_blank', 'noreferrer');
     };
 
     const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 400));
@@ -263,14 +286,14 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme = {
                     <Text strong ellipsis style={{ maxWidth: '80%', fontSize: 16 }}>{fileName}</Text>
                 </div>
             }
-            width={type === 'image' ? 'auto' : '90%'}
+            width={type === 'image' && !isGoogleDrive ? 'auto' : '90%'}
             centered
             footer={null}
             styles={{ body: { padding: 0, overflow: 'hidden' } }}
             closeIcon={<MdClose size={24} style={{ color: textTertiary }} />}
         >
             <div style={{
-                height: type === 'image' ? 'auto' : '85vh',
+                height: type === 'image' && !isGoogleDrive ? 'auto' : '85vh',
                 maxHeight: '90vh',
                 display: 'flex',
                 flexDirection: 'column',
@@ -288,12 +311,18 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme = {
                     zIndex: 10
                 }}>
                     <Space size="middle">
-                        <Space>
-                            <Button size="small" type="text" icon={<MdZoomOut color="white" />} onClick={handleZoomOut} />
-                            <Text style={{ color: '#fff', fontSize: 13, minWidth: 45, textAlign: 'center' }}>{zoom}%</Text>
-                            <Button size="small" type="text" icon={<MdZoomIn color="white" />} onClick={handleZoomIn} />
-                            <Button size="small" ghost onClick={handleResetZoom} style={{ fontSize: 11, height: 24 }}>Reset</Button>
-                        </Space>
+                        {type === 'image' && !isGoogleDrive ? (
+                            <Space>
+                                <Button size="small" type="text" icon={<MdZoomOut color="white" />} onClick={handleZoomOut} />
+                                <Text style={{ color: '#fff', fontSize: 13, minWidth: 45, textAlign: 'center' }}>{zoom}%</Text>
+                                <Button size="small" type="text" icon={<MdZoomIn color="white" />} onClick={handleZoomIn} />
+                                <Button size="small" ghost onClick={handleResetZoom} style={{ fontSize: 11, height: 24 }}>Reset</Button>
+                            </Space>
+                        ) : isGoogleDrive ? (
+                            <Tag color="blue" style={{ margin: 0, borderRadius: 4 }}>
+                                📁 Google Drive Media Preview
+                            </Tag>
+                        ) : null}
                     </Space>
 
                     <Space>
@@ -303,20 +332,20 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme = {
                                 ghost
                                 icon={<MdFileDownload size={18} />}
                                 onClick={() => {
-                                    let downloadUrl = fileUrl;
+                                    let downloadUrl = effectiveUrl;
                                     
                                     // If it's a Google Drive file, use the direct download URL
-                                    if (fileUrl.includes('drive.google.com') && !fileUrl.includes('export=download')) {
-                                        const fileIdMatch = fileUrl.match(/\/d\/([^/?#]+)/) || fileUrl.match(/[?&]id=([^/&?#]+)/);
-                                        if (fileIdMatch && fileIdMatch[1]) {
-                                            downloadUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+                                    if (isGoogleDrive) {
+                                        const driveId = attachment.drive_file_id || (effectiveUrl.match(/\/d\/([^/?#]+)/) || effectiveUrl.match(/[?&]id=([^/&?#]+)/))?.[1];
+                                        if (driveId) {
+                                            downloadUrl = `https://drive.google.com/uc?export=download&id=${driveId}`;
                                         }
                                     }
 
                                     const link = document.createElement('a');
                                     link.href = downloadUrl;
                                     link.download = fileName;
-                                    if (downloadUrl !== fileUrl) {
+                                    if (downloadUrl !== effectiveUrl) {
                                         link.target = '_blank';
                                     }
                                     document.body.appendChild(link);
@@ -343,18 +372,18 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme = {
                     overflow: 'auto',
                     display: 'flex',
                     justifyContent: 'center',
-                    alignItems: type === 'image' ? 'center' : 'stretch',
-                    padding: type === 'image' ? 24 : 0,
+                    alignItems: type === 'image' && !isGoogleDrive ? 'center' : 'stretch',
+                    padding: type === 'image' && !isGoogleDrive ? 24 : 0,
                     position: 'relative'
                 }}>
-                    {type === 'image' ? (
+                    {type === 'image' && !isGoogleDrive ? (
                         <div style={{
                             transform: `scale(${zoom / 100})`,
                             transition: 'transform 0.2s ease-out',
                             display: 'inline-block'
                         }}>
                             <Image
-                                src={fileUrl}
+                                src={effectiveUrl}
                                 preview={false}
                                 style={{
                                     maxWidth: '100%',
@@ -364,13 +393,14 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme = {
                                 }}
                             />
                         </div>
-                    ) : (type === 'pdf' || type === 'google_file') ? (
+                    ) : (type === 'pdf' || type === 'google_file' || isGoogleDrive) ? (
                         <iframe
-                            src={zoom === 100 ? fileUrl : `${fileUrl}#view=FitH&zoom=${zoom}`}
+                            src={effectiveUrl.includes('/preview') ? effectiveUrl : (zoom === 100 ? effectiveUrl : `${effectiveUrl}#view=FitH&zoom=${zoom}`)}
                             width="100%"
                             height="100%"
-                            style={{ border: 'none' }}
+                            style={{ border: 'none', minHeight: '75vh' }}
                             title="File Preview"
+                            allow="autoplay"
                         />
                     ) : (
                         <div style={{ padding: 60, textAlign: 'center' }}>

@@ -259,12 +259,15 @@ CREATE TABLE IF NOT EXISTS ecnt2_attachment (
     file_url        VARCHAR(1000) NOT NULL,                
     file_type       VARCHAR(50),                           
     file_size       INTEGER,
+    drive_file_id   VARCHAR(255),
+    drive_folder_url VARCHAR(1000),
     
     uploaded_by     VARCHAR(100),
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_ecnt2_attach_doc ON ecnt2_attachment(document_type, document_id);
+CREATE INDEX IF NOT EXISTS idx_ecnt2_attach_drive ON ecnt2_attachment(drive_file_id);
 
 
 -- 8. Notification Log

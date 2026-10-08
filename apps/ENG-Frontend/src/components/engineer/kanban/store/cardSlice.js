@@ -661,8 +661,8 @@ export const createCardSlice = (set, get) => ({
         } catch (err) {
             console.error('Failed to upload file attachment', err);
             Swal.fire('Error', err?.message || err?.response?.data?.error || 'ไม่สามารถอัปโหลดไฟล์ได้', 'error');
+            throw err;
         }
-        return null;
     },
 
     updateAttachment: async (attachmentId, data, cardId) => {

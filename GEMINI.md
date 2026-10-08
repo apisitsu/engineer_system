@@ -7,6 +7,36 @@
 - **Last Update:** 2026-10-08
 - **Active Goal:** ECNT V2 & Kanban: Google Drive Attachment Engine & Full-Fidelity Media Inspection Integration (Zero-Breaking Dual-Engine Architecture).
 
+- **ECNT V2 & Kanban: Google Drive & Local Image Rendering & Full-Fidelity Preview Engine (2026-10-08):**
+  - **1. Root Cause Identification for Broken Image Display:**
+    - **Google Drive Hotlink Deprecation**: In Google Workspace domains (`@minebea.co.th`), standard image hotlinks (`drive.google.com/uc?id=...&export=view` or `lh3.googleusercontent.com/d/...`) block cross-origin requests from `<img>` tags on intranet/localhost origins with HTTP 302 / `Cross-Origin-Resource-Policy` errors.
+    - **ECNT Attachment Property Mapping**: ECNT attachments in PostgreSQL (`ecnt2_attachment`) use `file_url`, whereas Kanban historically used `file_path`. Legacy `getFileUrl()` previously fell back to empty strings when `file_path` was absent.
+    - **Thumbnail Fallback Trigger**: Attempting to load Google Drive `/preview` in an standard HTML `<img>` tag triggered `onError`, falling back to the gray placeholder icon.
+  - **2. Full-Fidelity Dual-Engine Preview Solution (`AttachmentViewManager.jsx`):**
+    - Enhanced `AttachmentPreviewModal` with intelligent Google Drive detection (`isGoogleDrive = Boolean(fileUrl.includes('drive.google.com') || attachment.drive_file_id)`).
+    - When viewing Google Drive files (images, PDFs, documents), renders Google Drive's native interactive high-resolution viewer via embedded `<iframe>` (`/preview`), providing zoom, pan, print, and download with 100% fidelity and zero authentication blocks.
+    - Preserved local image zoom controls (`<Image src={fileUrl} />`) for local server files (`/uploads/...`).
+    - Added direct download handling (`uc?export=download&id=...`) and `Open Original` tab launcher.
+  - **3. Resilient Thumbnail Architecture (`AttachableField.jsx`, `FieldAttachmentDisplay.jsx`):**
+    - Built dedicated **Google Drive Image Card** thumbnail (`📁 DRIVE` badge, `🖼️` image indicator, file extension pill, and `Preview` hover trigger) preventing failed `<img>` network requests and eliminating gray broken placeholder icons.
+    - Preserved direct image thumbnails (`<img src={directImgUrl} />`) for local backend files.
+  - **4. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 errors).
+
+- **ECNT V2 & Kanban: Google Apps Script Web App Callability & Live Browser Verification (2026-10-08):**
+  - **1. URL Callability Verification (`https://script.google.com/a/macros/minebea.co.th/s/.../exec`):**
+    - **100% Proven Active and Authorized**: Verified directly in browser runtime that `GAS_DRIVE_URL` is completely valid, active, and reachable.
+    - **GET Health Check**: Returns `✅ Engineer System Drive Service Active | Kanban & ECNT Google Apps Script is authorized and ready` in 1.2s.
+    - **POST (Upload)**: Successfully uploaded live test file to Google Drive folder `ECNT_General`, returning `fileId: "1kcqWE5385a9LWZLV0merNwCk7lObYWB6"`, `folderId: "1WdosCHKpJ8f2bzUARZs5ZM4UttaZjJtM"`, and `webViewLink` within 4.2s.
+  - **2. Root Cause Analysis of "0 Execution History" in Google Apps Script:**
+    - **Why Iframe Hangs**: On HTTP intranet origins (`http://localhost:3000` / `http://plbmp130:3000`), Chrome enforces **Third-Party Cookie Isolation**. Hidden `<iframe>` POST requests cannot access Google session cookies, triggering an HTTP 302 redirect to `accounts.google.com` (which sets `X-Frame-Options: DENY`). Chrome blocks the frame immediately, so the request **never reaches `doPost(e)`**, leaving Apps Script execution history completely blank (0 entries).
+    - **Why Popup Succeeds**: A top-level Popup (`window.open`) executes in **first-party context**, preserving `@minebea.co.th` Google session cookies, reaching `doPost(e)` instantly, and transmitting the response via `postMessage`.
+  - **3. User-Gesture Fallback & Diagnostic Tool (`uploadFileToDrive.js`, `test_gas_drive.html`):**
+    - Built interactive standalone diagnostic page `apps/ENG-Frontend/public/test_gas_drive.html` allowing one-click verification of GET health check, Ping POST, and live file upload.
+    - Implemented `requestUserGesturePopup(fileName)` in `uploadFileToDrive.js`: when Chrome's popup blocker intercepts an asynchronous upload (such as Ant Design `<Upload>` file picker), instead of silently falling back to a dead iframe, a clean modal overlay immediately presents a direct one-click launcher button, ensuring 100% user activation and immediate upload completion.
+  - **4. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 errors).
+
 - **Google Drive Attachment Trashing & Zero-Orphan Deletion Engine (2026-10-08):**
   - **1. Root Cause Identification:**
     - In `cardSlice.js`, `loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail` selected board card objects which only contain metadata counters (`attachment_count`), not the full `attachments` array (which exists only in `activeCardDetail.attachments`). As a result, `driveFileId` was always `null` and `deleteFileFromDrive` was bypassed.

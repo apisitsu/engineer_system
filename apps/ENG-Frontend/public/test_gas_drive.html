@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAS Drive Service Diagnostic Tool</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --success: #16a34a;
+            --error: #dc2626;
+            --warning: #d97706;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #0f172a;
+            --muted: #64748b;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 24px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 22px;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .url-box {
+            background: #f1f5f9;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 13px;
+            word-break: break-all;
+            border: 1px solid #cbd5e1;
+            margin-bottom: 16px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        button {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #15803d; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-warning:hover { background: #b45309; }
+        .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
+        .btn-outline:hover { background: #f1f5f9; }
+
+        .log-box {
+            background: #0f172a;
+            color: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            height: 380px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+        .log-entry { margin-bottom: 4px; }
+        .log-info { color: #38bdf8; }
+        .log-success { color: #4ade80; font-weight: bold; }
+        .log-error { color: #f87171; font-weight: bold; }
+        .log-warn { color: #fbbf24; }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-pending { background: #e2e8f0; color: #475569; }
+        .badge-running { background: #dbeafe; color: #1d4ed8; }
+        .badge-success { background: #dcfce7; color: #15803d; }
+        .badge-error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🔍 Google Apps Script Web App Diagnostic Tool</h1>
+            <p style="color: var(--muted); margin-bottom: 12px;">
+                เครื่องมือทดสอบความสามารถในการเรียกใช้งาน (Callability) ของ Google Apps Script Web App สำหรับระบบ ECNT & Kanban
+            </p>
+            
+            <label style="font-weight: 600; font-size: 13px;">GAS_DRIVE_URL ปัจจุบัน:</label>
+            <div class="url-box" id="gasUrlDisplay">
+                https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-outline" onclick="testDirectGet()">
+                    🌐 1. ทดสอบเปิด GET (Health Check)
+                </button>
+                <button class="btn-primary" onclick="testIframePost()">
+                    📦 2. ทดสอบ Hidden Iframe POST (Action: Ping)
+                </button>
+                <button class="btn-warning" onclick="testPopupPost()">
+                    🪟 3. ทดสอบ Popup POST (Action: Ping)
+                </button>
+                <button class="btn-success" onclick="testFileUpload()">
+                    📤 4. ทดสอบอัปโหลดไฟล์ทดสอบจริง (Dummy Text File ผ่าน Popup)
+                </button>
+                <button class="btn-outline" onclick="clearLogs()" style="margin-left: auto;">
+                    🗑️ ล้าง Log
+                </button>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: 600; font-size: 14px;">Execution Logs:</span>
+                <span id="statusBadge" class="status-badge badge-pending">พร้อมทดสอบ</span>
+            </div>
+            <div class="log-box" id="logBox"></div>
+        </div>
+
+        <div class="card" style="font-size: 13px; color: var(--muted);">
+            <h3 style="margin-top: 0; color: var(--text); font-size: 15px;">💡 คำแนะนำในการตรวจสอบ:</h3>
+            <ol style="padding-left: 20px; line-height: 1.6; margin: 0;">
+                <li><b>ปุ่ม 1 (GET Health Check)</b>: จะเปิดแท็บใหม่ไปยัง URL หากคุณล็อกอิน <code>@minebea.co.th</code> ไว้ จะเห็นข้อความเขียว <i>"Engineer System Drive Service Active"</i> หากเห็นหน้า Login หรือ Error 404 แสดงว่า URL ผิดหรือยังไม่ได้ล็อกอิน</li>
+                <li><b>ปุ่ม 2 & 3 (POST Ping)</b>: จะส่ง Payload ไปยัง <code>doPost(e)</code> และรอรับผลลัพธ์ผ่าน <code>postMessage</code> เพื่อพิสูจน์ว่า Web App สามารถรับและตอบกลับข้อมูลได้จริงหรือไม่</li>
+                <li><b>ปุ่ม 4 (Upload Test)</b>: จะสร้างไฟล์ข้อความ <code>test_diagnostic.txt</code> ขนาดเล็ก และสั่งอัปโหลดไปยังโฟลเดอร์ <code>ECNT_General</code> ใน Google Drive ทันที</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        const GAS_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec';
+        const logBox = document.getElementById('logBox');
+        const statusBadge = document.getElementById('statusBadge');
+
+        function setStatus(text, type) {
+            statusBadge.innerText = text;
+            statusBadge.className = 'status-badge badge-' + type;
+        }
+
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString('th-TH');
+            const div = document.createElement('div');
+            div.className = 'log-entry log-' + type;
+            div.innerText = `[${time}] ${msg}`;
+            logBox.appendChild(div);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function clearLogs() {
+            logBox.innerHTML = '';
+            setStatus('พร้อมทดสอบ', 'pending');
+        }
+
+        function testDirectGet() {
+            log('🌐 กำลังเปิด URL ในแท็บใหม่เพื่อทดสอบ GET (Health Check)...', 'info');
+            window.open(GAS_URL, '_blank');
+        }
+
+        // Global message listener
+        window.addEventListener('message', function(event) {
+            try {
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                if (data && data._gasUploadResponse) {
+                    log(`📨 [postMessage ได้รับแล้ว] Origin: ${event.origin}`, 'success');
+                    log(`📦 ข้อมูลที่ตอบกลับ: ${JSON.stringify(data, null, 2)}`, 'success');
+                    if (data.success) {
+                        setStatus('สำเร็จ (Success)', 'success');
+                    } else {
+                        setStatus('ผิดพลาด (Error)', 'error');
+                        log(`❌ GAS แจ้งข้อผิดพลาด: ${data.error || 'Unknown error'}`, 'error');
+                    }
+                }
+            } catch(e) {
+                // Not JSON or other message
+            }
+        });
+
+        function testIframePost() {
+            clearLogs();
+            setStatus('กำลังส่งข้อมูลผ่าน Iframe...', 'running');
+            log(`🚀 กำลังส่ง Form POST ผ่าน Hidden Iframe ไปยัง: ${GAS_URL}`, 'info');
+
+            const iframeName = 'gas_test_iframe_' + Date.now();
+            const iframe = document.createElement('iframe');
+            iframe.name = iframeName;
+            iframe.style.display = 'none';
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = GAS_URL;
+            form.target = iframeName;
+            form.style.display = 'none';
+
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'payload';
+            input.value = JSON.stringify({
+                action: 'ping',
+                timestamp: Date.now()
+            });
+            form.appendChild(input);
+
+            document.body.appendChild(iframe);
+            document.body.appendChild(form);
+
+            log('📤 Form Submitted แล้ว! กำลังรอคำตอบจาก doPost(e)...', 'info');
+            form.submit();
+
+            setTimeout(() => {
+                try { document.body.removeChild(form); } catch(e){}
+                try { document.body.removeChild(iframe); } catch(e){}
+            }, 60000);
+        }
+
+        function testPopupPost() {
+            clearLogs();
+            setStatus('กำลังส่งข้อมูลผ่าน Popup...', 'running');
+            log(`🪟 กำลังเปิด Popup เพื่อส่ง Form POST ไปยัง: ${GAS_URL}`, 'info');
+
+            const popup = window.open('about:blank', 'gas_test_popup', 'width=460,height=420');
+            if (!popup) {
+                log('❌ Popup ถูกบล็อกโดยเบราว์เซอร์ กรุณาอนุญาต Popup สำหรับหน้านี้', 'error');
+                setStatus('Popup บล็อก', 'error');
+                return;
+            }
+
+            const payloadStr = JSON.stringify({
+                action: 'ping',
+                timestamp: Date.now()
+            });
+            window.__gasTestPayload = payloadStr;
+
+            popup.document.open();
+            popup.document.write(`<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:40px;">
+                <h3>กำลังนำส่งข้อมูลไปยัง Google Apps Script...</h3>
+                <form id="f" method="POST" action="${GAS_URL}">
+                    <input type="hidden" name="payload" id="p" />
+                </form>
+                <script>
+                    var pl = window.opener ? window.opener.__gasTestPayload : null;
+                    if (pl) {
+                        document.getElementById('p').value = pl;
+                        document.getElementById('f').submit();
+                    } else {
+                        document.body.innerHTML += '<p style="color:red;">ไม่พบ Payload จากหน้าต่างหลัก</p>';
+                    }
+                <\/script>
+            </body></html>`);
+            popup.document.close();
+            log('📤 Form ใน Popup ถูก Submit แล้ว! รอ postMessage...', 'info');
+        }
+
+        function testFileUpload() {
+            clearLogs();
+            setStatus('กำลังอัปโหลดไฟล์ทดสอบ...', 'running');
+            log(`📤 กำลังสร้างไฟล์ทดสอบ test_diagnostic_${Date.now()}.txt...`, 'info');
+
+            const dummyText = `ECNT & Kanban Test Upload\nDate: ${new Date().toISOString()}\nTested by Diagnostic Tool via Popup Window`;
+            const base64Data = btoa(unescape(encodeURIComponent(dummyText)));
+
+            log(`📦 ข้อมูลถูกเข้ารหัสเป็น Base64 แล้ว (ความยาว: ${base64Data.length} ตัวอักษร)`, 'info');
+
+            log('🪟 กำลังเปิด Popup เพื่อนำส่งไฟล์ไปยัง Google Drive...', 'info');
+            const popup = window.open('about:blank', 'gas_test_upload_popup', 'width=460,height=420');
+            if (!popup) {
+                log('❌ Popup ถูกบล็อกโดยเบราว์เซอร์ กรุณาอนุญาต Popup สำหรับหน้านี้', 'error');
+                setStatus('Popup บล็อก', 'error');
+                return;
+            }
+
+            const payloadStr = JSON.stringify({
+                action: 'upload',
+                system: 'ecnt',
+                ecrNo: 'ECNT_General',
+                ecnNo: '',
+                fileName: `diagnostic_test_${Date.now()}.txt`,
+                mimeType: 'text/plain',
+                base64Data: base64Data
+            });
+            window.__gasTestUploadPayload = payloadStr;
+
+            popup.document.open();
+            popup.document.write(`<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:40px;">
+                <h3>📤 กำลังอัปโหลดไฟล์ทดสอบไปยัง Google Drive...</h3>
+                <p style="color:#666;font-size:13px;">หน้าต่างนี้จะปิดอัตโนมัติเมื่อเสร็จสิ้น</p>
+                <form id="f" method="POST" action="${GAS_URL}">
+                    <input type="hidden" name="payload" id="p" />
+                </form>
+                <script>
+                    var pl = window.opener ? window.opener.__gasTestUploadPayload : null;
+                    if (pl) {
+                        document.getElementById('p').value = pl;
+                        document.getElementById('f').submit();
+                    } else {
+                        document.body.innerHTML += '<p style="color:red;">ไม่พบ Payload จากหน้าต่างหลัก</p>';
+                    }
+                <\/script>
+            </body></html>`);
+            popup.document.close();
+
+            log('🚀 Form ใน Popup ถูก Submit แล้ว! รอ Google Drive สร้างไฟล์และตอบกลับ...', 'info');
+
+            const timer = setTimeout(() => {
+                if (statusBadge.className.includes('running')) {
+                    log('⏱️ ไม่ได้รับการตอบกลับภายใน 45 วินาที (Timeout)', 'warn');
+                    setStatus('หมดเวลา (Timeout)', 'error');
+                }
+            }, 45000);
+        }
+
+        log('เครื่องมือพร้อมใช้งาน กดปุ่มด้านบนเพื่อเริ่มการทดสอบ', 'info');
+    </script>
+</body>
+</html>

@@ -367,10 +367,10 @@ export const useCardDetailHandlers = (deps) => {
 
             if (!result.isConfirmed) return;
 
-            // Open dedicated helper popup (Required for Google Workspace authentication cookies)
+            // Open helper popup synchronously from user confirmation gesture
             let popup = null;
             try {
-                popup = window.open('about:blank', 'gas_upload', 'width=460,height=380,left=300,top=120');
+                popup = window.open('about:blank', 'gas_upload', 'width=460,height=420,left=350,top=150');
             } catch (e) {
                 popup = null;
             }
@@ -401,10 +401,8 @@ export const useCardDetailHandlers = (deps) => {
                     showConfirmButton: false,
                 });
             } catch (err) {
-                if (popup && !popup.closed) {
-                    try { popup.close(); } catch (e) {}
-                }
                 console.error('[CardDetail] File upload failed:', err);
+                try { if (popup && !popup.closed) popup.close(); } catch {}
                 const errMsg = err.message || '';
                 const isAuthError = err.isAuthRequired || 
                                     errMsg.toLowerCase().includes('auth') || 

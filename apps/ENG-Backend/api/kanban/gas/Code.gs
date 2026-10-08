@@ -26,6 +26,7 @@ const ECNT_ROOT_FOLDER_ID   = '1NKhFV81KnUKrjCLae1sFrwj2xZeVKOD5';
 function doPost(e) {
   var isForm = false;
   try {
+    console.log('[GAS Drive] doPost triggered at ' + new Date().toISOString() + ' | e keys: ' + (e ? Object.keys(e).join(',') : 'none'));
     var raw = '';
 
     // 1. Check e.parameter.payload (small form submissions)
@@ -129,8 +130,9 @@ function handleEcntUpload(payload, isForm) {
   var ecnNo      = (payload.ecnNo || '').trim();
 
   if (!fileName)   return jsonOrHtml({ success: false, error: 'Missing fileName' }, isForm);
-  if (!base64Data) return jsonOrHtml({ success: false, error: 'Missing base64Data' }, isForm);
-  if (!ecrNo && !ecnNo) return jsonOrHtml({ success: false, error: 'Missing ecrNo or ecnNo' }, isForm);
+  if (!ecrNo && !ecnNo) {
+    ecrNo = 'ECNT_General';
+  }
 
   var rootFolder = DriveApp.getFolderById(ECNT_ROOT_FOLDER_ID);
   var targetFolder = getOrCreateEcntTargetFolder(rootFolder, ecrNo, ecnNo);
@@ -330,10 +332,13 @@ function postMessageResponse(data) {
 
   var html = '<!DOCTYPE html><html><head><script>'
     + 'var d = ' + jsonStr + ';'
-    + 'function send(w) { try { w.postMessage(d, "*"); return true; } catch(e) { return false; } }'
-    + 'send(window.top.opener) || send(window.top) || send(window.parent);'
-    + 'if (window.top.opener) { window.close(); }'
-    + '</script></head><body>OK</body></html>';
+    + 'function trySend(fn) { try { var w = fn(); if (w && w.postMessage) { w.postMessage(d, "*"); return true; } } catch(e) {} return false; }'
+    + 'trySend(function() { return window.opener; }) || '
+    + 'trySend(function() { return window.top.opener; }) || '
+    + 'trySend(function() { return window.parent; }) || '
+    + 'trySend(function() { return window.top; });'
+    + 'try { window.close(); } catch(e) {}'
+    + '</script></head><body><p style="font-family:sans-serif;text-align:center;padding:20px;color:#16a34a;">Upload Complete. Closing window...</p></body></html>';
 
   return HtmlService.createHtmlOutput(html)
     .setTitle('GAS Response')

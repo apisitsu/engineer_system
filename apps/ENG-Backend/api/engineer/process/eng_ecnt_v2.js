@@ -368,12 +368,14 @@ const createEcr = async (req, res) => {
                 await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
-                        file_name, file_url, file_type, file_size, uploaded_by
-                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8)
+                        file_name, file_url, file_type, file_size, uploaded_by,
+                        drive_file_id, drive_folder_url
+                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `, [
                     newId, att.block_number || 2, att.field_name || null,
                     att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                    requestByName
+                    requestByName,
+                    att.drive_file_id || null, att.drive_folder_url || null
                 ]);
             }
         }
@@ -509,12 +511,14 @@ const resubmitEcr = async (req, res) => {
                     await client.query(`
                         INSERT INTO ecnt2_attachment (
                             document_type, document_id, block_number, field_name,
-                            file_name, file_url, file_type, file_size, uploaded_by
-                        ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8)
+                            file_name, file_url, file_type, file_size, uploaded_by,
+                            drive_file_id, drive_folder_url
+                        ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     `, [
                         id, att.block_number || 2, att.field_name || null,
                         att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                        actionByName
+                        actionByName,
+                        att.drive_file_id || null, att.drive_folder_url || null
                     ]);
                 }
             }
@@ -755,12 +759,14 @@ const actionEcr = async (req, res) => {
                 await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
-                        file_name, file_url, file_type, file_size, uploaded_by
-                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8)
+                        file_name, file_url, file_type, file_size, uploaded_by,
+                        drive_file_id, drive_folder_url
+                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `, [
                     id, block_number, att.field_name || 'comment',
                     att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                    userName || userEmpno
+                    userName || userEmpno,
+                    att.drive_file_id || null, att.drive_folder_url || null
                 ]);
             }
         }
@@ -917,12 +923,14 @@ const createEcn = async (req, res) => {
                 await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
-                        file_name, file_url, file_type, file_size, uploaded_by
-                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8)
+                        file_name, file_url, file_type, file_size, uploaded_by,
+                        drive_file_id, drive_folder_url
+                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `, [
                     newEcnId, att.block_number || 5, att.field_name || null,
                     att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                    req.user?.name || engineerAssigned
+                    req.user?.name || engineerAssigned,
+                    att.drive_file_id || null, att.drive_folder_url || null
                 ]);
             }
         }
@@ -1272,12 +1280,14 @@ const actionEcn = async (req, res) => {
                 await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
-                        file_name, file_url, file_type, file_size, uploaded_by
-                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8)
+                        file_name, file_url, file_type, file_size, uploaded_by,
+                        drive_file_id, drive_folder_url
+                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `, [
                     id, block_number, att.field_name || 'comment',
                     att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                    userName || userEmpno
+                    userName || userEmpno,
+                    att.drive_file_id || null, att.drive_folder_url || null
                 ]);
             }
         }
@@ -1475,15 +1485,16 @@ const getMyTasks = async (req, res) => {
 // ==========================================
 
 const saveAttachment = async (req, res) => {
-    const { document_id, document_type, block_number, field_name, file_name, file_url, file_type, file_size } = req.body;
+    const { document_id, document_type, block_number, field_name, file_name, file_url, file_type, file_size, drive_file_id, drive_folder_url } = req.body;
     try {
         const uploadedBy = req.user?.name || req.user?.empno || req.body.uploaded_by || 'System';
 
         const sql = `
             INSERT INTO ecnt2_attachment (
                 document_type, document_id, block_number, field_name,
-                file_name, file_url, file_type, file_size, uploaded_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                file_name, file_url, file_type, file_size, uploaded_by,
+                drive_file_id, drive_folder_url
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
         `;
         const params = [
@@ -1495,7 +1506,9 @@ const saveAttachment = async (req, res) => {
             file_url,
             file_type || '',
             file_size || null,
-            uploadedBy
+            uploadedBy,
+            drive_file_id || null,
+            drive_folder_url || null
         ];
 
         const result = await engPool.query(sql, params);
@@ -1859,12 +1872,14 @@ const resubmitEcn = async (req, res) => {
                     await client.query(`
                         INSERT INTO ecnt2_attachment (
                             document_type, document_id, block_number, field_name,
-                            file_name, file_url, file_type, file_size, uploaded_by
-                        ) VALUES ('ECN', $1, 5, $2, $3, $4, $5, $6, $7)
+                            file_name, file_url, file_type, file_size, uploaded_by,
+                            drive_file_id, drive_folder_url
+                        ) VALUES ('ECN', $1, 5, $2, $3, $4, $5, $6, $7, $8, $9)
                     `, [
                         id, att.field_name || 'general',
                         att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                        actionByName
+                        actionByName,
+                        att.drive_file_id || null, att.drive_folder_url || null
                     ]);
                 }
             }

@@ -69,7 +69,83 @@ export default function FieldAttachmentDisplay({ attachments = [], fieldName }) 
                         );
                     }
 
-                    if (isImg) {
+                    const isDrive = Boolean(item.drive_file_id) || 
+                        (item.file_url && item.file_url.includes('drive.google.com')) || 
+                        (fullUrl && fullUrl.includes('drive.google.com'));
+
+                    if (isImg && isDrive) {
+                        return (
+                            <Tooltip title={`Google Drive Image: ${fileName} (Click to inspect)`} key={item.id || idx}>
+                                <div
+                                    onClick={() => handleItemClick(item)}
+                                    style={{
+                                        position: 'relative',
+                                        width: 76,
+                                        height: 72,
+                                        borderRadius: 6,
+                                        overflow: 'hidden',
+                                        border: '1px solid #93c5fd',
+                                        cursor: 'pointer',
+                                        background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                                        transition: 'all 0.15s ease',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '4px 6px'
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 6px rgba(37,99,235,0.2)'; e.currentTarget.style.borderColor = '#2563eb'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+                                >
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: 2,
+                                        left: 4,
+                                        fontSize: 8,
+                                        fontWeight: 700,
+                                        color: '#1d4ed8',
+                                        letterSpacing: '0.3px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 2
+                                    }}>
+                                        📁 DRIVE
+                                    </div>
+                                    <div style={{ fontSize: 22, marginTop: 8, lineHeight: 1 }}>🖼️</div>
+                                    <div style={{
+                                        fontSize: 10,
+                                        color: '#1e40af',
+                                        fontWeight: 600,
+                                        maxWidth: 68,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        marginTop: 2
+                                    }}>
+                                        {fileName.split('.').pop()?.toUpperCase() || 'IMG'}
+                                    </div>
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: 0,
+                                        left: 0,
+                                        right: 0,
+                                        background: '#2563eb',
+                                        color: '#fff',
+                                        fontSize: 8,
+                                        fontWeight: 600,
+                                        textAlign: 'center',
+                                        padding: '1px 0'
+                                    }}>
+                                        🔍 View
+                                    </div>
+                                </div>
+                            </Tooltip>
+                        );
+                    }
+
+                    if (isImg && !isDrive) {
+                        const directImgUrl = getFileUrl({ ...item, file_path: fullUrl });
                         return (
                             <Tooltip title={`Click to zoom & inspect: ${fileName}`} key={item.id || idx}>
                                 <div
@@ -90,7 +166,7 @@ export default function FieldAttachmentDisplay({ attachments = [], fieldName }) 
                                     onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)'; }}
                                 >
                                     <img
-                                        src={getFileUrl({ ...item, file_path: fullUrl })}
+                                        src={directImgUrl}
                                         alt={fileName}
                                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                         onError={(e) => { e.currentTarget.src = imageFallback; }}
