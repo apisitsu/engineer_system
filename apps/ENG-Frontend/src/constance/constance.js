@@ -11,51 +11,70 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 const MANUAL_OVERRIDE_URL = ""; // e.g. "http://plbmp130.lb.minebea.local:2005/"
 
 const getDynamicApiUrl = () => {
+  let resolvedUrl = "http://plbmp130.lb.minebea.local:2005/";
+  let matchedRule = "Production Fallback";
+
   if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL.endsWith('/')
+    resolvedUrl = process.env.REACT_APP_API_URL.endsWith('/')
       ? process.env.REACT_APP_API_URL
       : `${process.env.REACT_APP_API_URL}/`;
-  }
-
-  if (typeof window !== 'undefined' && window.location) {
+    matchedRule = "ENV (REACT_APP_API_URL)";
+  } else if (typeof window !== 'undefined' && window.location) {
     const host = (window.location.hostname || '').toLowerCase();
 
     // 1. Localhost / Local Development
     if (host === 'localhost' || host === '127.0.0.1') {
-      return "http://localhost:2005/";
+      resolvedUrl = "http://localhost:2005/";
+      matchedRule = `Localhost (${host})`;
     }
-
     // 2. Production Server (plbmp130)
-    if (host.includes('plbmp130')) {
-      return "http://plbmp130.lb.minebea.local:2005/";
+    else if (host.includes('plbmp130')) {
+      resolvedUrl = "http://plbmp130.lb.minebea.local:2005/";
+      matchedRule = `Production (${host})`;
     }
-
     // 3. Dev Server 129 (plbmp129)
-    if (host.includes('plbmp129')) {
-      return "http://plbmp129.lb.minebea.local:2005/";
+    else if (host.includes('plbmp129')) {
+      resolvedUrl = "http://plbmp129.lb.minebea.local:2005/";
+      matchedRule = `Dev 129 (${host})`;
     }
-
     // 4. Dev Server 118 (plbmp118)
-    if (host.includes('plbmp118')) {
-      return "http://plbmp118.lb.minebea.local:2005/";
+    else if (host.includes('plbmp118')) {
+      resolvedUrl = "http://plbmp118.lb.minebea.local:2005/";
+      matchedRule = `Dev 118 (${host})`;
     }
-
     // 5. Intranet Hostname without domain (append .lb.minebea.local for network-wide accessibility)
-    if (host && !host.includes('.')) {
-      return `http://${host}.lb.minebea.local:2005/`;
+    else if (host && !host.includes('.')) {
+      resolvedUrl = `http://${host}.lb.minebea.local:2005/`;
+      matchedRule = `Intranet Host (${host} -> ${host}.lb.minebea.local)`;
     }
-
     // 6. Direct IP or other FQDN Host (e.g. 10.121.50.38)
-    if (host) {
-      return `${window.location.protocol}//${host}:2005/`;
+    else if (host) {
+      resolvedUrl = `${window.location.protocol}//${host}:2005/`;
+      matchedRule = `Custom Host / IP (${host})`;
     }
   }
 
-  // Fallback to Production (for build / non-browser execution)
-  return "http://plbmp130.lb.minebea.local:2005/";
+  return { resolvedUrl, matchedRule };
 };
 
-export const apiUrl = MANUAL_OVERRIDE_URL || getDynamicApiUrl();
+const _detectedApi = getDynamicApiUrl();
+export const apiUrl = MANUAL_OVERRIDE_URL || _detectedApi.resolvedUrl;
+
+// Developer diagnostic log in browser console
+if (typeof window !== 'undefined') {
+  const currentHost = window.location.hostname || 'unknown';
+  const activeMode = MANUAL_OVERRIDE_URL ? `MANUAL OVERRIDE (${MANUAL_OVERRIDE_URL})` : _detectedApi.matchedRule;
+  console.log(
+    `%c[API Host Detect]%c Host: %c${currentHost}%c | Target API: %c${apiUrl}%c | Rule: %c${activeMode}`,
+    'color: #ffffff; background: #0284c7; padding: 2px 6px; border-radius: 3px 0 0 3px; font-weight: bold;',
+    'color: #334155; background: #f1f5f9; padding: 2px 4px;',
+    'color: #0369a1; background: #f1f5f9; font-weight: bold; padding: 2px 4px;',
+    'color: #64748b; background: #f1f5f9; padding: 2px 4px;',
+    'color: #15803d; background: #f1f5f9; font-weight: bold; padding: 2px 4px;',
+    'color: #64748b; background: #f1f5f9; padding: 2px 4px;',
+    'color: #7c3aed; background: #f1f5f9; font-weight: bold; padding: 2px 4px; border-radius: 0 3px 3px 0;'
+  );
+}
 
 export const server = {
   API_URL: `${apiUrl}`,
