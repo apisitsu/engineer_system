@@ -3,6 +3,7 @@ import { Upload, Button, List, message, Typography, Popconfirm, Spin, Tag, Space
 import { UploadOutlined, DeleteOutlined, PaperClipOutlined, DownloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
+import { deleteFileFromDrive } from '../../../../../utils/uploadFileToDrive';
 
 const { Text, Link } = Typography;
 
@@ -66,8 +67,21 @@ export default function AttachmentManager({ documentId, documentType, blockNumbe
         }
     };
 
-    const handleDelete = async (id) => {
+    const handleDelete = async (id, item = null) => {
         try {
+            let driveFileId = item?.drive_file_id;
+            if (!driveFileId && item?.file_url) {
+                const match = item.file_url.match(/\/d\/([^/?#]+)/) || item.file_url.match(/[?&]id=([^/&?#]+)/);
+                if (match && match[1]) driveFileId = match[1];
+            }
+            if (driveFileId) {
+                try {
+                    await deleteFileFromDrive(driveFileId);
+                } catch (driveErr) {
+                    console.warn('[ECNT AttachmentManager] Drive deletion warning:', driveErr);
+                }
+            }
+
             await axios.delete(`${server.URL}/api/ecnt/attachment/${id}`, { withCredentials: true });
             message.success("Attachment deleted");
             fetchAttachments();
@@ -111,7 +125,7 @@ export default function AttachmentManager({ documentId, documentType, blockNumbe
                                     <Link href={getFileUrl(item)} target="_blank" key="download">
                                         <Button type="text" icon={<DownloadOutlined />} size="small" />
                                     </Link>,
-                                    <Popconfirm title="Delete this file?" onConfirm={() => handleDelete(item.id)} key="del">
+                                    <Popconfirm title="Delete this file?" onConfirm={() => handleDelete(item.id, item)} key="del">
                                         <Button type="text" danger icon={<DeleteOutlined />} size="small" />
                                     </Popconfirm>
                                 ]}

@@ -16,6 +16,16 @@ const generateEcrNo = async () => {
     return `${prefix}${seq.toString().padStart(2, '0')}`;
 };
 
+const getNextEcrNo = async (req, res) => {
+    try {
+        const nextNo = await generateEcrNo();
+        res.json({ success: true, nextEcrNo: nextNo });
+    } catch (err) {
+        console.error("getNextEcrNo Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
 // Stage Definition Lookup
 const STAGE_META = {
     STAGE_1: { title: '1. ECR Initiation', type: 'STANDARD', picRole: 'Requester' },
@@ -272,8 +282,16 @@ const createEcr = async (req, res) => {
         const requestByName = req.user?.name || data.request_by_name || 'Unknown';
         const department = req.user?.department || data.department || 'ENG';
 
-        // Auto generate ecr_no after block 1 finish (per Excel requirement)
-        const ecrNo = await generateEcrNo();
+        // Auto generate or validate ecr_no
+        let ecrNo = data.ecr_no;
+        if (!ecrNo) {
+            ecrNo = await generateEcrNo();
+        } else {
+            const checkRes = await client.query(`SELECT id FROM ecnt2_ecr WHERE ecr_no = $1`, [ecrNo]);
+            if (checkRes.rows.length > 0) {
+                ecrNo = await generateEcrNo();
+            }
+        }
 
         const sql = `
             INSERT INTO ecnt2_ecr (
@@ -1897,6 +1915,7 @@ module.exports = {
     getEcntConfig,
     updateEcntConfig,
     getUserCandidates,
-    updateStageFlow
+    updateStageFlow,
+    getNextEcrNo
 };
 

@@ -8,6 +8,7 @@ import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import AttachableField from './components/AttachableField';
 import { dispatchStageWorkflowEmail } from '../../../../services/ecntEmailService';
+import { syncEcntDriveFolder } from '../../../../utils/uploadFileToDrive';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -28,6 +29,10 @@ export default function CreateECNModal({
     const [fieldAttachments, setFieldAttachments] = useState({});
 
     // Watchers for conditional impact fields
+    const watchedEcnNo = Form.useWatch('ecn_no', form);
+    const targetEcrNo = linkedEcr?.ecr_no || initialEcnData?.ecr_no || '';
+    const currentEcnNo = watchedEcnNo || initialEcnData?.ecn_no || '';
+
     const hasCustomerImpact = Form.useWatch(['impact', 'has_customer_impact'], form);
     const hasKzwImpact = Form.useWatch(['impact', 'has_kzw_fjsw_impact'], form);
     const hasSaleDwgImpact = Form.useWatch(['impact', 'has_sale_drawing_impact'], form);
@@ -133,6 +138,14 @@ export default function CreateECNModal({
                     headers: token ? { Authorization: `Bearer ${token}` } : {}
                 });
                 antdMessage.success("ECN Created Successfully (Block 5 Complete -> Pending Eng Mgr ECN)");
+
+                // Background Auto-sync Drive Folder: Rename ecrxxxxxx -> ecrxxxxxx_ecntxxxxxx
+                const finalEcnNo = values.ecn_no || currentEcnNo;
+                if (targetEcrNo && finalEcnNo) {
+                    syncEcntDriveFolder({ ecrNo: targetEcrNo, ecnNo: finalEcnNo }).catch(err => {
+                        console.warn("[CreateECNModal] Auto sync folder failed:", err);
+                    });
+                }
 
                 // Fire-and-forget email notification to Eng Mgr
                 try {
@@ -240,6 +253,8 @@ export default function CreateECNModal({
                             attachments={fieldAttachments['reason_of_change'] || []}
                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, reason_of_change: atts }))}
                             blockNumber={5}
+                            ecrNo={targetEcrNo}
+                            ecnNo={currentEcnNo}
                         />
                     </Col>
                     <Col span={24}>
@@ -256,6 +271,8 @@ export default function CreateECNModal({
                             attachments={fieldAttachments['before_change'] || []}
                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, before_change: atts }))}
                             blockNumber={5}
+                            ecrNo={targetEcrNo}
+                            ecnNo={currentEcnNo}
                         />
                     </Col>
                     <Col span={12}>
@@ -267,6 +284,8 @@ export default function CreateECNModal({
                             attachments={fieldAttachments['after_change'] || []}
                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, after_change: atts }))}
                             blockNumber={5}
+                            ecrNo={targetEcrNo}
+                            ecnNo={currentEcnNo}
                         />
                     </Col>
                 </Row>
@@ -415,6 +434,8 @@ export default function CreateECNModal({
                                             attachments={fieldAttachments['traceability'] || []}
                                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, traceability: atts }))}
                                             blockNumber={5}
+                                            ecrNo={targetEcrNo}
+                                            ecnNo={currentEcnNo}
                                         />
                                     </Col>
                                 </Row>
@@ -463,6 +484,8 @@ export default function CreateECNModal({
                                             attachments={fieldAttachments['wip_stock'] || []}
                                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, wip_stock: atts }))}
                                             blockNumber={5}
+                                            ecrNo={targetEcrNo}
+                                            ecnNo={currentEcnNo}
                                         />
                                     </Col>
                                 </Row>

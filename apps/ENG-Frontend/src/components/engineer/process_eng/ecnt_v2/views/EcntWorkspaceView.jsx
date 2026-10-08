@@ -9,7 +9,7 @@ import {
     ArrowLeftOutlined, MessageOutlined, CalendarOutlined, FilePdfOutlined, 
     EditOutlined, PlusCircleOutlined, CheckCircleOutlined, ClockCircleOutlined,
     CopyOutlined, DiffOutlined, MoreOutlined, ArrowRightOutlined,
-    EyeOutlined
+    EyeOutlined, FolderOpenOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
@@ -319,6 +319,20 @@ export default function EcntWorkspaceView({
                                 </Tag>
                             )
                         )}
+
+                        <Tooltip title="Open Google Drive Attachments Folder">
+                            <Button 
+                                icon={<FolderOpenOutlined />} 
+                                onClick={() => {
+                                    const folderUrl = attachments.find(a => a.drive_folder_url)?.drive_folder_url || 
+                                        'https://drive.google.com/drive/folders/1NKhFV81KnUKrjCLae1sFrwj2xZeVKOD5';
+                                    window.open(folderUrl, '_blank', 'noreferrer');
+                                }}
+                                style={{ borderRadius: 8, borderColor: '#faad14', color: '#d48806' }}
+                            >
+                                Drive 📁
+                            </Button>
+                        </Tooltip>
 
                         {docData?.process_status === 'ECN Effective' && (
                             <Tooltip title="Download Official Notice PDF">

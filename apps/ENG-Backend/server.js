@@ -258,6 +258,7 @@ app.put('/api/ecr/tasks/:taskId/ack', verifyToken, engProcess.ecrAckTask);
 const engEcntV2 = require('./api/engineer/process/eng_ecnt_v2');
 
 // ECR (Blocks 1-4)
+app.route('/api/ecnt/next-ecr-no').get(optionalVerifyToken, engEcntV2.getNextEcrNo);
 app.route('/api/ecnt/ecr').get(optionalVerifyToken, engEcntV2.getEcrList).post(verifyToken, engEcntV2.createEcr);
 app.route('/api/ecnt/ecr/:id').get(optionalVerifyToken, engEcntV2.getEcrById);
 app.route('/api/ecnt/ecr/:id/action').put(verifyToken, engEcntV2.actionEcr);

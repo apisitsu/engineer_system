@@ -178,18 +178,28 @@ export const createCardSlice = (set, get) => ({
     deleteCard: async (cardId) => {
         try {
             // First, delete Google Drive attachments from the frontend to ensure auth context
-            const loc = get()._findCardList(cardId);
-            const card = loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail;
-            if (card && card.attachments) {
-                // deleteFileFromDrive is imported statically at the top
-                for (const att of card.attachments) {
-                    if (att.drive_file_id) {
-                        try {
-                            await deleteFileFromDrive(att.drive_file_id);
-                        } catch (err) {
-                            console.warn('Failed to delete Drive file from frontend:', att.drive_file_id, err);
-                        }
+            let attachments = [];
+            const activeDetail = get().activeCardDetail;
+            if (activeDetail && activeDetail.id === cardId && Array.isArray(activeDetail.attachments)) {
+                attachments = activeDetail.attachments;
+            } else {
+                try {
+                    const res = await axios.get(`${server.KANBAN_CARDS}/${cardId}`);
+                    if (res.data?.data?.attachments) {
+                        attachments = res.data.data.attachments;
                     }
+                } catch { /* ignore */ }
+            }
+
+            const driveFileIds = attachments
+                .map(a => a.drive_file_id || (a.file_path?.match(/\/d\/([^/?#]+)/)?.[1]) || (a.file_path?.match(/[?&]id=([^/&?#]+)/)?.[1]))
+                .filter(Boolean);
+
+            if (driveFileIds.length > 0) {
+                try {
+                    await deleteFileFromDrive(driveFileIds);
+                } catch (err) {
+                    console.warn('Failed to delete Drive files for card:', cardId, err);
                 }
             }
 
@@ -601,17 +611,22 @@ export const createCardSlice = (set, get) => ({
         return null;
     },
 
-    addFileAttachment: async (cardId, file, popup) => {
+    addFileAttachment: async (cardId, file, options = {}) => {
         try {
-            // ── Step 1: Upload to Google Drive via GAS popup ──
+            // ── Step 1: Upload to Google Drive via GAS (Silent iframe by default) ──
             if (GAS_DRIVE_URL) {
                 const { activeProject, activeBoard } = get();
                 const projectId = activeProject?.id || 0;
                 const boardId = activeBoard?.id || 0;
 
+                // Support legacy signature where 3rd param was a popup Window object
+                const uploadOpts = (options && typeof options === 'object' && options.closed !== undefined)
+                    ? { popup: options }
+                    : (options || {});
+
                 const gasResult = await uploadFileToDrive(file, {
                     projectId, boardId, cardId,
-                }, { popup });
+                }, uploadOpts);
 
                 // ── Step 2: Send Drive metadata to backend for DB storage ──
                 const res = await axios.post(
@@ -664,39 +679,68 @@ export const createCardSlice = (set, get) => ({
         return null;
     },
 
-    deleteAttachment: async (attachmentId, cardId) => {
-        try {
-            // Find the attachment to get drive_file_id
-            const loc = get()._findCardList(cardId);
-            const card = loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail;
-            let driveFileId = null;
-            if (card && card.attachments) {
-                const att = card.attachments.find(a => a.id === attachmentId);
-                if (att && att.drive_file_id) {
-                    driveFileId = att.drive_file_id;
-                }
+    deleteAttachment: async (attachmentId, cardId, attObj = null) => {
+        // 1. Resolve attachment object and drive_file_id
+        let att = attObj;
+        if (!att) {
+            const activeDetail = get().activeCardDetail;
+            if (activeDetail && activeDetail.attachments) {
+                att = activeDetail.attachments.find(a => a.id === attachmentId);
             }
+        }
+        if (!att) {
+            const loc = get()._findCardList(cardId);
+            const card = loc ? get().cards[loc.listId]?.[loc.idx] : null;
+            if (card && card.attachments) {
+                att = card.attachments.find(a => a.id === attachmentId);
+            }
+        }
 
+        let driveFileId = att?.drive_file_id;
+        if (!driveFileId && att?.file_path) {
+            const match = att.file_path.match(/\/d\/([^/?#]+)/) || att.file_path.match(/[?&]id=([^/&?#]+)/);
+            if (match && match[1]) {
+                driveFileId = match[1];
+            }
+        }
+
+        // 2. If it's a Drive file, open the popup immediately synchronously before any await
+        let popup = null;
+        if (driveFileId) {
+            try {
+                popup = window.open('about:blank', 'gas_delete', 'width=420,height=300,left=350,top=150');
+            } catch (e) {
+                popup = null;
+            }
+        }
+
+        try {
             // Show loading state
             Swal.fire({
-                title: 'Deleting attachment...',
-                text: 'Waiting for Google Drive confirmation',
+                title: 'กำลังลบไฟล์แนบ...',
+                text: driveFileId ? 'กำลังลบไฟล์ออกจาก Google Drive และระบบ...' : 'กำลังลบข้อมูลจากระบบ...',
                 allowOutsideClick: false,
                 didOpen: () => Swal.showLoading()
             });
 
-            // 1. Delete from Google Drive if it's a Drive file
+            // 3. Delete from Google Drive if it's a Drive file
             if (driveFileId) {
-                // deleteFileFromDrive is imported statically at the top
-                await deleteFileFromDrive(driveFileId);
+                try {
+                    await deleteFileFromDrive(driveFileId, { popup });
+                } catch (driveErr) {
+                    console.warn('[deleteAttachment] Drive delete warning:', driveErr);
+                }
             }
 
-            // 2. Delete from Database
+            // 4. Delete from Database
             await axios.delete(`${server.KANBAN_ATTACHMENTS}/${attachmentId}`);
-            if (cardId) get().fetchCardDetail(cardId);
+            if (cardId) await get().fetchCardDetail(cardId);
             Swal.close();
             return true;
         } catch (err) {
+            if (popup && !popup.closed) {
+                try { popup.close(); } catch { }
+            }
             Swal.close();
             console.error('Failed to delete attachment', err);
             const status = err.response?.status;

@@ -52,6 +52,8 @@ export default function WorkflowActionCard({
     const cleanRole = (userRole || localStorage.getItem('role') || '').toUpperCase();
     const cleanDept = (userDepartment || localStorage.getItem('u_department') || '').toUpperCase();
     const cleanName = (userName || localStorage.getItem('u_name') || '').toLowerCase();
+    const activeEcrNo = docData?.ecr_no || (documentType === 'ECR' ? docData?.doc_no : '') || '';
+    const activeEcnNo = docData?.ecn_no || (documentType === 'ECN' ? docData?.doc_no : '') || '';
 
     // 1. Super Admin / System Admin check
     const systemAdmins = (systemConfig?.system_admins || ['admin', 'eng_mgr']).map(a => String(a).toLowerCase());
@@ -584,6 +586,8 @@ export default function WorkflowActionCard({
                                 attachments={riskAttachments}
                                 onAttachmentsChange={setRiskAttachments}
                                 blockNumber={3}
+                                ecrNo={activeEcrNo}
+                                ecnNo={activeEcnNo}
                             />
                         </Col>
                     </Row>
@@ -847,6 +851,8 @@ export default function WorkflowActionCard({
                                 attachments={faiSummaryAttachments}
                                 onAttachmentsChange={setFaiSummaryAttachments}
                                 blockNumber={9}
+                                ecrNo={activeEcrNo}
+                                ecnNo={activeEcnNo}
                             />
                         </Col>
                         <Col span={24}>
@@ -1131,6 +1137,8 @@ export default function WorkflowActionCard({
                                 attachments={rmdAttachments}
                                 onAttachmentsChange={setRmdAttachments}
                                 blockNumber={currentBlock}
+                                ecrNo={activeEcrNo}
+                                ecnNo={activeEcnNo}
                             />
                         )}
                         {currentBlock !== 5 && currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9 && (
@@ -1146,6 +1154,8 @@ export default function WorkflowActionCard({
                             attachments={commentAttachments}
                             onAttachmentsChange={setCommentAttachments}
                             blockNumber={currentBlock}
+                            ecrNo={activeEcrNo}
+                            ecnNo={activeEcnNo}
                         />
                     </>
                 )}

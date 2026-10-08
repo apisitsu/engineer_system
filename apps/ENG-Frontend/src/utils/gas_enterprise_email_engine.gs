@@ -82,7 +82,21 @@ function doPost(e) {
     try {
         var data = {};
         if (e && e.postData && e.postData.contents) {
-            data = JSON.parse(e.postData.contents);
+            var raw = e.postData.contents;
+            if (typeof raw === 'string') {
+                raw = raw.trim();
+                if (raw.indexOf('payload=') === 0) {
+                    raw = raw.substring(8);
+                    try { raw = decodeURIComponent(raw.replace(/\+/g, ' ')); } catch (e1) {
+                        try { raw = unescape(raw.replace(/\+/g, ' ')); } catch (e2) {}
+                    }
+                } else if (raw.indexOf('%7B') === 0 || raw.indexOf('%7b') === 0) {
+                    try { raw = decodeURIComponent(raw.replace(/\+/g, ' ')); } catch (e1) {
+                        try { raw = unescape(raw.replace(/\+/g, ' ')); } catch (e2) {}
+                    }
+                }
+            }
+            data = (typeof raw === 'object') ? raw : JSON.parse(raw);
         } else if (e && e.parameter) {
             data = e.parameter;
         }

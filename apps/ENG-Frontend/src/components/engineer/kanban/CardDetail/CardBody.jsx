@@ -220,7 +220,7 @@ const CardBody = () => {
                                         <Button type="text" size="small" icon={<FiUpload size={14} style={{ transform: 'rotate(180deg)' }} />} onClick={() => window.open(fileUrl, '_blank', 'noreferrer')} />
                                     </Tooltip>
                                     {!isReadOnly && (
-                                        <Popconfirm title="Delete attachment?" onConfirm={() => deleteAttachment(att.id, card.id)}>
+                                        <Popconfirm title="Delete attachment?" onConfirm={() => deleteAttachment(att.id, card.id, att)}>
                                             <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
                                         </Popconfirm>
                                     )}
@@ -245,7 +245,7 @@ const CardBody = () => {
                                             {!isReadOnly && (
                                                 <Space size={4}>
                                                     <Button type="text" size="small" onClick={() => { setEditingLinkId(att.id); setEditLinkName(att.file_name || linkData?.name || ''); setEditLinkUrl(linkData?.url || att.file_path || ''); }}><AiOutlineEdit size={14} /></Button>
-                                                    <Popconfirm title="Delete attachment?" onConfirm={() => deleteAttachment(att.id, card.id)}>
+                                                    <Popconfirm title="Delete attachment?" onConfirm={() => deleteAttachment(att.id, card.id, att)}>
                                                         <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
                                                     </Popconfirm>
                                                 </Space>

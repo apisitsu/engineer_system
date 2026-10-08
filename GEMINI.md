@@ -5,7 +5,39 @@
 
 ## Current Project Status
 - **Last Update:** 2026-10-08
-- **Active Goal:** Frontend API Config: Smart Dynamic Resolution Engine (Auto Prod/Dev/Localhost Detection, Zero-Conflict Constance Architecture & Script Resilience).
+- **Active Goal:** ECNT V2 & Kanban: Google Drive Attachment Engine & Full-Fidelity Media Inspection Integration (Zero-Breaking Dual-Engine Architecture).
+
+- **Google Drive Attachment Trashing & Zero-Orphan Deletion Engine (2026-10-08):**
+  - **1. Root Cause Identification:**
+    - In `cardSlice.js`, `loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail` selected board card objects which only contain metadata counters (`attachment_count`), not the full `attachments` array (which exists only in `activeCardDetail.attachments`). As a result, `driveFileId` was always `null` and `deleteFileFromDrive` was bypassed.
+    - In `uploadFileToDrive.js`, `deleteFileFromDrive` was previously targeting a hidden `<iframe>`. On intranet HTTP origins, modern browsers block third-party cookies in iframes, causing Google Workspace (`@minebea.co.th`) authentication to fail or redirect to `accounts.google.com` (`X-Frame-Options: DENY`), preventing delete requests from reaching Google Apps Script.
+  - **2. Synchronous User-Gesture Popup & Batch Deletion Engine (`uploadFileToDrive.js`, `cardSlice.js`, `CardBody.jsx`):**
+    - Updated `CardBody.jsx` to pass the attachment object `att` directly to `deleteAttachment(att.id, card.id, att)`.
+    - Updated `cardSlice.js` `deleteAttachment` to extract `drive_file_id` (or parse regex from `file_path`) and immediately open `popup = window.open('about:blank', 'gas_delete', ...)` **synchronously within the user's click gesture** before any `await`, preventing popup blocking.
+    - Updated `deleteCard` in `cardSlice.js` to collect all Drive file IDs from card attachments and delete them via batch array in one operation.
+    - Updated `uploadFileToDrive.js` `deleteFileFromDrive(fileIdOrIds, options)` to support single file IDs or arrays of IDs, post to GAS via the helper popup with session cookies, and auto-close upon `postMessage`.
+  - **3. Google Apps Script Universal Delete Handler (`Code.gs`):**
+    - Updated `handleDelete` in `apps/ENG-Backend/api/kanban/gas/Code.gs` to support single `fileId` or batch `fileIds` array, calling `DriveApp.getFileById(id).setTrashed(true)` for each file and returning `{ success: true, trashed: true, deleted: [...] }`.
+  - **4. ECNT V2 Attachment Deletion Sync (`AttachmentManager.jsx`):**
+    - Updated `handleDelete(id, item)` in `AttachmentManager.jsx` to also invoke `deleteFileFromDrive` when removing attachments with Drive file IDs, keeping Google Drive and PostgreSQL in sync.
+  - **5. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully).
+
+- **ECNT V2 & Kanban: Unified Direct-from-Frontend Drive Upload & File Cleanup (2026-10-08):**
+  - **1. Direct Frontend-to-GAS Upload Architecture:**
+    - Verified 100% that all Google Drive uploads execute exclusively from the **Frontend Browser directly to Google Apps Script Web App** (`window.open` auto-closing helper popup).
+    - Enterprise Google Workspace (`@minebea.co.th`) session cookies are securely transmitted with first-party context, preventing 302 login redirects and `X-Frame-Options: DENY` iframe blocks.
+    - Node.js backend handles **zero** Drive file transfers (preventing McAfee corporate proxy timeouts and hanging connections), and solely persists metadata (`drive_file_id`, `drive_folder_path`, `file_name`) into PostgreSQL `kb_attachment` and `ecnt2_attachment`.
+  - **2. Unused Files & Dead Code Purge:**
+    - **Deleted**: `apps/ENG-Frontend/src/components/engineer/process_eng/ecnt_v2/Source/gas_drive_servise` (duplicate non-standard file removed to eliminate confusion).
+    - **Deleted**: `apps/ENG-Frontend/src/utils/test_mail.html` (scratch test file).
+    - **Purged**: Removed dead backend upload functions (`postToGAS`, `HttpsProxyAgent`, `GAS_DRIVE_URL`) from `apps/ENG-Backend/api/kanban/kanban_card.js`.
+    - **Canonical File**: Established `apps/ENG-Backend/api/kanban/gas/Code.gs` as the **single authoritative universal script** for Google Apps Script deployment (handling Kanban, ECNT, URL-decoding, and auto-folder renaming).
+  - **3. In-Page Progress & Synchronized Auto-Closing Popup:**
+    - In-page loading modals (SweetAlert2 for Kanban, Ant Design message for ECNT) display live uploading status.
+    - Lightweight popup transfers files reliably and closes automatically via `window.close()` upon `postMessage` delivery.
+  - **4. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 errors).
 
 - **Frontend API Configuration & Automation Architecture (2026-10-08):**
   - **1. Root Cause Resolution for `'return' outside of function` SyntaxError:**

@@ -22,6 +22,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
     
     // Field-specific attachments state
     const [fieldAttachments, setFieldAttachments] = useState({});
+    const [currentEcrNo, setCurrentEcrNo] = useState(initialData?.ecr_no || '');
 
     // Watchers for conditional sub-forms
     const isDrawing = Form.useWatch('is_drawing', form);
@@ -73,6 +74,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                     console.warn("[EcrRequireView] Fallback fetch attachments failed:", err);
                 });
             }
+            setCurrentEcrNo(initialData.ecr_no || '');
         } else {
             form.resetFields();
             form.setFieldsValue({ 
@@ -80,6 +82,20 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                 objective: 'IMPROVE_YIELD'
             });
             setFieldAttachments({});
+
+            // Pre-fetch next ECR number for Google Drive folder alignment
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const token = localStorage.getItem("token");
+            axios.get(`${baseUrl}/api/ecnt/next-ecr-no`, {
+                withCredentials: true,
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            }).then(res => {
+                if (res.data && res.data.nextEcrNo) {
+                    setCurrentEcrNo(res.data.nextEcrNo);
+                }
+            }).catch(err => {
+                console.warn("[EcrRequireView] Pre-fetch next ECR No failed:", err);
+            });
         }
     }, [initialData, form]);
 
@@ -106,6 +122,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
 
             const payload = {
                 ...values,
+                ecr_no: currentEcrNo || undefined,
                 attachments: allFieldAttachments,
                 request_by: empNo || localStorage.getItem('u_code') || 'EMP123',
                 request_by_name: userName || localStorage.getItem('u_name') || 'Requester',
@@ -179,9 +196,16 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                         </Title>
                     </Space>
 
-                    <Tag color={isEditMode ? "orange" : "blue"} style={{ borderRadius: 8, fontSize: 12, padding: '4px 10px' }}>
-                        {isEditMode ? "Mode: Revision / Resubmit" : "Mode: New Request"}
-                    </Tag>
+                    <Space>
+                        {currentEcrNo && (
+                            <Tag color="cyan" style={{ borderRadius: 8, fontSize: 12, padding: '4px 10px', fontWeight: 600 }}>
+                                📁 Drive Folder: {currentEcrNo}
+                            </Tag>
+                        )}
+                        <Tag color={isEditMode ? "orange" : "blue"} style={{ borderRadius: 8, fontSize: 12, padding: '4px 10px' }}>
+                            {isEditMode ? "Mode: Revision / Resubmit" : "Mode: New Request"}
+                        </Tag>
+                    </Space>
                 </div>
             </Card>
 
@@ -257,6 +281,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                 attachments={fieldAttachments['reason_of_change'] || []}
                                 onAttachmentsChange={(newAtt) => handleAttachmentsChange('reason_of_change', newAtt)}
                                 blockNumber={1}
+                                ecrNo={currentEcrNo}
                             />
                         </Col>
                     </Row>
@@ -373,6 +398,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                     attachments={fieldAttachments['dwg_before_change'] || []}
                                     onAttachmentsChange={(newAtt) => handleAttachmentsChange('dwg_before_change', newAtt)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                             <Col xs={24} md={12}>
@@ -384,6 +410,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                     attachments={fieldAttachments['dwg_after_change'] || []}
                                     onAttachmentsChange={(newAtt) => handleAttachmentsChange('dwg_after_change', newAtt)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                         </Row>
@@ -431,6 +458,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                     attachments={fieldAttachments['prog_before_change'] || []}
                                     onAttachmentsChange={(newAtt) => handleAttachmentsChange('prog_before_change', newAtt)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                                 <AttachableField
                                     name="prog_condition_before"
@@ -440,6 +468,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                     attachments={fieldAttachments['prog_condition_before'] || []}
                                     onAttachmentsChange={(newAtt) => handleAttachmentsChange('prog_condition_before', newAtt)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                             <Col xs={24} md={12}>
@@ -451,6 +480,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                     attachments={fieldAttachments['prog_after_change'] || []}
                                     onAttachmentsChange={(newAtt) => handleAttachmentsChange('prog_after_change', newAtt)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                                 <AttachableField
                                     name="prog_condition_after"
@@ -460,6 +490,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                     attachments={fieldAttachments['prog_condition_after'] || []}
                                     onAttachmentsChange={(newAtt) => handleAttachmentsChange('prog_condition_after', newAtt)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                         </Row>
@@ -514,6 +545,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                     attachments={fieldAttachments['usage_before_change'] || []}
                                     onAttachmentsChange={(newAtt) => handleAttachmentsChange('usage_before_change', newAtt)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                             <Col xs={24} md={12}>
@@ -528,6 +560,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                                     attachments={fieldAttachments['usage_after_change'] || []}
                                     onAttachmentsChange={(newAtt) => handleAttachmentsChange('usage_after_change', newAtt)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                         </Row>

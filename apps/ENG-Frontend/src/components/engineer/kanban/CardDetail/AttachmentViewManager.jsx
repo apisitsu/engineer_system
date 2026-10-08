@@ -147,7 +147,8 @@ const getOfficeScheme = (url) => {
 /**
  * Component for the attachment link itself
  */
-export const AttachmentLink = ({ attachment, theme, onClick }) => {
+export const AttachmentLink = ({ attachment, theme = {}, onClick }) => {
+    const primaryColor = theme?.colors?.primary || '#1890ff';
     // Get the preview-optimized URL
     const url = getFileUrl(attachment);
 
@@ -190,7 +191,7 @@ export const AttachmentLink = ({ attachment, theme, onClick }) => {
                     rel="noreferrer"
                     onClick={handleClick}
                     style={{
-                        color: theme.colors.primary,
+                        color: primaryColor,
                         fontSize: 13,
                         fontWeight: 600,
                         textDecoration: 'none',
@@ -217,7 +218,7 @@ export const AttachmentLink = ({ attachment, theme, onClick }) => {
             onClick={handleClick}
             style={{
                 flex: 1,
-                color: theme.colors.primary,
+                color: primaryColor,
                 fontSize: 13,
                 textDecoration: 'none',
                 overflow: 'hidden',
@@ -234,8 +235,10 @@ export const AttachmentLink = ({ attachment, theme, onClick }) => {
 /**
  * Modal component for Image and PDF previews
  */
-export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme }) => {
+export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme = {} }) => {
     const [zoom, setZoom] = useState(100);
+    const primaryColor = theme?.colors?.primary || '#1890ff';
+    const textTertiary = theme?.colors?.textTertiary || '#8c8c8c';
 
     if (!attachment) return null;
 
@@ -264,7 +267,7 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme }) 
             centered
             footer={null}
             styles={{ body: { padding: 0, overflow: 'hidden' } }}
-            closeIcon={<MdClose size={24} style={{ color: theme.colors.textTertiary }} />}
+            closeIcon={<MdClose size={24} style={{ color: textTertiary }} />}
         >
             <div style={{
                 height: type === 'image' ? 'auto' : '85vh',
@@ -327,7 +330,7 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme }) 
                             size="small"
                             icon={<MdOpenInNew size={14} />}
                             onClick={handleOpenNewTab}
-                            style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}
+                            style={{ background: primaryColor, borderColor: primaryColor }}
                         >
                             Open Original
                         </Button>
