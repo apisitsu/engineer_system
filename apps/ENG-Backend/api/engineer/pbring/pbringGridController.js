@@ -7,11 +7,12 @@
  */
 
 const {
-  loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
+  buildGridPdfHtml, hasDataForCn,
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
   getTemplateById, createTemplate, updateTemplate, deleteTemplate,
   parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
   getParamConfig, saveParamConfig, buildStandardGridForMachine,
+  TURNING_MACHINE_NAMES, buildTurningGridForMachine,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 
@@ -22,24 +23,20 @@ async function getPdf(req, res) {
       return res.status(400).json({ success: false, error: 'cn, machine_type_name and process_code are required' });
     }
 
-    // Phase 6 cutover: a machine with a seeded GRIND/DRESS CONDITION config
-    // (the 16 grinding machines) renders through the live SDS "Standard"
-    // layout. Anything without one (the 2 turning machines — Phase 6 doesn't
-    // cover them yet) falls back to the Phase 5 mechanism (own imported
-    // template + {{}} replace) so this cutover can't break a machine Phase 6
-    // doesn't support.
-    const paramConfig = await getParamConfig(machineTypeName);
+    // Phase 6: every PB Ring machine now renders through a live SDS layout —
+    // grinding machines (seeded GRIND/DRESS CONDITION config) through
+    // "Standard", the 2 turning machines through "Turning"
+    // (TURNING_MACHINE_NAMES). The old Phase 5 mechanism (own imported
+    // template + {{}} replace, and the "Grid Templates (PDF)" admin tab that
+    // managed it) is no longer reachable from this route — every machine has
+    // live-layout coverage.
     let grid;
-    if (paramConfig.length > 0) {
+    if (TURNING_MACHINE_NAMES.includes(machineTypeName)) {
+      grid = await buildTurningGridForMachine(cn, machineTypeName, processCode);
+      if (!grid) return res.status(404).json({ success: false, error: 'Live SDS Turning template not available' });
+    } else {
       grid = await buildStandardGridForMachine(cn, machineTypeName, processCode);
       if (!grid) return res.status(404).json({ success: false, error: 'Live SDS Standard template not available' });
-    } else {
-      const loaded = await loadGridForMachine(machineTypeName);
-      if (!loaded) {
-        return res.status(404).json({ success: false, error: `No PB Ring grid template for machine "${machineTypeName}"` });
-      }
-      const { paramMap, conditionByToolNumber } = await buildPbRingValueMap(cn, machineTypeName, processCode);
-      grid = applyValuesToGrid(loaded.grid, paramMap, conditionByToolNumber);
     }
 
     const html = buildGridPdfHtml(grid);
