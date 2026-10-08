@@ -4,7 +4,7 @@ export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was u
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- PROD -----------
-// export const apiUrl = "http://plbmp130.lb.minebea.local:2005/";
+export const apiUrl = "http://plbmp130.lb.minebea.local:2005/";
 // export const apiUrl = "http://plbmp130:2005/";
 
 
@@ -19,10 +19,9 @@ const getDynamicApiUrl = () => {
   return "http://plbmp129:2005/";
 };
 
-export const apiUrl = getDynamicApiUrl();
+// export const apiUrl = getDynamicApiUrl();
 // export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
-// export const apiUrl = "http://10.121.50.38:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
