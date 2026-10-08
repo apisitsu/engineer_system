@@ -89,7 +89,7 @@ export default function StageStepper({
             return { primaryName: mgr?.name || `${docData?.department || 'Dept'} Mgr`, extraCount: 0, rule: 'ANY' };
         }
         if (stageKey === 'STAGE_2_RISK') {
-            return { primaryName: 'พี่โอ (PE Assigned)', extraCount: 0, rule: 'ANY' };
+            return { primaryName: cfg?.lead_engineer_risk?.name || 'พี่โอ (PE Assigned)', extraCount: 0, rule: 'ANY' };
         }
         if (stageKey === 'STAGE_3') {
             return { primaryName: cfg?.eng_mgr?.name || 'พี่แจ็ค (Eng Mgr)', extraCount: 0, rule: 'ANY' };
@@ -98,10 +98,13 @@ export default function StageStepper({
             return { primaryName: cfg?.eng_mgr?.name || 'Teerapol K.', extraCount: 0, rule: 'ANY' };
         }
         if (stageKey === 'STAGE_4' || stageKey === 'STAGE_8') {
-            return { primaryName: docData?.assigned_to || docData?.engineer_assigned || 'PE Assigned', extraCount: 0, rule: 'ANY' };
+            return { primaryName: docData?.assigned_to || docData?.engineer_assigned || cfg?.default_lead_engineer?.name || 'PE Assigned', extraCount: 0, rule: 'ANY' };
         }
-        if (stageKey === 'STAGE_6' || stageKey === 'STAGE_7') {
-            return { primaryName: cfg?.default_qc_pic?.name || 'Patcharayada W.', extraCount: 0, rule: 'ANY' };
+        if (stageKey === 'STAGE_6') {
+            return { primaryName: cfg?.qc_msa_pic?.name || cfg?.default_qc_pic?.name || 'Patcharayada W.', extraCount: 0, rule: 'ANY' };
+        }
+        if (stageKey === 'STAGE_7') {
+            return { primaryName: cfg?.qc_fai_pic?.name || cfg?.default_qc_pic?.name || 'Patcharayada W.', extraCount: 0, rule: 'ANY' };
         }
         if (stageKey === 'STAGE_9') {
             return { primaryName: 'Multi-Dept (ALL)', extraCount: 0, rule: 'ALL' };

@@ -1,6 +1,6 @@
 /**
  * ==============================================================================
- * 🚀 Google Apps Script – Enterprise Reusable Email Notification Engine
+ * 🚀 Google Apps Script – Enterprise Reusable Email Notification Engine V2
  * ==============================================================================
  * 
  * DESCRIPTION:
@@ -11,18 +11,19 @@
  * SUPPORTS:
  *   1. ECNT V2 (11-Block Engineering Change Management System)
  *   2. Generic Modular Template System (Kanban, SDS, Tooling, Materials, etc.)
+ *   3. System Error Diagnostics & Exception Reports
  * 
  * DEPLOYMENT INSTRUCTIONS:
- *   1. Create a new Google Apps Script project at https://script.google.com/
+ *   1. Create or open your Google Apps Script project at https://script.google.com/
  *   2. Replace the contents of Code.gs with this entire file.
- *   3. Click [ Deploy ] > [ New deployment ]
+ *   3. Click [ Deploy ] > [ Manage deployments ] or [ New deployment ]
  *   4. Select type: [ Web app ]
  *      - Description: "Enterprise Email Engine V2"
- *      - Execute as: "Me (your_email@minebea.co.th)"
- *      - Who has access: "Anyone"
- *   5. Click [ Deploy ], authorize the required Gmail permissions.
- *   6. Copy the generated Web App URL and paste it into the ECNT V2 System Settings
- *      panel (or set as GAS_WEBAPP_URL).
+ *      - Execute as: "Me (your_email@minebea.co.th)" or "User accessing the web app"
+ *      - Who has access: "Anyone within MinebeaMitsumi" or "Anyone"
+ *   5. Click [ Deploy ], authorize the required Gmail/Mail permissions.
+ *   6. Copy the generated Web App URL and paste it into ECNT V2 System Settings
+ *      (or constance.js as GAS_EMAIL_WEBAPP).
  * ==============================================================================
  */
 
@@ -32,72 +33,107 @@ var BRAND_PRIMARY_COLOR = "#1890ff";
 var BRAND_DARK_COLOR = "#001529";
 
 /**
- * HTTP GET handler (supports hidden iframe / image ping / query string triggers)
+ * HTTP GET handler (supports direct browser URL ping, health checks, iframe pings)
  */
 function doGet(e) {
     try {
         var params = e && e.parameter ? e.parameter : {};
+
+        // 1. Health Check & Diagnostics
+        if (params.check === "health" || (!params.recipients && !params.funct)) {
+            var healthHtml = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>GAS Mail Engine Active</title></head>" +
+                "<body style='font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;text-align:center;padding:50px 20px;background:#f8fafc;color:#1e293b;'>" +
+                "<div style='max-width:540px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 4px 16px rgba(0,0,0,0.06);border:1px solid #e2e8f0;'>" +
+                "<div style='font-size:42px;margin-bottom:12px;'>✉️</div>" +
+                "<h2 style='margin:0 0 8px;color:#0f172a;'>✅ Enterprise Email Notification Engine Active</h2>" +
+                "<p style='color:#64748b;font-size:14px;margin:0 0 16px;'>Google Apps Script Web App is authorized and ready to dispatch notifications.</p>" +
+                "<div style='background:#f1f5f9;border-radius:8px;padding:12px;font-size:12px;text-align:left;font-family:monospace;color:#334155;'>" +
+                "Service: " + SYSTEM_NAME + "<br>" +
+                "Timestamp: " + new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }) + " (Bangkok Time)" +
+                "</div>" +
+                "</div>" +
+                "</body></html>";
+            return HtmlService.createHtmlOutput(healthHtml)
+                .setTitle("GAS Mail Service Active")
+                .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+        }
+
+        // 2. Dispatch Email
         var result = dispatchEmailAction(params);
 
-        var htmlOutput = "<script>" +
-            "try {" +
-            "  if (window.top.opener) {" +
-            "    window.top.opener.postMessage({ type: 'GAS_MAIL_RESULT', status: 'success' }, '*');" +
-            "    window.top.close();" +
-            "  } else if (window.top !== window) {" +
-            "    window.top.postMessage({ type: 'GAS_MAIL_RESULT', status: 'success' }, '*');" +
-            "  } else {" +
-            "    document.write('✅ Email dispatched successfully.');" +
-            "  }" +
-            "} catch(err) { document.write('✅ Dispatched'); }" +
-            "</script>";
+        var htmlOutput = "<!DOCTYPE html><html><head><script>" +
+            "var res = { type: 'GAS_MAIL_RESULT', status: 'success', message: " + JSON.stringify(result) + " };" +
+            "function trySend(fn) { try { var w = fn(); if (w && w.postMessage) { w.postMessage(res, '*'); return true; } } catch(e) {} return false; }" +
+            "trySend(function() { return window.opener; }) || " +
+            "trySend(function() { return window.top.opener; }) || " +
+            "trySend(function() { return window.parent; }) || " +
+            "trySend(function() { return window.top; });" +
+            "setTimeout(function() { try { window.close(); } catch(e) {} }, 800);" +
+            "</script></head><body style='font-family:sans-serif;text-align:center;padding:40px;'>" +
+            "<h3 style='color:#16a34a;'>✅ Email Dispatched Successfully</h3>" +
+            "<p style='color:#666;font-size:13px;'>" + result + "</p>" +
+            "</body></html>";
 
         return HtmlService.createHtmlOutput(htmlOutput)
+            .setTitle("Email Sent")
             .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 
     } catch (err) {
-        var htmlErr = "<script>" +
-            "try {" +
-            "  if (window.top.opener) {" +
-            "    window.top.opener.postMessage({ type: 'GAS_MAIL_RESULT', status: 'error', message: " + JSON.stringify(err.toString()) + " }, '*');" +
-            "    window.top.close();" +
-            "  } else if (window.top !== window) {" +
-            "    window.top.postMessage({ type: 'GAS_MAIL_RESULT', status: 'error', message: " + JSON.stringify(err.toString()) + " }, '*');" +
-            "  } else {" +
-            "    document.write('❌ Error: ' + " + JSON.stringify(err.toString()) + ");" +
-            "  }" +
-            "} catch(e) { document.write('❌ Error'); }" +
-            "</script>";
+        var htmlErr = "<!DOCTYPE html><html><head><script>" +
+            "var res = { type: 'GAS_MAIL_RESULT', status: 'error', message: " + JSON.stringify(err.toString()) + " };" +
+            "function trySend(fn) { try { var w = fn(); if (w && w.postMessage) { w.postMessage(res, '*'); return true; } } catch(e) {} return false; }" +
+            "trySend(function() { return window.opener; }) || " +
+            "trySend(function() { return window.top.opener; }) || " +
+            "trySend(function() { return window.parent; }) || " +
+            "trySend(function() { return window.top; });" +
+            "</script></head><body style='font-family:sans-serif;text-align:center;padding:40px;'>" +
+            "<h3 style='color:#dc2626;'>❌ Dispatch Error</h3>" +
+            "<p style='color:#666;font-size:13px;'>" + err.toString() + "</p>" +
+            "</body></html>";
 
         return HtmlService.createHtmlOutput(htmlErr)
+            .setTitle("Dispatch Error")
             .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 }
 
 /**
- * HTTP POST handler (supports fetch() with JSON body)
+ * HTTP POST handler (supports fetch() with JSON body as well as form submissions)
  */
 function doPost(e) {
+    var isForm = false;
     var response = { success: false, message: "" };
     try {
         var data = {};
-        if (e && e.postData && e.postData.contents) {
+        if (e && e.parameter && e.parameter.payload) {
+            isForm = true;
+            var raw = e.parameter.payload;
+            try { data = JSON.parse(raw); } catch (e1) { data = e.parameter; }
+        } else if (e && e.postData && e.postData.contents) {
             var raw = e.postData.contents;
             if (typeof raw === 'string') {
                 raw = raw.trim();
-                if (raw.indexOf('payload=') === 0) {
-                    raw = raw.substring(8);
-                    try { raw = decodeURIComponent(raw.replace(/\+/g, ' ')); } catch (e1) {
-                        try { raw = unescape(raw.replace(/\+/g, ' ')); } catch (e2) {}
+                var pIdx = raw.indexOf('payload=');
+                if (pIdx !== -1) {
+                    isForm = true;
+                    var sub = raw.substring(pIdx + 8);
+                    var nextAmp = sub.indexOf('&');
+                    if (nextAmp !== -1) sub = sub.substring(0, nextAmp);
+                    try { raw = decodeURIComponent(sub.replace(/\+/g, ' ')); } catch (e1) {
+                        try { raw = unescape(sub.replace(/\+/g, ' ')); } catch (e2) { raw = sub; }
                     }
                 } else if (raw.indexOf('%7B') === 0 || raw.indexOf('%7b') === 0) {
+                    isForm = true;
                     try { raw = decodeURIComponent(raw.replace(/\+/g, ' ')); } catch (e1) {
                         try { raw = unescape(raw.replace(/\+/g, ' ')); } catch (e2) {}
                     }
+                } else if (e.postData.type && e.postData.type.indexOf('form') !== -1) {
+                    isForm = true;
                 }
             }
             data = (typeof raw === 'object') ? raw : JSON.parse(raw);
         } else if (e && e.parameter) {
+            isForm = true;
             data = e.parameter;
         }
 
@@ -107,6 +143,28 @@ function doPost(e) {
     } catch (err) {
         response.success = false;
         response.error = err.toString();
+    }
+
+    if (isForm) {
+        var jsonStr = JSON.stringify(response);
+        var html = '<!DOCTYPE html><html><head><script>'
+            + 'var d = ' + jsonStr + ';'
+            + 'function trySend(fn) { try { var w = fn(); if (w && w.postMessage) { w.postMessage({ type: "GAS_MAIL_RESULT", status: d.success ? "success" : "error", message: d.message || d.error }, "*"); return true; } } catch(e) {} return false; }'
+            + 'trySend(function() { return window.opener; }) || '
+            + 'trySend(function() { return window.top.opener; }) || '
+            + 'trySend(function() { return window.parent; }) || '
+            + 'trySend(function() { return window.top; });'
+            + 'setTimeout(function() { try { window.close(); } catch(e){} }, 800);'
+            + '</script></head><body style="font-family:sans-serif;text-align:center;padding:24px;">'
+            + '<h3 style="color:' + (response.success ? '#16a34a' : '#dc2626') + ';">'
+            + (response.success ? '✅ Email Sent Successfully' : '❌ Failed: ' + (response.error || 'Error'))
+            + '</h3>'
+            + '<p style="color:#666;font-size:12px;">Closing window...</p>'
+            + '</body></html>';
+
+        return HtmlService.createHtmlOutput(html)
+            .setTitle('GAS Mail Result')
+            .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 
     return ContentService.createTextOutput(JSON.stringify(response))

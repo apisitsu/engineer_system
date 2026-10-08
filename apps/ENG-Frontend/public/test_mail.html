@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apps Script Email Dispatcher Tester</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      padding: 24px;
+      margin: 0;
+    }
+    .container {
+      max-width: 820px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px 32px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+    }
+    h1 {
+      margin-top: 0;
+      color: #001529;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .endpoint-box {
+      background: #f9fbfd;
+      border: 1px solid #d6e4ff;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+    }
+    .endpoint-box label {
+      color: #0958d9;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .endpoint-input-wrapper {
+      display: flex;
+      gap: 8px;
+    }
+    .endpoint-input-wrapper input {
+      flex: 1;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 8px 10px;
+      background: #fff;
+      border: 1px solid #b7d0fc;
+      border-radius: 6px;
+      color: #262626;
+    }
+    .endpoint-input-wrapper input:focus {
+      border-color: #1890ff;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(24,144,255,0.2);
+    }
+    .btn-reset-url {
+      background: #f0f0f0;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      padding: 0 12px;
+      font-size: 12px;
+      color: #555;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: 0.2s;
+    }
+    .btn-reset-url:hover {
+      background: #e4e4e4;
+      color: #222;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #f0f0f0;
+      padding-bottom: 8px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      color: #666;
+      cursor: pointer;
+      padding: 8px 16px;
+      border-radius: 6px;
+      transition: 0.2s;
+    }
+    .tab-btn.active {
+      color: #1890ff;
+      background: #e6f7ff;
+    }
+    .form-group {
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 5px;
+      color: #333;
+    }
+    .hint {
+      font-size: 11px;
+      font-weight: normal;
+      color: #888;
+      margin-left: 4px;
+    }
+    input[type="text"], input[type="email"], select, textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #1890ff;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(24,144,255,0.2);
+    }
+    .row {
+      display: flex;
+      gap: 14px;
+    }
+    .col {
+      flex: 1;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    button.submit-btn, a.submit-link {
+      background: #1890ff;
+      color: #fff !important;
+      border: none;
+      padding: 11px 20px;
+      font-size: 13.5px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: 0.2s;
+    }
+    button.submit-btn:hover, a.submit-link:hover { opacity: 0.9; }
+    button.submit-btn:disabled { background: #d9d9d9 !important; cursor: not-allowed; }
+    
+    .status-box {
+      margin-top: 20px;
+      padding: 14px 18px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      display: none;
+      line-height: 1.6;
+    }
+    .status-box.success {
+      background: #f6ffed;
+      border: 1px solid #b7eb8f;
+      color: #389e0d;
+      display: block;
+    }
+    .status-box.error {
+      background: #fff2f0;
+      border: 1px solid #ffccc7;
+      color: #cf1322;
+      display: block;
+    }
+    .status-box.loading {
+      background: #e6f7ff;
+      border: 1px solid #91d5ff;
+      color: #096dd9;
+      display: block;
+    }
+
+    .direct-box {
+      margin-top: 20px;
+      background: #fdf6ec;
+      border: 1px solid #faecd8;
+      border-radius: 8px;
+      padding: 14px 18px;
+    }
+    .direct-box h4 {
+      margin: 0 0 6px 0;
+      color: #e6a23c;
+      font-size: 14px;
+    }
+    .direct-box p {
+      margin: 0 0 10px 0;
+      font-size: 12.5px;
+      color: #595959;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>✉️ GAS Email Engine Tester</h1>
+  
+  <!-- Editable Web App Target -->
+  <div class="endpoint-box">
+    <label for="scriptUrlInput">
+      <span>🔗 <strong>Web App Target URL</strong> (แก้ไข/สลับเวอร์ชัน Deployment ได้ที่นี่)</span>
+      <span class="hint">บันทึกอัตโนมัติลงใน Browser</span>
+    </label>
+    <div class="endpoint-input-wrapper">
+      <input type="text" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
+      <button type="button" class="btn-reset-url" onclick="resetToDefaultUrl()" title="รีเซ็ตกลับเป็น URL เริ่มต้น">↺ รีเซ็ต</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('template')">1. General Email (Generic)</button>
+    <button class="tab-btn" onclick="switchTab('ecnt')">2. ECNT V2 Email</button>
+    <button class="tab-btn" onclick="switchTab('error')">3. Error Report</button>
+  </div>
+
+  <!-- Form 1: General Email (Default Tab) -->
+  <form id="formTemplate">
+    <div class="form-group">
+      <label>Email ผู้รับ (Recipients) *</label>
+      <input type="email" id="tpl_recipients" value="nanthiwa.k@minebea.co.th" placeholder="e.g. nanthiwa.k@minebea.co.th" required>
+    </div>
+    <div class="row">
+      <div class="col form-group">
+        <label>App Name <span class="hint">(ระบบที่ส่ง)</span></label>
+        <input type="text" id="tpl_app_name" value="EngineerSystem">
+      </div>
+      <div class="col form-group">
+        <label>Theme Color <span class="hint">(รหัสสี HEX หัวข้อ)</span></label>
+        <input type="text" id="tpl_theme_color" value="#1890ff">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Subject (หัวข้ออีเมล)</label>
+      <input type="text" id="tpl_subject" value="[System Test] ECNT & Engineer System Notification Engine Verification">
+    </div>
+    <div class="form-group">
+      <label>Message / Body (ข้อความเนื้อหา)</label>
+      <textarea id="tpl_message" rows="3">Hello Nanthiwa, this is an automated verification test sent from Google Apps Script Enterprise Email Engine to verify email delivery.</textarea>
+    </div>
+    <div class="form-group">
+      <label>Details JSON (Key-Value) <span class="hint">*(ถ้ามี จะแสดงเป็นตารางรายละเอียด)*</span></label>
+      <textarea id="tpl_details" rows="3">{"Service": "GAS Enterprise Mail Engine", "Target Recipient": "nanthiwa.k@minebea.co.th", "Status": "Verification Test", "Timestamp": "Live"}</textarea>
+    </div>
+    <div class="row">
+      <div class="col form-group">
+        <label>Action URL <span class="hint">*(ถ้ามี จะแสดงปุ่มลิงก์)*</span></label>
+        <input type="text" id="tpl_action_url" value="http://localhost:3000/eng/process_eng/ecnt_v2" placeholder="http://localhost:3000/eng/process_eng/ecnt_v2">
+      </div>
+      <div class="col form-group">
+        <label>Action Button Text <span class="hint">(ข้อความบนปุ่ม)</span></label>
+        <input type="text" id="tpl_action_button_text" value="Open ECNT System">
+      </div>
+    </div>
+  </form>
+
+  <!-- Form 2: ECNT -->
+  <form id="formEcnt" style="display:none;">
+    <div class="form-group">
+      <label>Email ผู้รับ (Recipients) *</label>
+      <input type="email" id="ecnt_recipients" value="nanthiwa.k@minebea.co.th" placeholder="e.g. nanthiwa.k@minebea.co.th">
+    </div>
+    <div class="row">
+      <div class="col form-group">
+        <label>Doc Type</label>
+        <select id="ecnt_doc_type">
+          <option value="ECR">ECR</option>
+          <option value="ECN">ECN</option>
+          <option value="PTR">PTR</option>
+        </select>
+      </div>
+      <div class="col form-group">
+        <label>Document No.</label>
+        <input type="text" id="ecnt_doc_no" value="ECR-2026-TEST">
+      </div>
+      <div class="col form-group">
+        <label>Priority</label>
+        <select id="ecnt_priority">
+          <option value="NORMAL">NORMAL</option>
+          <option value="URGENT">URGENT</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Title of Change</label>
+      <input type="text" id="ecnt_title" value="Test Change of Grease Specification for ECNT Verification">
+    </div>
+    <div class="row">
+      <div class="col form-group">
+        <label>Customer</label>
+        <input type="text" id="ecnt_customer" value="Minebea Internal Test">
+      </div>
+      <div class="col form-group">
+        <label>Requester Name (Dept)</label>
+        <input type="text" id="ecnt_requester" value="System Tester (ENG)">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col form-group">
+        <label>Current Stage</label>
+        <input type="text" id="ecnt_stage" value="2. Dept Mgr Review">
+      </div>
+      <div class="col form-group">
+        <label>Is Rework?</label>
+        <select id="ecnt_is_rework">
+          <option value="false">No (Normal Flow)</option>
+          <option value="true">Yes (Rework / Clarification)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Action Required</label>
+      <textarea id="ecnt_action" rows="2">Please review this document in the ECNT V2 system.</textarea>
+    </div>
+    <div class="form-group">
+      <label>Notes / Remarks</label>
+      <textarea id="ecnt_notes" rows="2">Automated verification testing for nanthiwa.k@minebea.co.th.</textarea>
+    </div>
+  </form>
+
+  <!-- Form 3: Error Report -->
+  <form id="formError" style="display:none;">
+    <div class="form-group">
+      <label>Email ผู้รับ (Default: nanthiwa.k@minebea.co.th)</label>
+      <input type="email" id="err_recipients" value="nanthiwa.k@minebea.co.th" placeholder="Leave empty for default">
+    </div>
+    <div class="form-group">
+      <label>Subject</label>
+      <input type="text" id="err_subject" value="System Health Check & Diagnostics Test">
+    </div>
+    <div class="row">
+      <div class="col form-group">
+        <label>Action</label>
+        <input type="text" id="err_action" value="EmailVerificationTest">
+      </div>
+      <div class="col form-group">
+        <label>Status</label>
+        <input type="text" id="err_status" value="OK">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Error Message / Diagnostic Content</label>
+      <textarea id="err_msg" rows="3">Verification diagnostic ping to confirm Google Apps Script execution.</textarea>
+    </div>
+  </form>
+
+  <div class="actions">
+    <button class="submit-btn" id="btnSendPopup" style="background:#722ed1;" onclick="sendMailPopup()">🪟 1. ส่งผ่าน Popup Form (แนะนำที่สุด)</button>
+    <button class="submit-btn" id="btnSendPost" style="background:#1890ff;" onclick="sendMail('POST')">🚀 2. ส่งผ่าน POST Fetch</button>
+    <button class="submit-btn" id="btnSendGet" style="background:#52c41a;" onclick="sendMail('GET')">🌐 3. ส่งผ่าน GET Ping (Iframe)</button>
+    <button class="submit-btn" id="btnOpenDirect" style="background:#fa8c16;" onclick="openDirectLink()">↗️ 4. เปิด Direct Link ในแท็บใหม่</button>
+  </div>
+
+  <div id="statusBox" class="status-box"></div>
+
+  <div class="direct-box">
+    <h4>💡 คำแนะนำการทดสอบใน Google Workspace (@minebea.co.th):</h4>
+    <p>
+      เนื่องจากเบราว์เซอร์และ Google Workspace บังคับระบบ Single Sign-On (SSO):<br>
+      • วิธีที่ 1 <b>"🪟 ส่งผ่าน Popup Form"</b> จะเปิดหน้าต่าง Pop-up สั้นๆ ส่ง Session Cookie ไปยัง Google Apps Script แล้วปิดตัวลงอัตโนมัติเมื่อส่งสำเร็จ<br>
+      • วิธีที่ 4 <b>"↗️ เปิด Direct Link"</b> จะเปิดหน้าต่างใหม่ไปยัง Apps Script โดยตรงเพื่อรันคำสั่งส่งอีเมลหา <code>nanthiwa.k@minebea.co.th</code> ทันที
+    </p>
+  </div>
+</div>
+
+<script>
+  const DEFAULT_SCRIPT_URL = "https://script.google.com/a/macros/minebea.co.th/s/AKfycbyBwUbuPNdv9hGJd5s_SjVynpVxW5hPe4I45CtDB614JMeEzEsJTjPw_-GQv7f41o-TIQ/exec";
+  const urlInput = document.getElementById("scriptUrlInput");
+
+  // โหลด URL ล่าสุดจาก LocalStorage ถ้ามี
+  const savedUrl = localStorage.getItem("gas_email_target_url");
+  urlInput.value = savedUrl ? savedUrl : DEFAULT_SCRIPT_URL;
+
+  // บันทึกลง LocalStorage อัตโนมัติเมื่อมีการแก้ไข URL
+  urlInput.addEventListener("input", function() {
+    localStorage.setItem("gas_email_target_url", this.value.trim());
+  });
+
+  function resetToDefaultUrl() {
+    urlInput.value = DEFAULT_SCRIPT_URL;
+    localStorage.setItem("gas_email_target_url", DEFAULT_SCRIPT_URL);
+    alert("รีเซ็ต Web App URL กลับเป็นค่าเริ่มต้นเรียบร้อยแล้ว");
+  }
+
+  function getActiveScriptUrl() {
+    return urlInput.value.trim();
+  }
+
+  let currentTab = 'template';
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+      btn.classList.toggle('active', (tab === 'template' && idx === 0) || (tab === 'ecnt' && idx === 1) || (tab === 'error' && idx === 2));
+    });
+    document.getElementById('formTemplate').style.display = tab === 'template' ? 'block' : 'none';
+    document.getElementById('formEcnt').style.display = tab === 'ecnt' ? 'block' : 'none';
+    document.getElementById('formError').style.display = tab === 'error' ? 'block' : 'none';
+    hideStatus();
+  }
+
+  function getPayload() {
+    if (currentTab === 'template') {
+      const detailsRaw = document.getElementById('tpl_details').value.trim();
+      let detailsVal = {};
+      if (detailsRaw) {
+        try {
+          detailsVal = JSON.parse(detailsRaw);
+        } catch(e) {
+          detailsVal = detailsRaw;
+        }
+      }
+
+      return {
+        funct: "sendTemplateEmail",
+        recipients: document.getElementById('tpl_recipients').value.trim(),
+        app_name: document.getElementById('tpl_app_name').value.trim(),
+        subject: document.getElementById('tpl_subject').value.trim(),
+        message: document.getElementById('tpl_message').value.trim(),
+        theme_color: document.getElementById('tpl_theme_color').value.trim() || "#1890ff",
+        details: detailsVal,
+        action_url: document.getElementById('tpl_action_url').value.trim(),
+        action_button_text: document.getElementById('tpl_action_button_text').value.trim() || "View in System"
+      };
+    } else if (currentTab === 'ecnt') {
+      return {
+        funct: "sendEcntEmail",
+        recipients: document.getElementById('ecnt_recipients').value.trim(),
+        doc_type: document.getElementById('ecnt_doc_type').value,
+        doc_no: document.getElementById('ecnt_doc_no').value,
+        title: document.getElementById('ecnt_title').value,
+        customer: document.getElementById('ecnt_customer').value,
+        requester: document.getElementById('ecnt_requester').value,
+        stage_title: document.getElementById('ecnt_stage').value,
+        priority: document.getElementById('ecnt_priority').value,
+        is_rework: document.getElementById('ecnt_is_rework').value,
+        action_required: document.getElementById('ecnt_action').value,
+        notes: document.getElementById('ecnt_notes').value
+      };
+    } else {
+      return {
+        funct: "sendErrorReport",
+        recipients: document.getElementById('err_recipients').value.trim(),
+        subject: document.getElementById('err_subject').value,
+        action: document.getElementById('err_action').value,
+        status: document.getElementById('err_status').value,
+        error_msg: document.getElementById('err_msg').value
+      };
+    }
+  }
+
+  // ส่งผ่าน Popup Form (นำพา Session Cookie ของ Google Workspace)
+  function sendMailPopup() {
+    const scriptUrl = getActiveScriptUrl();
+    if (!scriptUrl) {
+      alert("กรุณาระบุ Web App Target URL");
+      urlInput.focus();
+      return;
+    }
+
+    const payload = getPayload();
+    if (currentTab !== 'error' && !payload.recipients) {
+      alert("กรุณาระบุอีเมลผู้รับ (Recipients)");
+      return;
+    }
+
+    showStatus('loading', '⏳ กำลังเปิด Popup ส่งข้อมูลไปยัง Google Apps Script...');
+    const popup = window.open('about:blank', 'gas_mail_popup', 'width=460,height=320,menubar=no,toolbar=no,location=no');
+
+    if (!popup) {
+      showStatus('error', '⚠️ ป๊อปอัปถูกเบราว์เซอร์บล็อก กรุณาอนุญาตป๊อปอัป');
+      return;
+    }
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = scriptUrl;
+    form.target = 'gas_mail_popup';
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = JSON.stringify(payload);
+    form.appendChild(input);
+
+    for (const [k, v] of Object.entries(payload)) {
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = k;
+      hidden.value = typeof v === 'object' ? JSON.stringify(v) : v;
+      form.appendChild(hidden);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+
+    showStatus('loading', '⏳ ข้อมูลถูกส่งเข้า Popup ไปยัง Apps Script แล้ว กำลังรอผลลัพธ์...');
+  }
+
+  function openDirectLink() {
+    const scriptUrl = getActiveScriptUrl();
+    const payload = getPayload();
+    const queryParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(payload)) {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+      }
+    }
+    const targetUrl = scriptUrl + (scriptUrl.includes('?') ? '&' : '?') + queryParams.toString();
+    window.open(targetUrl, '_blank');
+    showStatus('success', '🌐 เปิดลิงก์ Direct ในแท็บใหม่เรียบร้อยแล้ว กรุณาตรวจสอบแท็บใหม่และกล่องจดหมายของ ' + payload.recipients);
+  }
+
+  async function sendMail(method) {
+    const scriptUrl = getActiveScriptUrl();
+    if (!scriptUrl) {
+      alert("กรุณาระบุ Web App Target URL");
+      urlInput.focus();
+      return;
+    }
+
+    const payload = getPayload();
+
+    if (currentTab !== 'error' && !payload.recipients) {
+      alert("กรุณาระบุอีเมลผู้รับ (Recipients)");
+      return;
+    }
+
+    showStatus('loading', '⏳ กำลังส่งข้อมูลไปยัง Google Apps Script...');
+    toggleButtons(true);
+
+    if (method === 'POST') {
+      try {
+        const res = await fetch(scriptUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+        if (json.success) {
+          showStatus('success', '✅ สำเร็จ! ' + (json.message || 'ส่งอีเมลเรียบร้อยแล้ว'));
+        } else {
+          showStatus('error', '❌ เกิดข้อผิดพลาดจาก Apps Script: ' + (json.error || json.message));
+        }
+      } catch (err) {
+        showStatus('error', '⚠️ ติดการเชื่อมต่อเบราว์เซอร์ / CORS: ' + err.message + '<br><small>ทิป: ให้คลิกปุ่ม <b>"🪟 1. ส่งผ่าน Popup Form"</b> หรือ <b>"↗️ 4. เปิด Direct Link"</b> ด้านบนเพื่อส่งผ่าน Google Workspace Session</small>');
+      } finally {
+        toggleButtons(false);
+      }
+    } else {
+      try {
+        const queryParams = new URLSearchParams();
+        for (const [key, value] of Object.entries(payload)) {
+          if (value !== undefined && value !== null && value !== '') {
+            queryParams.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+          }
+        }
+        
+        const targetUrl = scriptUrl + (scriptUrl.includes('?') ? '&' : '?') + queryParams.toString();
+        
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = targetUrl;
+        document.body.appendChild(iframe);
+
+        showStatus('success', '✅ ร้องขอการส่งผ่าน GET เรียบร้อยแล้ว กรุณาตรวจสอบกล่องจดหมายของผู้รับ (' + payload.recipients + ')');
+      } catch (err) {
+        showStatus('error', '❌ ส่ง GET ไม่สำเร็จ: ' + err.message);
+      } finally {
+        toggleButtons(false);
+      }
+    }
+  }
+
+  window.addEventListener("message", function(event) {
+    if (event.data && (event.data.type === "GAS_MAIL_RESULT" || event.data.type === "GAS_MAIL")) {
+      if (event.data.status === "success") {
+        showStatus('success', '✅ สำเร็จ! ยืนยันผลลัพธ์จาก Google Apps Script: อีเมลถูกส่งออกหา nanthiwa.k@minebea.co.th เรียบร้อยแล้ว');
+      } else {
+        showStatus('error', '❌ เกิดข้อผิดพลาด: ' + (event.data.message || 'Unknown'));
+      }
+    }
+  });
+
+  function showStatus(type, msg) {
+    const box = document.getElementById('statusBox');
+    box.className = 'status-box ' + type;
+    box.innerHTML = msg;
+  }
+
+  function hideStatus() {
+    const box = document.getElementById('statusBox');
+    box.className = 'status-box';
+    box.style.display = 'none';
+  }
+
+  function toggleButtons(disabled) {
+    document.getElementById('btnSendPost').disabled = disabled;
+    document.getElementById('btnSendPopup').disabled = disabled;
+    document.getElementById('btnSendGet').disabled = disabled;
+  }
+</script>
+
+</body>
+</html>

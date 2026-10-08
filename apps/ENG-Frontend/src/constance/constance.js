@@ -363,8 +363,7 @@ export const mm_safety = {
   TOTAL_STOCK: "TOTAL_STOCK"
 }
 
-// Google Apps Script Web App URL (doGet endpoint for hidden iframe email notifications)
-export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
+
 
 // Google Apps Script Web App URL (doPost endpoint for Kanban Drive file attachments)
 // เน€เธยเธขยเธขย เน€เธยเน€เธยเธขย Paste your deployed GAS URL here after deploying Code.gs
@@ -388,3 +387,5 @@ export const GAS_TI_CSV_URL = 'https://script.google.com/a/macros/minebea.co.th/
 // .env's GAS_EMAIL_WEBAPP (kept as a literal here — CRA cannot read the backend
 // .env — update both if the script is ever re-deployed under a new /exec URL).
 export const GAS_EMAIL_WEBAPP = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyBwUbuPNdv9hGJd5s_SjVynpVxW5hPe4I45CtDB614JMeEzEsJTjPw_-GQv7f41o-TIQ/exec';
+export const GAS_WEBAPP_URL = GAS_EMAIL_WEBAPP;
+

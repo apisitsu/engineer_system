@@ -151,7 +151,7 @@ export default function CreateECNModal({
                 try {
                     const ecnId = res.data?.id || res.data?.data?.id;
                     dispatchStageWorkflowEmail({
-                        stageCode: 'STAGE_3',
+                        stageCode: 'STAGE_5',
                         docData: {
                             id: ecnId,
                             ecn_no: values.ecn_no,

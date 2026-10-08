@@ -5,6 +5,7 @@ import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import AttachableField from './components/AttachableField';
+import { dispatchStageWorkflowEmail } from '../../../../services/ecntEmailService';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -100,9 +101,32 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
             if (isEditMode) {
                 await axios.put(`${server.URL}/api/ecnt/ecr/${initialData.id}/resubmit`, payload, { withCredentials: true });
                 antdMessage.success("ECR Details Resubmitted to Department Manager");
+                try {
+                    dispatchStageWorkflowEmail({
+                        stageCode: 'STAGE_2',
+                        docData: { ...initialData, ...payload },
+                        documentType: 'ECR',
+                        actionTaken: 'RESUBMIT'
+                    });
+                } catch(e) { console.warn("Email dispatch error:", e); }
             } else {
                 const res = await axios.post(`${server.URL}/api/ecnt/ecr`, payload, { withCredentials: true });
                 antdMessage.success(`ECR Created Successfully: ${res.data.ecr_no || 'Assigned'} (Block 1 & 2 completed)`);
+                try {
+                    dispatchStageWorkflowEmail({
+                        stageCode: 'STAGE_2',
+                        docData: {
+                            id: res.data.id,
+                            ecr_no: res.data.ecr_no,
+                            title_of_change: payload.title_of_change,
+                            department: payload.department,
+                            customer_name: payload.customer_name,
+                            request_by_name: payload.request_by_name
+                        },
+                        documentType: 'ECR',
+                        actionTaken: 'SUBMIT'
+                    });
+                } catch(e) { console.warn("Email dispatch error:", e); }
             }
             
             form.resetFields();

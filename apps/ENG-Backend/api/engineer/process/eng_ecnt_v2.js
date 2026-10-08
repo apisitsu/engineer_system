@@ -140,9 +140,14 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
             // Block 3: Dept Mgr Review or Risk Assessment
             if (blockNumber === 3) {
                 if (ecr.current_stage_code === 'STAGE_2_RISK' || ecr.process_status === 'Pending Risk Assessment') {
-                    const isRiskPic = dept === 'ENG' || (ecr.assigned_to || '').toLowerCase() === empno || (ecr.assigned_to || '').toLowerCase() === name || name.includes('nathaporn');
+                    const configuredLeadRisk = stageAssignees?.lead_engineer_risk;
+                    const isConfiguredRiskPic = configuredLeadRisk && (
+                        (configuredLeadRisk.emp_no || '').toLowerCase() === empno ||
+                        (configuredLeadRisk.name || '').toLowerCase() === name
+                    );
+                    const isRiskPic = isConfiguredRiskPic || dept === 'ENG' || (ecr.assigned_to || '').toLowerCase() === empno || (ecr.assigned_to || '').toLowerCase() === name || name.includes('nathaporn');
                     if (isRiskPic) return { authorized: true, roleLabel: 'Lead Engineer (Risk Assessment)' };
-                    return { authorized: false, reason: "Only the Assigned Engineer (พี่โอ) is authorized to perform Risk Assessment." };
+                    return { authorized: false, reason: "Only the Assigned Lead Engineer is authorized to perform Risk Assessment." };
                 }
 
                 const configuredDeptMgr = stageAssignees?.dept_mgr_mapping?.[ecr.department];
@@ -190,9 +195,14 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
 
             // Block 5: ECN Creation & Return Loop Rework (STAGE_5_R1)
             if (blockNumber === 5) {
+                const configuredLeadEng = stageAssignees?.default_lead_engineer;
+                const isConfiguredLeadEng = configuredLeadEng && (
+                    (configuredLeadEng.emp_no || '').toLowerCase() === empno ||
+                    (configuredLeadEng.name || '').toLowerCase() === name
+                );
                 const isAssignedEng = (ecn.engineer_assigned || '').toLowerCase() === empno || 
                                       (ecn.engineer_assigned || '').toLowerCase() === name || 
-                                      dept === 'ENG';
+                                      dept === 'ENG' || isConfiguredLeadEng;
                 if (isAssignedEng) return { authorized: true, roleLabel: 'Assigned Engineer' };
                 return { authorized: false, reason: `Only the assigned engineer (${ecn.engineer_assigned}) is authorized to formulate or revise this ECN.` };
             }
@@ -214,18 +224,26 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
 
             // Block 7 & 8: QC MSA & FAI Decisions
             if (blockNumber === 7 || blockNumber === 8) {
-                const configuredQcPic = stageAssignees?.default_qc_pic;
-                const isConfiguredQc = configuredQcPic && (configuredQcPic.emp_no || '').toLowerCase() === empno;
+                const configuredQcPic = (blockNumber === 7 ? stageAssignees?.qc_msa_pic : stageAssignees?.qc_fai_pic) || stageAssignees?.default_qc_pic;
+                const isConfiguredQc = configuredQcPic && (
+                    (configuredQcPic.emp_no || '').toLowerCase() === empno ||
+                    (configuredQcPic.name || '').toLowerCase() === name
+                );
                 const isQcRole = dept === 'QC' || role === 'QC';
                 if (isConfiguredQc || isQcRole) return { authorized: true, roleLabel: 'Quality Control (QC) Evaluator' };
-                return { authorized: false, reason: "Only Quality Control (QC) personnel are authorized to submit MSA and FAI decisions." };
+                return { authorized: false, reason: `Only Quality Control (QC) personnel are authorized to submit ${blockNumber === 7 ? 'MSA' : 'FAI'} decisions.` };
             }
 
             // Block 9: Engineer Summary & Concern Setup
             if (blockNumber === 9) {
+                const configuredLeadEng = stageAssignees?.default_lead_engineer;
+                const isConfiguredLeadEng = configuredLeadEng && (
+                    (configuredLeadEng.emp_no || '').toLowerCase() === empno ||
+                    (configuredLeadEng.name || '').toLowerCase() === name
+                );
                 const isAssignedEng = (ecn.engineer_assigned || '').toLowerCase() === empno || 
                                       (ecn.engineer_assigned || '').toLowerCase() === name || 
-                                      dept === 'ENG';
+                                      dept === 'ENG' || isConfiguredLeadEng;
                 if (isAssignedEng) return { authorized: true, roleLabel: 'Assigned Engineer' };
                 return { authorized: false, reason: `Only the assigned engineer (${ecn.engineer_assigned}) is authorized to configure concern department tasks.` };
             }
@@ -1682,16 +1700,21 @@ const updateStageFlow = async (req, res) => {
             } else if (stageKey === 'STAGE_2') {
                 const deptMgr = defaultAssignees?.dept_mgr_mapping?.[doc.department];
                 isStagePic = (deptMgr?.emp_no || '').toLowerCase() === empno || (dept === (doc.department || '').toUpperCase() && (role === 'MGR' || role === 'MANAGER'));
+            } else if (stageKey === 'STAGE_2_RISK') {
+                const leadRisk = defaultAssignees?.lead_engineer_risk;
+                isStagePic = (leadRisk?.emp_no || '').toLowerCase() === empno || dept === 'ENG';
             } else if (stageKey === 'STAGE_3' || stageKey === 'STAGE_5') {
                 const engMgr = defaultAssignees?.eng_mgr;
                 isStagePic = (engMgr?.emp_no || '').toLowerCase() === empno || (dept === 'ENG' && (role === 'MGR' || role === 'MANAGER'));
-            } else if (stageKey === 'STAGE_4') {
-                isStagePic = (doc.assigned_to || '').toLowerCase() === empno || dept === 'ENG';
-            } else if (stageKey === 'STAGE_6' || stageKey === 'STAGE_7') {
-                const qcPic = defaultAssignees?.default_qc_pic;
+            } else if (stageKey === 'STAGE_4' || stageKey === 'STAGE_8') {
+                const leadEng = defaultAssignees?.default_lead_engineer;
+                isStagePic = (doc.assigned_to || doc.engineer_assigned || leadEng?.emp_no || '').toLowerCase() === empno || dept === 'ENG';
+            } else if (stageKey === 'STAGE_6') {
+                const qcPic = defaultAssignees?.qc_msa_pic || defaultAssignees?.default_qc_pic;
                 isStagePic = (qcPic?.emp_no || '').toLowerCase() === empno || dept === 'QC' || role === 'QC';
-            } else if (stageKey === 'STAGE_8') {
-                isStagePic = (doc.engineer_assigned || '').toLowerCase() === empno || dept === 'ENG';
+            } else if (stageKey === 'STAGE_7') {
+                const qcPic = defaultAssignees?.qc_fai_pic || defaultAssignees?.default_qc_pic;
+                isStagePic = (qcPic?.emp_no || '').toLowerCase() === empno || dept === 'QC' || role === 'QC';
             } else if (stageKey === 'STAGE_10') {
                 const engMgr = defaultAssignees?.eng_mgr;
                 isStagePic = (engMgr?.emp_no || '').toLowerCase() === empno || role === 'TOP';

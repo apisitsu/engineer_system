@@ -115,7 +115,14 @@ export default function WorkflowStageFlowPanel({
                 role: 'MGR'
             }];
         } else if (stageKey === 'STAGE_2_RISK') {
-            defaultList = [{
+            const configuredRisk = stageAssigneesCfg?.lead_engineer_risk;
+            defaultList = [configuredRisk ? {
+                emp_no: configuredRisk.emp_no,
+                name: configuredRisk.name,
+                dept: 'ENG',
+                role: 'Lead PE',
+                email: configuredRisk.email
+            } : {
                 emp_no: 'eng_assigned',
                 name: 'Nathaporn Yammanus (พี่โอ)',
                 dept: 'ENG',
@@ -129,25 +136,50 @@ export default function WorkflowStageFlowPanel({
                 role: 'MGR'
             }];
         } else if (stageKey === 'STAGE_4') {
+            const configuredLead = stageAssigneesCfg?.default_lead_engineer;
             defaultList = [{
-                emp_no: docData?.assigned_to || 'eng_assigned',
-                name: docData?.assigned_to || 'NATHAPORN YAMMANUS (พี่โอ)',
+                emp_no: docData?.assigned_to || configuredLead?.emp_no || 'eng_assigned',
+                name: docData?.assigned_to || configuredLead?.name || 'NATHAPORN YAMMANUS (พี่โอ)',
                 dept: 'ENG',
-                role: 'PE'
+                role: 'PE',
+                email: configuredLead?.email
             }];
-        } else if (stageKey === 'STAGE_6' || stageKey === 'STAGE_7') {
-            defaultList = [stageAssigneesCfg?.default_qc_pic || {
+        } else if (stageKey === 'STAGE_6') {
+            const configuredQc = stageAssigneesCfg?.qc_msa_pic || stageAssigneesCfg?.default_qc_pic;
+            defaultList = [configuredQc ? {
+                emp_no: configuredQc.emp_no,
+                name: configuredQc.name,
+                dept: 'QC',
+                role: 'QC',
+                email: configuredQc.email
+            } : {
+                emp_no: 'qc_admin',
+                name: 'Patcharayada Waiyaboon',
+                dept: 'QC',
+                role: 'QC'
+            }];
+        } else if (stageKey === 'STAGE_7') {
+            const configuredQc = stageAssigneesCfg?.qc_fai_pic || stageAssigneesCfg?.default_qc_pic;
+            defaultList = [configuredQc ? {
+                emp_no: configuredQc.emp_no,
+                name: configuredQc.name,
+                dept: 'QC',
+                role: 'QC',
+                email: configuredQc.email
+            } : {
                 emp_no: 'qc_admin',
                 name: 'Patcharayada Waiyaboon',
                 dept: 'QC',
                 role: 'QC'
             }];
         } else if (stageKey === 'STAGE_8') {
+            const configuredLead = stageAssigneesCfg?.default_lead_engineer;
             defaultList = [{
-                emp_no: docData?.engineer_assigned || docData?.assigned_to || 'eng_assigned',
-                name: docData?.engineer_assigned || docData?.assigned_to || 'NATHAPORN YAMMANUS (พี่โอ)',
+                emp_no: docData?.engineer_assigned || docData?.assigned_to || configuredLead?.emp_no || 'eng_assigned',
+                name: docData?.engineer_assigned || docData?.assigned_to || configuredLead?.name || 'NATHAPORN YAMMANUS (พี่โอ)',
                 dept: 'ENG',
-                role: 'PE'
+                role: 'PE',
+                email: configuredLead?.email
             }];
         } else if (stageKey === 'STAGE_10') {
             defaultList = [
