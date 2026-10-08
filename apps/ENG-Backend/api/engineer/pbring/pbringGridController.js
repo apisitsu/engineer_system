@@ -11,7 +11,7 @@ const {
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
   getTemplateById, createTemplate, updateTemplate, deleteTemplate,
   parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
-  getParamConfig, saveParamConfig,
+  getParamConfig, saveParamConfig, buildStandardGridForMachine,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 
@@ -22,13 +22,26 @@ async function getPdf(req, res) {
       return res.status(400).json({ success: false, error: 'cn, machine_type_name and process_code are required' });
     }
 
-    const loaded = await loadGridForMachine(machineTypeName);
-    if (!loaded) {
-      return res.status(404).json({ success: false, error: `No PB Ring grid template for machine "${machineTypeName}"` });
+    // Phase 6 cutover: a machine with a seeded GRIND/DRESS CONDITION config
+    // (the 16 grinding machines) renders through the live SDS "Standard"
+    // layout. Anything without one (the 2 turning machines — Phase 6 doesn't
+    // cover them yet) falls back to the Phase 5 mechanism (own imported
+    // template + {{}} replace) so this cutover can't break a machine Phase 6
+    // doesn't support.
+    const paramConfig = await getParamConfig(machineTypeName);
+    let grid;
+    if (paramConfig.length > 0) {
+      grid = await buildStandardGridForMachine(cn, machineTypeName, processCode);
+      if (!grid) return res.status(404).json({ success: false, error: 'Live SDS Standard template not available' });
+    } else {
+      const loaded = await loadGridForMachine(machineTypeName);
+      if (!loaded) {
+        return res.status(404).json({ success: false, error: `No PB Ring grid template for machine "${machineTypeName}"` });
+      }
+      const { paramMap, conditionByToolNumber } = await buildPbRingValueMap(cn, machineTypeName, processCode);
+      grid = applyValuesToGrid(loaded.grid, paramMap, conditionByToolNumber);
     }
 
-    const { paramMap, conditionByToolNumber } = await buildPbRingValueMap(cn, machineTypeName, processCode);
-    const grid = applyValuesToGrid(loaded.grid, paramMap, conditionByToolNumber);
     const html = buildGridPdfHtml(grid);
     const pdf = await renderPdf(html);
 
