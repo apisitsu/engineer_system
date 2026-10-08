@@ -641,38 +641,60 @@ async function saveParamConfig(machineTypeName, rows, empno) {
 }
 
 /**
- * Writes the GRIND/DRESS CONDITION list into the (currently blank, in the
- * live Standard template) left-hand area of the grid — one config row per
- * grid row, starting at row 16 (0-based row 15, matching where the user
- * confirmed the real condition area begins), columns A/E/F (label/value/unit).
- * Single-column layout (not the real sheet's compact 2-column pairing) — simpler
- * and has no risk of overlapping the T01-T20 tool area, which starts at
- * column K (index 10); this mechanism only ever writes columns 0-5.
+ * Writes the per-machine config rows into two DIFFERENT regions of the grid,
+ * by source — not one continuous list:
+ *
+ * - `source='param'` rows (the numbered #01-#NN GRIND/DRESS CONDITION list)
+ *   go in the left-hand area starting row 16 (0-based 15, confirmed live),
+ *   columns A/E/F (label/value/unit). Never overlaps the T01-T20 tool area,
+ *   which starts at column K (index 10).
+ * - `source='condition'` rows (grinding/dressing-wheel spec+maker — KVD300/
+ *   KVD350 today) go in the bottom-right area, same columns the real SDS
+ *   system itself uses for its own "GW" section: `gw_row_N_AN` (label) /
+ *   `gw_row_N_AP` (value), confirmed live against `sds_parameter` for
+ *   KS-B80 (rows 53-55) — i.e. column AN (index 39, label) / AP (index 41,
+ *   value), same column family as the "Grinding Area" diagram box, NOT the
+ *   left-hand condition-parameter columns. Starts row 50 (0-based 49),
+ *   ending well before the sheet's row-58 footer.
+ *
+ * The two row counters are independent, so a long #01-#NN list on one
+ * machine never pushes the GW/DW rows down into territory the diagram box
+ * needs, and vice versa.
  */
 const CONDITION_START_ROW = 15; // 0-based (row 16, 1-based, confirmed live)
 const CONDITION_LABEL_COL = 0, CONDITION_VALUE_COL = 4, CONDITION_UNIT_COL = 5;
 
+const GW_DETAIL_START_ROW = 49; // 0-based (row 50, 1-based) — bottom-right, same column family as the Grinding Area diagram
+const GW_DETAIL_LABEL_COL = 39, GW_DETAIL_VALUE_COL = 41; // AN / AP, matching the real sds_parameter gw_row_N_AN/AP convention
+
 function applyConditionConfigToGrid(grid, configRows, paramMap, conditionByToolNumber = {}) {
-  configRows.forEach((cfg, i) => {
-    const r = CONDITION_START_ROW + i;
-    const value = cfg.source === 'condition'
+  let paramRowIdx = 0;
+  let gwRowIdx = 0;
+  configRows.forEach((cfg) => {
+    const isGwDetail = cfg.source === 'condition';
+    const r = isGwDetail ? GW_DETAIL_START_ROW + gwRowIdx : CONDITION_START_ROW + paramRowIdx;
+    if (isGwDetail) gwRowIdx += 1; else paramRowIdx += 1;
+    const labelCol = isGwDetail ? GW_DETAIL_LABEL_COL : CONDITION_LABEL_COL;
+    const valueCol = isGwDetail ? GW_DETAIL_VALUE_COL : CONDITION_VALUE_COL;
+
+    const value = isGwDetail
       ? (conditionByToolNumber[cfg.tool_number] || {})[cfg.condition_field]
       : paramMap[cfg.param_key];
     if (cfg.label) {
-      grid.cells[`${r},${CONDITION_LABEL_COL}`] = {
+      grid.cells[`${r},${labelCol}`] = {
         v: cfg.label,
         f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#000000' },
         a: { h: null, v: 'middle', wrap: false },
       };
     }
     if (value != null && value !== '') {
-      grid.cells[`${r},${CONDITION_VALUE_COL}`] = {
+      grid.cells[`${r},${valueCol}`] = {
         v: String(value),
         f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#c00000' },
         a: { h: 'right', v: 'middle', wrap: false },
       };
     }
-    if (cfg.unit) {
+    if (cfg.unit && !isGwDetail) {
       grid.cells[`${r},${CONDITION_UNIT_COL}`] = {
         v: cfg.unit,
         f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#000000' },
