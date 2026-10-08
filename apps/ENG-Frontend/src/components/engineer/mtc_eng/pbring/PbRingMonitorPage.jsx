@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Layout, Tabs, Select, Button, Space, Typography, Table, Tag, Empty, Statistic,
-  Row, Col, Card, Input, InputNumber, DatePicker, Checkbox, Popconfirm, App,
+  Row, Col, Card, Input, InputNumber, DatePicker, Checkbox, Popconfirm, App, Tooltip,
 } from 'antd';
 import {
   ClearOutlined, ReloadOutlined, EditOutlined, SaveOutlined, CloseOutlined,
@@ -1187,7 +1187,10 @@ function ParamConfigTab() {
     if (!selectedMachine) return;
     setSaving(true);
     try {
-      const payload = rows.map((r) => ({ label: r.label, param_key: r.param_key, unit: r.unit }));
+      const payload = rows.map((r) => ({
+        label: r.label, param_key: r.param_key, unit: r.unit,
+        source: r.source, tool_number: r.tool_number, condition_field: r.condition_field,
+      }));
       const r = await axios.put(server.PBRING_GRID_ADMIN_PARAM_CONFIG, { rows: payload }, { params: { machine_type_name: selectedMachine } });
       message.success(`Saved ${r.data?.count ?? payload.length} row(s)`);
       loadRows(selectedMachine);
@@ -1206,7 +1209,13 @@ function ParamConfigTab() {
     },
     {
       title: 'Param Key', dataIndex: 'param_key', key: 'param_key',
-      render: (v, row) => <Input size="small" value={v} onChange={(e) => updateRow(row._key, 'param_key', e.target.value)} placeholder="e.g. sh1" style={{ fontFamily: 'monospace' }} />,
+      render: (v, row) => (row.source === 'condition' ? (
+        <Tooltip title={`Resolved from pbring_sds_condition: tool_number='${row.tool_number}', field='${row.condition_field}' — not editable here yet`}>
+          <Input size="small" value={v} disabled style={{ fontFamily: 'monospace' }} addonBefore={<Tag color="blue" style={{ margin: 0 }}>condition</Tag>} />
+        </Tooltip>
+      ) : (
+        <Input size="small" value={v} onChange={(e) => updateRow(row._key, 'param_key', e.target.value)} placeholder="e.g. sh1" style={{ fontFamily: 'monospace' }} />
+      )),
     },
     {
       title: 'Unit', dataIndex: 'unit', key: 'unit', width: 100,

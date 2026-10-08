@@ -540,16 +540,22 @@ function applyHeaderToGrid(grid, headerAddresses, paramMap) {
   }
 }
 
-// Named (non-numbered) PB Ring tool_number values, in the fixed order they
-// fill the slots AFTER every numbered T{n} tool for that CN — see
-// applyToolSlotsToGrid. Not machine-configurable (yet): a reasonable default,
-// not a verified design decision — flagged in the Phase 6 plan.
-const NAMED_TOOL_ORDER = ['F_DW', 'Upper_GW', 'Lower_GW', 'R_DW'];
+// Named (non-numbered) PB Ring tool_number values that DO belong in a T-slot
+// (fixtures/jigs), in the fixed order they fill the slots AFTER every
+// numbered T{n} tool for that CN. Deliberately does NOT include the 4
+// grinding/dressing-wheel names (F_DW/Upper_GW/Lower_GW/R_DW) — those are
+// condition-list data, not tools; see pbring_sds_param_config's
+// source='condition' rows and 20261010c/d for why. If a future machine's
+// pbring_sds_condition carries a genuinely different named fixture, add it
+// here, not to the GW/DW set.
+const NAMED_TOOL_ORDER = [];
+const CONDITION_SOURCED_TOOL_NUMBERS = new Set(['F_DW', 'Upper_GW', 'Lower_GW', 'R_DW']);
 
 function orderToolNumbers(keys) {
-  const numbered = keys.filter((k) => /^T\d+$/.test(k)).sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10));
-  const named = NAMED_TOOL_ORDER.filter((k) => keys.includes(k));
-  const rest = keys.filter((k) => !numbered.includes(k) && !named.includes(k));
+  const usable = keys.filter((k) => !CONDITION_SOURCED_TOOL_NUMBERS.has(k));
+  const numbered = usable.filter((k) => /^T\d+$/.test(k)).sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10));
+  const named = NAMED_TOOL_ORDER.filter((k) => usable.includes(k));
+  const rest = usable.filter((k) => !numbered.includes(k) && !named.includes(k));
   return [...numbered, ...named, ...rest];
 }
 
@@ -584,8 +590,8 @@ function addrToRC(addr) {
 /** GET admin: per-machine GRIND/DRESS CONDITION row config, in display order. */
 async function getParamConfig(machineTypeName) {
   const { rows } = await engPool.query(
-    `SELECT id, sort_order, label, param_key, unit FROM pbring_sds_param_config
-      WHERE machine_type_name = $1 ORDER BY sort_order`,
+    `SELECT id, sort_order, label, param_key, unit, source, tool_number, condition_field
+       FROM pbring_sds_param_config WHERE machine_type_name = $1 ORDER BY sort_order`,
     [machineTypeName]
   );
   return rows;
@@ -600,7 +606,14 @@ async function getParamConfig(machineTypeName) {
  */
 async function saveParamConfig(machineTypeName, rows, empno) {
   const clean = (Array.isArray(rows) ? rows : [])
-    .map((r) => ({ label: (r.label || '').trim(), param_key: (r.param_key || '').trim(), unit: (r.unit || '').trim() }))
+    .map((r) => ({
+      label: (r.label || '').trim(),
+      param_key: (r.param_key || '').trim(),
+      unit: (r.unit || '').trim(),
+      source: r.source === 'condition' ? 'condition' : 'param',
+      tool_number: (r.tool_number || '').trim() || null,
+      condition_field: (r.condition_field || '').trim() || null,
+    }))
     .filter((r) => r.param_key);
 
   const client = await engPool.connect();
@@ -608,10 +621,13 @@ async function saveParamConfig(machineTypeName, rows, empno) {
     await client.query('BEGIN');
     await client.query('DELETE FROM pbring_sds_param_config WHERE machine_type_name = $1', [machineTypeName]);
     if (clean.length) {
-      const cols = ['machine_type_name', 'sort_order', 'label', 'param_key', 'unit', 'created_by'];
+      const cols = ['machine_type_name', 'sort_order', 'label', 'param_key', 'unit', 'source', 'tool_number', 'condition_field', 'created_by'];
       const c = cols.length;
       const placeholders = clean.map((_, ri) => `(${Array.from({ length: c }, (__, ci) => `$${ri * c + ci + 1}`).join(',')})`).join(',');
-      const values = clean.flatMap((r, i) => [machineTypeName, i + 1, r.label || null, r.param_key, r.unit || null, empno || null]);
+      const values = clean.flatMap((r, i) => [
+        machineTypeName, i + 1, r.label || null, r.param_key, r.unit || null,
+        r.source, r.tool_number, r.condition_field, empno || null,
+      ]);
       await client.query(`INSERT INTO pbring_sds_param_config (${cols.join(',')}) VALUES ${placeholders}`, values);
     }
     await client.query('COMMIT');
@@ -636,10 +652,12 @@ async function saveParamConfig(machineTypeName, rows, empno) {
 const CONDITION_START_ROW = 15; // 0-based (row 16, 1-based, confirmed live)
 const CONDITION_LABEL_COL = 0, CONDITION_VALUE_COL = 4, CONDITION_UNIT_COL = 5;
 
-function applyConditionConfigToGrid(grid, configRows, paramMap) {
+function applyConditionConfigToGrid(grid, configRows, paramMap, conditionByToolNumber = {}) {
   configRows.forEach((cfg, i) => {
     const r = CONDITION_START_ROW + i;
-    const value = paramMap[cfg.param_key];
+    const value = cfg.source === 'condition'
+      ? (conditionByToolNumber[cfg.tool_number] || {})[cfg.condition_field]
+      : paramMap[cfg.param_key];
     if (cfg.label) {
       grid.cells[`${r},${CONDITION_LABEL_COL}`] = {
         v: cfg.label,
@@ -686,7 +704,7 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
   applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses);
 
   const configRows = await getParamConfig(machineTypeName);
-  applyConditionConfigToGrid(grid, configRows, paramMap);
+  applyConditionConfigToGrid(grid, configRows, paramMap, conditionByToolNumber);
 
   return grid;
 }
