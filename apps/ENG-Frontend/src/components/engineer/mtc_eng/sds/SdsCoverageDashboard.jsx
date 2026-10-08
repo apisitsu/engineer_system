@@ -227,15 +227,13 @@ const PrevMonthPctRow = ({ label, snapshot, C }) => {
 };
 
 // ── Part Type Card ─────────────────────────────────────────────────────────────
-// `onClick` makes the card a toggle filter on the CN table below (part type); `active`
-// outlines it in its own colour, `dimmed` fades it while a sibling card is selected.
-const PartTypeCard = ({ pt, C, delta, onClick, active, dimmed }) => {
+// Minimal stat card — title + total only, same visual language (coloured top border,
+// active ring, dimmed sibling) as MiniStatCard below. `onClick` makes the card a
+// toggle filter on the CN table (part type); `active` outlines it in its own colour,
+// `dimmed` fades it while a sibling card is selected.
+const PartTypeCard = ({ pt, C, onClick, active, dimmed }) => {
   const cardStyle = cardStyleOf(C);
   const color = partTypeColors(C)[pt.part_type] || C.cyan;
-  const pct = pt.complete_pct || 0;                       // with T-Select #1
-  const pctSaved = pt.complete_saved_pct ?? pct;          // baseline (saved only)
-  const boost = Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0));
-  
   // Custom label mapping: 'body' or 'mecha' -> 'Mecha' (shared with the chart series)
   const displayLabel = partTypeLabel(pt.part_type);
 
@@ -249,67 +247,38 @@ const PartTypeCard = ({ pt, C, delta, onClick, active, dimmed }) => {
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: active ? `0 0 0 2px ${color}` : 'none',
         opacity: dimmed ? 0.6 : 1, transition: 'box-shadow 0.15s, opacity 0.15s',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
-        <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>
-          {displayLabel}
-        </Text>
-        <Tooltip title="SDS requirements = CN × machine × process (one CN may need several setup sheets)">
-          <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1, cursor: 'help' }}>
-            {(pt.total ?? 0).toLocaleString()}
-          </Text>
-        </Tooltip>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <Text style={{ color: C.textSec, fontSize: 10 }}>SDS reqs</Text>
-        <Tooltip title="Unique CNs (deduplicated across machine × process)">
-          <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(pt.cn_count ?? 0).toLocaleString()} Unique CNs</Text>
-        </Tooltip>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
-        <Tooltip title="Complete / Pending sheets">
-          <Text style={{ fontSize: 10, cursor: 'help' }}>
-            <span style={{ color: C.green, fontWeight: 700 }}>{(pt.complete ?? 0).toLocaleString()}</span>
-            <span style={{ color: C.textSec }}> comp / </span>
-            <span style={{ color: C.yellow, fontWeight: 700 }}>{(pt.pending ?? 0).toLocaleString()}</span>
-            <span style={{ color: C.textSec }}> pend</span>
-          </Text>
-        </Tooltip>
-      </div>
-      {/* Two-tone bar: solid = KZW baseline, soft green = THAI Complete (T-Select #1 boost, * ) */}
-      <Tooltip title={`KZW ${pctSaved}% + THAI ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
-        <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px', display: 'flex', cursor: 'help' }}>
-          <div style={{ width: `${Math.min(pctSaved, 100)}%`, height: '100%', background: C.green, transition: 'width 0.8s ease' }} />
-          <div style={{ width: `${Math.min(Math.max(pct - pctSaved, 0), 100)}%`, height: '100%', background: C.greenSoft, opacity: 0.85, transition: 'width 0.8s ease' }} />
-        </div>
-      </Tooltip>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-        <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>
-          {pctSaved}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>KZW</Text>
-        </Text>
-        {boost > 0 && (
-          <Text style={{ color: C.greenSoft, fontSize: 11, fontWeight: 700 }}>+{(pct - pctSaved).toFixed(1)}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>THAI *</Text></Text>
-        )}
-        {boost > 0 && (
-          <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 800 }}>→ {pct}%</Text>
-        )}
-      </div>
-      {/* No previous-month history row on this card — TOTAL is the only card that
-          shows one (see `monthDelta` in the main component for why: an older closed
-          month may predate the `byPartType` field, so a per-type row is unreliable). */}
-      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-        <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(pt.complete_saved ?? pt.complete).toLocaleString()} KZW complete</Tag>
-        {boost > 0 && (
-          <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-            <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: C.greenSoft, background: hexToRgba(C.greenSoft, 0.18), borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
-          </Tooltip>
-        )}
-      </div>
-      <DeltaBadge delta={delta} C={C} />
+      <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>{displayLabel}</Text>
+      <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{(pt.total ?? 0).toLocaleString()}</Text>
     </div>
   );
 };
+
+// ── Mini Stat Card ───────────────────────────────────────────────────────────────
+// Same title+number shape as the (now minimal) PartTypeCard, for a non-part-type stat
+// (Complete / Pending) sitting alongside the wide TOTAL card.
+const MiniStatCard = ({ label, value, suffix, color, C }) => (
+  <div style={{
+    ...cardStyleOf(C), borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  }}>
+    <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>{label}</Text>
+    <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{(value ?? 0).toLocaleString()}{suffix}</Text>
+  </div>
+);
+
+// Label stacked ABOVE the number (instead of MiniStatCard's side-by-side) — for a card
+// at roughly half MiniStatCard's width, where label+number side by side wraps badly.
+const SubStatCard = ({ label, value, suffix, color, C }) => (
+  <div style={{
+    ...cardStyleOf(C), borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box',
+    padding: '8px 12px',
+  }}>
+    <div style={{ color, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label}</div>
+    <div style={{ color: C.textPri, fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>{(value ?? 0).toLocaleString()}{suffix}</div>
+  </div>
+);
 
 // Friendly labels for the pending_reason filter. Unknown codes fall back to the raw
 // value so a newly introduced reason still shows up rather than disappearing.
@@ -354,6 +323,7 @@ export default function SdsCoverageDashboard() {
   const [monthRowsLoading, setMonthRowsLoading] = useState(false);
   const [monthRowsBuilding, setMonthRowsBuilding] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
+  const [showLimitSoftening, setShowLimitSoftening] = useState(false);
   const pollRef = useRef(null);
   const attentionRef = useRef(null);
 
@@ -475,6 +445,29 @@ export default function SdsCoverageDashboard() {
   }, [filterMonth, monthRows, byPartType]);
   const cardKpi = cohort ? cohort.kpi : data?.kpi;
   const cardPartTypes = cohort ? cohort.byPartType : byPartType;
+  // The Complete/Pending/%Complete mini cards re-scope to the selected part-type card
+  // (Ball, Race, ...) the same way the TOTAL card's own numbers already re-scope to a
+  // selected month (`cardKpi`/`cohort`) — a part-type pick should move these three the
+  // same way a month pick moves TOTAL. `byPartType` entries are snake_case from the
+  // backend; normalized to the camelCase `cardKpi` already uses so callers don't care
+  // which source they came from.
+  const scopedStats = filterPt
+    ? (() => {
+        const pt = cardPartTypes.find(p => p.part_type === filterPt);
+        if (!pt) return { complete: 0, pending: 0, completePct: 0, completeSaved: 0, completeSavedPct: 0 };
+        return {
+          complete: pt.complete ?? 0, pending: pt.pending ?? 0,
+          completePct: pt.complete_pct ?? 0,
+          completeSaved: pt.complete_saved ?? pt.complete ?? 0,
+          completeSavedPct: pt.complete_saved_pct ?? pt.complete_pct ?? 0,
+        };
+      })()
+    : {
+        complete: cardKpi?.complete ?? 0, pending: cardKpi?.pending ?? 0,
+        completePct: cardKpi?.completePct ?? 0,
+        completeSaved: cardKpi?.completeSaved ?? cardKpi?.complete ?? 0,
+        completeSavedPct: cardKpi?.completeSavedPct ?? cardKpi?.completePct ?? 0,
+      };
 
   // The part-type set that drives the New Parts chart series. Prefer the scope config
   // (data.partTypes, from sds_report_config) so add/remove a type there flows through;
@@ -675,22 +668,16 @@ export default function SdsCoverageDashboard() {
       totalFrom: (p.complete ?? 0) + (p.pending ?? 0),
       totalTo:   (c.complete ?? 0) + (c.pending ?? 0),
     } : null;
-    const byPartType = {};
-    for (const pt of Object.keys(cur.byPartType || {})) {
-      byPartType[pt] = diff(cur.byPartType[pt], prev.byPartType?.[pt]);
-    }
-    // A closed month's own KZW/THAI/combined % breakdown (not a delta) — so the TOTAL
-    // card ONLY can show a short history underneath the live row, e.g. current month
-    // = Sep (still open, keeps moving) with "Aug 26" then "Jul 26" underneath for
-    // stable reference points. `pctRow` builds one such row; `prev2` is one month
-    // further back than `prev`, or null if there isn't one yet (early in the FY).
-    // Not per part type: an older closed month may predate the `byPartType` field
-    // entirely (see the July recovery note above `monthDelta`), so a per-type history
-    // row would be missing as often as present — dropped in favor of TOTAL alone.
+    // A closed month's own KZW/THAI/combined % breakdown (not a delta) — lets the TOTAL
+    // card show a short history underneath the live row, e.g. current month = Sep (still
+    // open, keeps moving) with "Aug 26" then "Jul 26" underneath for stable reference
+    // points. `prev2` is one month further back than `prev`, or null if there isn't one
+    // yet (early in the FY). Part-type cards are title+total only now, so this stays
+    // TOTAL-only — no per-type consumer left (see PartTypeCard).
     const pctRow = (row) => row ? { pctSaved: row.complete_saved_pct ?? 0, pct: row.complete_pct ?? 0 } : null;
     const prev2 = idx >= 2 ? all[idx - 2] : null;
     return {
-      total: diff(cur, prev), byPartType,
+      total: diff(cur, prev),
       prevLabel: fmtMonth(prev.month), prevTotalPct: pctRow(prev),
       prev2Label: prev2 ? fmtMonth(prev2.month) : null, prev2TotalPct: pctRow(prev2),
     };
@@ -1189,8 +1176,8 @@ export default function SdsCoverageDashboard() {
             {/* ── Part Type Cards ─────────────────────────────────────────────── */}
             {byPartType.length > 0 && (
               <Row gutter={[10, 10]} style={{ marginBottom: 14 }}>
-                {/* Total CNs summary card */}
-                <Col span={4}>
+                {/* Total CNs summary card — same width as "New SDS Reqs per Month" below */}
+                <Col span={8}>
                   <div
                     role="button" tabIndex={0}
                     title="Show every pending CN (clears the part-type and month filters)"
@@ -1262,17 +1249,75 @@ export default function SdsCoverageDashboard() {
                     {!cohort && <DeltaBadge delta={monthDelta?.total} C={C} />}
                   </div>
                 </Col>
-                {cardPartTypes.map(pt => (
-                  <Col key={pt.part_type} span={4}>
-                    <PartTypeCard
-                      pt={pt} C={C}
-                      delta={cohort ? null : monthDelta?.byPartType?.[pt.part_type]}
-                      onClick={() => pickPartType(pt.part_type)}
-                      active={filterPt === pt.part_type}
-                      dimmed={!!filterPt && filterPt !== pt.part_type}
-                    />
-                  </Col>
-                ))}
+                {/* Complete/Pending on top, Ball/Race/Mecha/Sleeve underneath — same
+                    column width as TOTAL's neighbour, stacked to use the height TOTAL's
+                    richer content takes up. */}
+                <Col span={16}>
+                  <Row gutter={[10, 10]} style={{ marginBottom: 6 }}>
+                    <Col span={8}>
+                      <MiniStatCard label="Complete" value={scopedStats.complete} color={C.green} C={C} />
+                    </Col>
+                    <Col span={8}>
+                      <MiniStatCard label="Pending" value={scopedStats.pending} color={C.yellow} C={C} />
+                    </Col>
+                    <Col span={8}>
+                      <MiniStatCard label="% Complete" value={scopedStats.completePct} suffix="%"
+                        color={scopedStats.completePct >= 90 ? C.green : C.red} C={C} />
+                    </Col>
+                  </Row>
+                  {/* KZW/THAI breakdown — same two columns as Complete / % Complete above,
+                      empty under Pending (pending has no KZW/THAI split). */}
+                  <Row gutter={[10, 10]} style={{ marginBottom: 10 }}>
+                    <Col span={8}>
+                      <Row gutter={[8, 8]}>
+                        <Col span={12}>
+                          <SubStatCard label="KZW complete" value={scopedStats.completeSaved} color={C.green} C={C} />
+                        </Col>
+                        <Col span={12}>
+                          {scopedStats.complete - scopedStats.completeSaved > 0 && (
+                            <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+                              <div style={{ height: '100%' }}>
+                                <SubStatCard label="THAI complete *" value={scopedStats.complete - scopedStats.completeSaved}
+                                  color={C.greenSoft} C={C} />
+                              </div>
+                            </Tooltip>
+                          )}
+                        </Col>
+                      </Row>
+                    </Col>
+                    <Col span={8} />
+                    <Col span={8}>
+                      <Row gutter={[8, 8]}>
+                        <Col span={12}>
+                          <SubStatCard label="KZW %" value={scopedStats.completeSavedPct} suffix="%"
+                            color={scopedStats.completeSavedPct >= 90 ? C.green : C.red} C={C} />
+                        </Col>
+                        <Col span={12}>
+                          {scopedStats.completePct - scopedStats.completeSavedPct > 0 && (
+                            <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+                              <div style={{ height: '100%' }}>
+                                <SubStatCard label="THAI % *" value={(scopedStats.completePct - scopedStats.completeSavedPct).toFixed(1)} suffix="%"
+                                  color={C.greenSoft} C={C} />
+                              </div>
+                            </Tooltip>
+                          )}
+                        </Col>
+                      </Row>
+                    </Col>
+                  </Row>
+                  <Row gutter={[10, 10]}>
+                    {cardPartTypes.map(pt => (
+                      <Col key={pt.part_type} span={24 / cardPartTypes.length}>
+                        <PartTypeCard
+                          pt={pt} C={C}
+                          onClick={() => pickPartType(pt.part_type)}
+                          active={filterPt === pt.part_type}
+                          dimmed={!!filterPt && filterPt !== pt.part_type}
+                        />
+                      </Col>
+                    ))}
+                  </Row>
+                </Col>
               </Row>
             )}
 
@@ -1334,25 +1379,36 @@ export default function SdsCoverageDashboard() {
                 there. Each line is a tooling_machine_limit bound to measure against the
                 plan and fix surgically — the standard is what needs revising, not the run. */}
             {(data?.kpi?.limitSoftenedByMachine?.length > 0) && (
-              <div style={{ ...cardStyle, marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                  {sectionTitle('Limit Softening — surgical-fix worklist', C)}
-                  <Text style={{ color: C.textSec, fontSize: 11 }}>
-                    {(data?.kpi?.limitSoftened ?? 0).toLocaleString()} sheet(s) across{' '}
-                    {data.kpi.limitSoftenedByMachine.length} (machine · process)
-                  </Text>
+              showLimitSoftening ? (
+                <div style={{ ...cardStyle, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                    {sectionTitle('Limit Softening — surgical-fix worklist', C)}
+                    <Text style={{ color: C.textSec, fontSize: 11 }}>
+                      {(data?.kpi?.limitSoftened ?? 0).toLocaleString()} sheet(s) across{' '}
+                      {data.kpi.limitSoftenedByMachine.length} (machine · process)
+                    </Text>
+                    <Button size="small" style={{ marginLeft: 'auto', background: C.card, borderColor: C.border, color: C.textPri }}
+                      onClick={() => setShowLimitSoftening(false)}>Hide</Button>
+                  </div>
+                  <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                    {data.kpi.limitSoftenedByMachine.map((g, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
+                        <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textPri }}>{g.machine}</Tag>
+                        <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textSec }}>{g.process}</Tag>
+                        <Text style={{ color: C.orange, fontSize: 11 }}>{g.reason || 'over work-size limit'}</Text>
+                        <Text style={{ color: C.textSec, fontSize: 11, marginLeft: 'auto' }}>{g.cn_count} C/N</Text>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                  {data.kpi.limitSoftenedByMachine.map((g, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
-                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textPri }}>{g.machine}</Tag>
-                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textSec }}>{g.process}</Tag>
-                      <Text style={{ color: C.orange, fontSize: 11 }}>{g.reason || 'over work-size limit'}</Text>
-                      <Text style={{ color: C.textSec, fontSize: 11, marginLeft: 'auto' }}>{g.cn_count} C/N</Text>
-                    </div>
-                  ))}
+              ) : (
+                <div style={{ marginBottom: 14 }}>
+                  <Button icon={<WarningOutlined />} onClick={() => setShowLimitSoftening(true)} size="small"
+                    style={{ background: C.card, borderColor: C.border, color: C.textPri }}>
+                    Limit Softening — {(data?.kpi?.limitSoftened ?? 0).toLocaleString()} sheet(s) across {data.kpi.limitSoftenedByMachine.length} (machine · process)
+                  </Button>
                 </div>
-              </div>
+              )
             )}
 
             {/* ── Needs Attention Table ───────────────────────────────────────── */}
