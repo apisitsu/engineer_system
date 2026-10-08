@@ -99,6 +99,7 @@ export const server = {
   PBRING_GRID_ADMIN_REIMPORT: `${apiUrl}api/engineer/pbring/grid/admin/reimport`,
   PBRING_GRID_ADMIN_TEMPLATE_XLSX_UPLOAD: `${apiUrl}api/engineer/pbring/grid/admin/templates/from-xlsx-upload`,
   PBRING_GRID_ADMIN_TEMPLATE_XLSX_UPLOAD_SHEETS: `${apiUrl}api/engineer/pbring/grid/admin/templates/from-xlsx-upload/sheets`,
+  PBRING_GRID_ADMIN_PARAM_CONFIG: `${apiUrl}api/engineer/pbring/grid/admin/param-config`, // ?machine_type_name= (GET/PUT)
 
   // Permissions Config — grant/revoke feature_perms (tooling_admin/sds_admin/
   // general_dwg_admin). Access restricted to AD + an explicit empno allowlist.

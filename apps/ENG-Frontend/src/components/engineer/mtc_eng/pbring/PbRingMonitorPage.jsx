@@ -1134,6 +1134,128 @@ function GridTemplatesTab() {
   );
 }
 
+// Phase 6, problem #3 — per-machine GRIND/DRESS CONDITION row editor. Seeded
+// automatically from the xlsx import (512 rows across 16 grinding machines);
+// this page is where an admin reviews/fixes the ~2% rough edges the
+// auto-extraction left (a few multi-placeholder rows carry extra prefix text
+// in their label, one wrong unit) or adds new rows by hand.
+function ParamConfigTab() {
+  const { message } = App.useApp();
+  const [machines, setMachines] = useState([]);
+  const [selectedMachine, setSelectedMachine] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES)
+      .then((r) => setMachines(r.data || []))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load machine list')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadRows = useCallback((machineTypeName) => {
+    if (!machineTypeName) { setRows([]); return; }
+    setLoading(true);
+    axios.get(server.PBRING_GRID_ADMIN_PARAM_CONFIG, { params: { machine_type_name: machineTypeName } })
+      .then((r) => setRows((r.data || []).map((row, i) => ({ ...row, _key: row.id ?? `new-${i}` }))))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load param config')))
+      .finally(() => setLoading(false));
+  }, [message]);
+
+  const selectMachine = (val) => { setSelectedMachine(val); loadRows(val); };
+
+  const updateRow = (key, field, value) => {
+    setRows((prev) => prev.map((r) => (r._key === key ? { ...r, [field]: value } : r)));
+  };
+  const addRow = () => {
+    setRows((prev) => [...prev, { _key: `new-${Date.now()}`, sort_order: prev.length + 1, label: '', param_key: '', unit: '' }]);
+  };
+  const deleteRow = (key) => setRows((prev) => prev.filter((r) => r._key !== key));
+  const moveRow = (key, dir) => {
+    setRows((prev) => {
+      const idx = prev.findIndex((r) => r._key === key);
+      const swapWith = idx + dir;
+      if (idx < 0 || swapWith < 0 || swapWith >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
+      return next;
+    });
+  };
+
+  const save = async () => {
+    if (!selectedMachine) return;
+    setSaving(true);
+    try {
+      const payload = rows.map((r) => ({ label: r.label, param_key: r.param_key, unit: r.unit }));
+      const r = await axios.put(server.PBRING_GRID_ADMIN_PARAM_CONFIG, { rows: payload }, { params: { machine_type_name: selectedMachine } });
+      message.success(`Saved ${r.data?.count ?? payload.length} row(s)`);
+      loadRows(selectedMachine);
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Save failed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const columns = [
+    { title: '#', key: 'order', width: 40, render: (_, __, i) => i + 1 },
+    {
+      title: 'Label', dataIndex: 'label', key: 'label',
+      render: (v, row) => <Input size="small" value={v} onChange={(e) => updateRow(row._key, 'label', e.target.value)} placeholder="e.g. #01 / JUMP FEED" />,
+    },
+    {
+      title: 'Param Key', dataIndex: 'param_key', key: 'param_key',
+      render: (v, row) => <Input size="small" value={v} onChange={(e) => updateRow(row._key, 'param_key', e.target.value)} placeholder="e.g. sh1" style={{ fontFamily: 'monospace' }} />,
+    },
+    {
+      title: 'Unit', dataIndex: 'unit', key: 'unit', width: 100,
+      render: (v, row) => <Input size="small" value={v} onChange={(e) => updateRow(row._key, 'unit', e.target.value)} placeholder="mm" />,
+    },
+    {
+      title: '', key: 'actions', width: 110,
+      render: (_, row, i) => (
+        <Space size={4}>
+          <Button size="small" icon={<DoubleLeftOutlined rotate={90} />} disabled={i === 0} onClick={() => moveRow(row._key, -1)} title="Move up" />
+          <Button size="small" icon={<DoubleRightOutlined rotate={90} />} disabled={i === rows.length - 1} onClick={() => moveRow(row._key, 1)} title="Move down" />
+          <Popconfirm title="Remove this row?" onConfirm={() => deleteRow(row._key)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <Space style={{ marginBottom: 12 }}>
+        <Text type="secondary">Machine</Text>
+        <Select
+          style={{ width: 240 }}
+          placeholder="Select a grinding machine"
+          value={selectedMachine}
+          onChange={selectMachine}
+          options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))}
+          showSearch
+        />
+        <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine}>Add Row</Button>
+        <Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving} disabled={!selectedMachine}>Save</Button>
+      </Space>
+      {selectedMachine && (
+        <Table
+          size="small"
+          rowKey="_key"
+          dataSource={rows}
+          columns={columns}
+          loading={loading}
+          pagination={false}
+          scroll={{ y: 600 }}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function PbRingMonitorPage() {
   const C = useColors();
   const userRole = useAuthStore((s) => s.userRole);
@@ -1149,6 +1271,7 @@ export default function PbRingMonitorPage() {
   ];
   if (isPbringAdmin) {
     tabItems.push({ key: 'grid-templates', label: 'Grid Templates (PDF)', children: <GridTemplatesTab /> });
+    tabItems.push({ key: 'param-config', label: 'Parameter Config', children: <ParamConfigTab /> });
   }
 
   const bodyContent = (

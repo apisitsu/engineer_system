@@ -459,9 +459,243 @@ async function renderBlankTemplateHtml(id) {
   return buildGridPdfHtml(tpl.grid);
 }
 
+/**
+ * Phase 6: reuse the live SDS "Standard" grid layout instead of the Phase 5
+ * imported-xlsx templates (user feedback: the 18 imported layouts render
+ * "เพี้ยน" — inconsistent formatting, one per author/date — and the real
+ * system doesn't use literal {{param}} cells at all). See the "Phase 6"
+ * section of the plan file for the full reasoning and the CN-collision risk
+ * this design avoids.
+ *
+ * `loadStandardGridLive` is READ-ONLY against `sds_grid_template` — a plain
+ * `SELECT ... WHERE id = 1`, no JOIN to `sds_machine_type_code`, no CN
+ * involved anywhere in the query. This can never touch real production
+ * part/tooling data; it only ever reads the shared layout definition.
+ */
+const SDS_STANDARD_TEMPLATE_ID = 1; // sds_grid_template.id, is_default=true, confirmed live 2026-10-07
+
+async function loadStandardGridLive() {
+  const { rows } = await engPool.query(`SELECT grid_json FROM sds_grid_template WHERE id = $1`, [SDS_STANDARD_TEMPLATE_ID]);
+  if (!rows.length) return null;
+  return JSON.parse(rows[0].grid_json);
+}
+
+/**
+ * The real T01-T20 "Tooling No:"/"Maker:" value-cell addresses, read live
+ * from `sds_excel_mapping` (machine_type_name IS NULL — shared across every
+ * grinding machine, confirmed live: all 40 rows present, M/S/Y/AE/AK columns
+ * stepping every 5 slots, rows 24/25 -> 34/35 -> 44/45 -> 54/55). Read-only,
+ * no CN involved — same safety argument as `loadStandardGridLive`.
+ */
+async function loadToolSlotAddressesLive() {
+  const { rows } = await engPool.query(
+    `SELECT cell_address, param_key FROM sds_excel_mapping
+      WHERE machine_type_name IS NULL AND (param_key LIKE 'tool_dwg_no_T%' OR param_key LIKE 'maker_T%')`
+  );
+  const addr = {};
+  for (const r of rows) {
+    const m = /^(tool_dwg_no|maker)_T(\d+)$/.exec(r.param_key);
+    if (!m) continue;
+    const slot = `T${m[2].padStart(2, '0')}`;
+    addr[slot] = addr[slot] || {};
+    addr[slot][m[1] === 'tool_dwg_no' ? 'dwgNo' : 'maker'] = r.cell_address;
+  }
+  return addr; // { T01: { dwgNo: 'M24', maker: 'M25' }, ... T20 }
+}
+
+/**
+ * Header field addresses (Machine/Part No/C-N/Process/Rev/CT), read live from
+ * the same shared `sds_excel_mapping` rows — confirmed live: B3/M3/M4/Z3/AC3/
+ * T3/B4. Read-only, no CN involved — same safety argument as the other two
+ * live-read helpers above.
+ */
+// paramMap's own keys are capitalized (CN/PN/Machine/Process_Code/Process/CT/REV)
+// — buildPbRingValueMap merges them in matching the original xlsx's {{}}
+// placeholder spelling, not sds_excel_mapping's lowercase param_key naming.
+const HEADER_FIELD_TO_PARAM_KEY = {
+  machine_type_name: 'Machine', parts_no: 'PN', cn: 'CN',
+  process_code: 'Process_Code', process_name: 'Process', dwg_rev: 'REV', ct: 'CT',
+};
+async function loadHeaderAddressesLive() {
+  const { rows } = await engPool.query(
+    `SELECT cell_address, param_key FROM sds_excel_mapping
+      WHERE machine_type_name IS NULL AND param_key = ANY($1)`,
+    [Object.keys(HEADER_FIELD_TO_PARAM_KEY)]
+  );
+  const addr = {};
+  for (const r of rows) addr[r.param_key] = r.cell_address;
+  return addr; // { machine_type_name: 'B3', parts_no: 'M3', ... }
+}
+
+function applyHeaderToGrid(grid, headerAddresses, paramMap) {
+  for (const [sdsField, pbKey] of Object.entries(HEADER_FIELD_TO_PARAM_KEY)) {
+    const cellAddr = headerAddresses[sdsField];
+    const value = paramMap[pbKey];
+    if (!cellAddr || value == null || value === '') continue;
+    grid.cells[addrToRC(cellAddr)] = {
+      v: String(value),
+      f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' },
+      a: { h: null, v: 'middle', wrap: false },
+    };
+  }
+}
+
+// Named (non-numbered) PB Ring tool_number values, in the fixed order they
+// fill the slots AFTER every numbered T{n} tool for that CN — see
+// applyToolSlotsToGrid. Not machine-configurable (yet): a reasonable default,
+// not a verified design decision — flagged in the Phase 6 plan.
+const NAMED_TOOL_ORDER = ['F_DW', 'Upper_GW', 'Lower_GW', 'R_DW'];
+
+function orderToolNumbers(keys) {
+  const numbered = keys.filter((k) => /^T\d+$/.test(k)).sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10));
+  const named = NAMED_TOOL_ORDER.filter((k) => keys.includes(k));
+  const rest = keys.filter((k) => !numbered.includes(k) && !named.includes(k));
+  return [...numbered, ...named, ...rest];
+}
+
+/** Writes each (tool_number -> condition row) into its assigned T01-T20 slot's real cell addresses. */
+function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses) {
+  const ordered = orderToolNumbers(Object.keys(conditionByToolNumber));
+  ordered.forEach((toolNumber, i) => {
+    const slot = `T${String(i + 1).padStart(2, '0')}`;
+    const addr = toolAddresses[slot];
+    if (!addr) return; // ran out of T01-T20 slots — more than 20 tools is not representable here
+    const row = conditionByToolNumber[toolNumber];
+    const colorCell = (cellAddr, text) => {
+      if (!text) return;
+      const key = addrToRC(cellAddr);
+      grid.cells[key] = { v: String(text), f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' }, a: { h: null, v: 'middle', wrap: false } };
+    };
+    colorCell(addr.dwgNo, row.tooling_no);
+    colorCell(addr.maker, row.maker);
+  });
+}
+
+function colLetterToNum(letters) {
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n;
+}
+function addrToRC(addr) {
+  const m = /^([A-Z]+)(\d+)$/.exec(addr);
+  return `${parseInt(m[2], 10) - 1},${colLetterToNum(m[1]) - 1}`;
+}
+
+/** GET admin: per-machine GRIND/DRESS CONDITION row config, in display order. */
+async function getParamConfig(machineTypeName) {
+  const { rows } = await engPool.query(
+    `SELECT id, sort_order, label, param_key, unit FROM pbring_sds_param_config
+      WHERE machine_type_name = $1 ORDER BY sort_order`,
+    [machineTypeName]
+  );
+  return rows;
+}
+
+/**
+ * PUT admin: replace a machine's whole param-config list in one go (delete +
+ * bulk insert in a transaction) — the editor sends its full edited list
+ * rather than per-row diffs, same pattern as `sds_machine_tool`'s bulk
+ * combo-replace. `sort_order` is reassigned from the array's own order, so
+ * the editor's row order is always what gets saved.
+ */
+async function saveParamConfig(machineTypeName, rows, empno) {
+  const clean = (Array.isArray(rows) ? rows : [])
+    .map((r) => ({ label: (r.label || '').trim(), param_key: (r.param_key || '').trim(), unit: (r.unit || '').trim() }))
+    .filter((r) => r.param_key);
+
+  const client = await engPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM pbring_sds_param_config WHERE machine_type_name = $1', [machineTypeName]);
+    if (clean.length) {
+      const cols = ['machine_type_name', 'sort_order', 'label', 'param_key', 'unit', 'created_by'];
+      const c = cols.length;
+      const placeholders = clean.map((_, ri) => `(${Array.from({ length: c }, (__, ci) => `$${ri * c + ci + 1}`).join(',')})`).join(',');
+      const values = clean.flatMap((r, i) => [machineTypeName, i + 1, r.label || null, r.param_key, r.unit || null, empno || null]);
+      await client.query(`INSERT INTO pbring_sds_param_config (${cols.join(',')}) VALUES ${placeholders}`, values);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  return clean.length;
+}
+
+/**
+ * Writes the GRIND/DRESS CONDITION list into the (currently blank, in the
+ * live Standard template) left-hand area of the grid — one config row per
+ * grid row, starting at row 16 (0-based row 15, matching where the user
+ * confirmed the real condition area begins), columns A/E/F (label/value/unit).
+ * Single-column layout (not the real sheet's compact 2-column pairing) — simpler
+ * and has no risk of overlapping the T01-T20 tool area, which starts at
+ * column K (index 10); this mechanism only ever writes columns 0-5.
+ */
+const CONDITION_START_ROW = 15; // 0-based (row 16, 1-based, confirmed live)
+const CONDITION_LABEL_COL = 0, CONDITION_VALUE_COL = 4, CONDITION_UNIT_COL = 5;
+
+function applyConditionConfigToGrid(grid, configRows, paramMap) {
+  configRows.forEach((cfg, i) => {
+    const r = CONDITION_START_ROW + i;
+    const value = paramMap[cfg.param_key];
+    if (cfg.label) {
+      grid.cells[`${r},${CONDITION_LABEL_COL}`] = {
+        v: cfg.label,
+        f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#000000' },
+        a: { h: null, v: 'middle', wrap: false },
+      };
+    }
+    if (value != null && value !== '') {
+      grid.cells[`${r},${CONDITION_VALUE_COL}`] = {
+        v: String(value),
+        f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#c00000' },
+        a: { h: 'right', v: 'middle', wrap: false },
+      };
+    }
+    if (cfg.unit) {
+      grid.cells[`${r},${CONDITION_UNIT_COL}`] = {
+        v: cfg.unit,
+        f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#000000' },
+        a: { h: null, v: 'middle', wrap: false },
+      };
+    }
+  });
+  return grid;
+}
+
+/**
+ * Full Phase-6 render: live Standard layout + T01-T20 tool values (existing
+ * mechanism, reused) + the new GRIND/DRESS CONDITION list. Does not touch
+ * `pbring_grid_template`/`pbring_excel_mapping`/`classifyParam` at all — this
+ * is a parallel path to the Phase 5 `loadGridForMachine`/`applyValuesToGrid`,
+ * not a replacement yet (the live `/grid/pdf` route still uses Phase 5 until
+ * this is reviewed and cut over machine by machine).
+ */
+async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
+  const grid = await loadStandardGridLive();
+  if (!grid) return null;
+
+  const { paramMap, conditionByToolNumber } = await buildPbRingValueMap(cn, machineTypeName, processCode);
+
+  const headerAddresses = await loadHeaderAddressesLive();
+  applyHeaderToGrid(grid, headerAddresses, paramMap);
+
+  const toolAddresses = await loadToolSlotAddressesLive();
+  applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses);
+
+  const configRows = await getParamConfig(machineTypeName);
+  applyConditionConfigToGrid(grid, configRows, paramMap);
+
+  return grid;
+}
+
 module.exports = {
   loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
   getTemplateById, createTemplate, updateTemplate, deleteTemplate,
   parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
+  loadStandardGridLive, getParamConfig, saveParamConfig, applyConditionConfigToGrid, buildStandardGridForMachine,
+  loadToolSlotAddressesLive, applyToolSlotsToGrid, loadHeaderAddressesLive, applyHeaderToGrid,
 };

@@ -11,6 +11,7 @@ const {
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
   getTemplateById, createTemplate, updateTemplate, deleteTemplate,
   parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
+  getParamConfig, saveParamConfig,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 
@@ -195,9 +196,33 @@ async function getTemplateBlankPdf(req, res) {
   }
 }
 
+async function getParamConfigRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName } = req.query;
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    res.json(await getParamConfig(machineTypeName));
+  } catch (err) {
+    console.error('[pbring:grid:admin:param-config:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load param config' });
+  }
+}
+
+async function putParamConfigRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName } = req.query;
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    const count = await saveParamConfig(machineTypeName, req.body?.rows, req.user?.empno);
+    res.json({ success: true, count });
+  } catch (err) {
+    console.error('[pbring:grid:admin:param-config:put]', err);
+    res.status(500).json({ error: err.message || 'Failed to save param config' });
+  }
+}
+
 module.exports = {
   getPdf, getHasData,
   getTemplates, getMachineTypes, putMachineTemplate, putTemplateDefault, postReimport,
   getTemplate, postTemplate, putTemplate, deleteTemplate: deleteTemplateRoute,
   postXlsxUploadSheets, postXlsxUpload, getTemplateBlankPdf,
+  getParamConfig: getParamConfigRoute, putParamConfig: putParamConfigRoute,
 };

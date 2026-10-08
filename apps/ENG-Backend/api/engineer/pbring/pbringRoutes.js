@@ -99,4 +99,11 @@ router.post('/grid/admin/templates/from-xlsx-upload/sheets', isPbringAdmin, pbri
 router.post('/grid/admin/templates/from-xlsx-upload', isPbringAdmin, pbringGridController.postXlsxUpload);
 router.get('/grid/admin/templates/:id/pdf-blank', isPbringAdmin, pbringGridController.getTemplateBlankPdf);
 
+// Parameter Config (Phase 6, problem #3) — per-machine GRIND/DRESS CONDITION
+// row definitions (label/param_key/unit), seeded from the xlsx import,
+// editable here. Independent of sds_parameter — see pbringGridService.js's
+// Phase 6 header note for why (PB Ring's CN is a real factory CN).
+router.get('/grid/admin/param-config', isPbringAdmin, pbringGridController.getParamConfig);
+router.put('/grid/admin/param-config', isPbringAdmin, pbringGridController.putParamConfig);
+
 module.exports = router;
