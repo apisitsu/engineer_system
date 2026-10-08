@@ -42,6 +42,13 @@ async function getPdf(req, res) {
     const html = buildGridPdfHtml(grid);
     const pdf = await renderPdf(html);
 
+    // No-store: this URL (cn/machine/process + the caller's fixed-per-session
+    // token) is byte-identical on repeat requests, so without this the
+    // browser silently serves a stale cached PDF on re-click after any data
+    // or layout change — confirmed live: the server returned fresh,
+    // fully-populated data on a direct call while a browser tab open to the
+    // exact same URL kept showing an old blank render from before this fix.
+    res.set('Cache-Control', 'no-store');
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', `inline; filename="pbring-sds-${cn}-${machineTypeName}-${processCode}.pdf"`);
     res.send(pdf);
@@ -197,6 +204,7 @@ async function getTemplateBlankPdf(req, res) {
     const html = await renderBlankTemplateHtml(req.params.id);
     if (!html) return res.status(404).json({ error: 'Template not found' });
     const pdf = await renderPdf(html);
+    res.set('Cache-Control', 'no-store'); // same stale-cache risk as getPdf — see its comment
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', 'inline; filename="pbring-template-blank.pdf"');
     res.send(pdf);
