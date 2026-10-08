@@ -3,15 +3,59 @@ export const NETWORK_TIMEOUT_MESSAGE = "A network timeout has occurred, Please t
 export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was unable to upload.";
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
-// // // ----------- PROD -----------
-export const apiUrl = "http://plbmp130.lb.minebea.local:2005/";
-// export const apiUrl = "http://plbmp130:2005/";
+// ============================================================================
+// API URL Configuration
+// - Default: Automatically detects Host (Production, Dev 129/118, Localhost)
+// - Manual Override: Set MANUAL_OVERRIDE_URL if you need to force a specific host
+// ============================================================================
+const MANUAL_OVERRIDE_URL = ""; // e.g. "http://plbmp130.lb.minebea.local:2005/"
 
+const getDynamicApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL.endsWith('/')
+      ? process.env.REACT_APP_API_URL
+      : `${process.env.REACT_APP_API_URL}/`;
+  }
 
-// // // ----------- DEV -----------
-// export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
-// export const apiUrl = "http://plbmp118:2005/";
+  if (typeof window !== 'undefined' && window.location) {
+    const host = (window.location.hostname || '').toLowerCase();
+
+    // 1. Localhost / Local Development
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return "http://localhost:2005/";
+    }
+
+    // 2. Production Server (plbmp130)
+    if (host.includes('plbmp130')) {
+      return "http://plbmp130.lb.minebea.local:2005/";
+    }
+
+    // 3. Dev Server 129 (plbmp129)
+    if (host.includes('plbmp129')) {
+      return "http://plbmp129.lb.minebea.local:2005/";
+    }
+
+    // 4. Dev Server 118 (plbmp118)
+    if (host.includes('plbmp118')) {
+      return "http://plbmp118.lb.minebea.local:2005/";
+    }
+
+    // 5. Intranet Hostname without domain (append .lb.minebea.local for network-wide accessibility)
+    if (host && !host.includes('.')) {
+      return `http://${host}.lb.minebea.local:2005/`;
+    }
+
+    // 6. Direct IP or other FQDN Host (e.g. 10.121.50.38)
+    if (host) {
+      return `${window.location.protocol}//${host}:2005/`;
+    }
+  }
+
+  // Fallback to Production (for build / non-browser execution)
+  return "http://plbmp130.lb.minebea.local:2005/";
+};
+
+export const apiUrl = MANUAL_OVERRIDE_URL || getDynamicApiUrl();
 
 export const server = {
   API_URL: `${apiUrl}`,

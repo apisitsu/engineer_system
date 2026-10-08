@@ -245,8 +245,9 @@ if (Test-Path $ConstanceFile) {
     $rawContent = [System.IO.File]::ReadAllText((Resolve-Path $ConstanceFile), [System.Text.Encoding]::UTF8)
     if ($rawContent.Length -gt 0 -and [int]$rawContent[0] -eq 65279) { $rawContent = $rawContent.Substring(1) }
 
-    $activeMatch = [regex]::Match($rawContent, '(?m)^\s*export\s+const\s+apiUrl\s*=\s*["'']([^"'']+)["''];')
-    if ($activeMatch.Success) {
+    if ($rawContent -match 'getDynamicApiUrl' -and $rawContent -match 'export\s+const\s+apiUrl\s*=') {
+        Write-Success "Frontend apiUrl is configured: Smart Dynamic Resolution (Auto Prod/Dev/Local)"
+    } elseif ($activeMatch.Success) {
         $currentUrl = $activeMatch.Groups[1].Value
         Write-Success "Frontend apiUrl is active: $currentUrl"
     } else {

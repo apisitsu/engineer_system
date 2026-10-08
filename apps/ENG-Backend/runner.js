@@ -31,7 +31,12 @@ function checkAndFixApiUrl() {
             return true;
         }
 
-        // ตรวจสอบว่า plbmp130 เป็นตัวที่ active อยู่หรือไม่
+        // ถ้าใช้ getDynamicApiUrl จะรองรับทั้ง Prod/Dev อัตโนมัติอยู่แล้ว
+        if (content.includes('getDynamicApiUrl')) {
+            return true;
+        }
+
+        // ตรวจสอบว่า plbmp130 เป็นตัวที่ active อยู่หรือไม่ (สำหรับ static config)
         const hasActiveProd = uncommented.some(line => line.includes('plbmp130'));
         if (uncommented.length === 1 && !hasActiveProd) {
             console.log('🔧 [Runner] apiUrl ไม่ได้ชี้ไปที่ plbmp130 — กำลังแก้ไข...');

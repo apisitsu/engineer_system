@@ -4,8 +4,28 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-10-07
-- **Active Goal:** ECNT V2: Complete 11-Feature System Upgrade from Factory Document Feedback (Stage Stepper Refinement, Block 5 & 9 Google Sheets Integration, Dedicated Rework Modals, View Full Details Dialogs, Attachment Sync & Clean Architecture); Production Build Verified.
+- **Last Update:** 2026-10-08
+- **Active Goal:** Frontend API Config: Smart Dynamic Resolution Engine (Auto Prod/Dev/Localhost Detection, Zero-Conflict Constance Architecture & Script Resilience).
+
+- **Frontend API Configuration & Automation Architecture (2026-10-08):**
+  - **1. Root Cause Resolution for `'return' outside of function` SyntaxError:**
+    - Resolved module parse error caused by partial manual commenting of `getDynamicApiUrl()` where function declaration was removed while internal return statements remained at top-level module scope.
+  - **2. Smart Dynamic API URL Engine (`getDynamicApiUrl` in `constance.js`):**
+    - Built universal runtime host detection using `window.location.hostname`:
+      - Localhost / `127.0.0.1` -> `http://localhost:2005/`
+      - Production (`plbmp130`) -> `http://plbmp130.lb.minebea.local:2005/`
+      - Dev 129 (`plbmp129`) -> `http://plbmp129.lb.minebea.local:2005/`
+      - Dev 118 (`plbmp118`) -> `http://plbmp118.lb.minebea.local:2005/`
+      - Intranet Host without domain -> `http://${host}.lb.minebea.local:2005/`
+      - Direct IP / FQDN Host -> `${protocol}//${hostname}:2005/`
+      - Non-browser/Build fallback -> `http://plbmp130.lb.minebea.local:2005/`
+    - Added optional `MANUAL_OVERRIDE_URL` for developers needing to force an API target without duplicate declarations or syntax corruption.
+  - **3. Automation Scripts Resilience (`fix_constance_prod.ps1`, `auto_update_and_run.ps1`, `setup_machine.ps1`, `runner.js`):**
+    - Updated `scripts/fix_constance_prod.ps1` and `auto_update_and_run.ps1` to detect `getDynamicApiUrl()` and preserve it without overwriting, eliminating duplicate `apiUrl` declarations across git pulls.
+    - Updated `scripts/setup_machine.ps1` (Step 6) to recognize dynamic resolution as an active valid configuration.
+    - Updated `apps/ENG-Backend/runner.js` to prevent false positive warning triggers when running in dynamic mode.
+  - **4. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 errors).
 
 - **ECNT V2: Factory Engineering Process & Workflow Enhancement (11 Items Complete) (2026-10-07):**
   - **1. Block 3 Label Realignment:**
