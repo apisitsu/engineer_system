@@ -221,10 +221,20 @@ const SdsV2Page = () => {
     // on normal calls, so the token travels as a query param — same fallback
     // middleware/auth.js already supports for file-download links, same
     // pattern handleGeneratePdf above uses for the live SDS PDF.
+    //
+    // `_t: Date.now()` is required, not cosmetic: the server already sends
+    // Cache-Control: no-store, but window.open to a URL that's byte-identical
+    // to one already open in another tab can just FOCUS that existing tab
+    // instead of issuing a fresh request — confirmed live (2026-10-09): a
+    // re-uploaded tooling/grinding-area photo and a freshly-typed CN-override
+    // value both kept showing the stale pre-upload render until this was
+    // added, even though a direct server call always returned the current
+    // data. handleGeneratePdf above already carries this; this one didn't.
     const params = new URLSearchParams({
       cn: data.cn,
       machine_type_name: combo.machine_type_name,
       process_code: combo.process_code,
+      _t: Date.now(),
       token: localStorage.getItem('token') || '',
     }).toString();
     window.open(`${server.PBRING_GRID_PDF}?${params}`, '_blank');

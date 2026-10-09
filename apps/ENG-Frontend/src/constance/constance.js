@@ -99,7 +99,15 @@ export const server = {
   PBRING_GRID_ADMIN_REIMPORT: `${apiUrl}api/engineer/pbring/grid/admin/reimport`,
   PBRING_GRID_ADMIN_TEMPLATE_XLSX_UPLOAD: `${apiUrl}api/engineer/pbring/grid/admin/templates/from-xlsx-upload`,
   PBRING_GRID_ADMIN_TEMPLATE_XLSX_UPLOAD_SHEETS: `${apiUrl}api/engineer/pbring/grid/admin/templates/from-xlsx-upload/sheets`,
-  PBRING_GRID_ADMIN_PARAM_CONFIG: `${apiUrl}api/engineer/pbring/grid/admin/param-config`, // ?machine_type_name= (GET/PUT)
+  PBRING_GRID_ADMIN_PARAMETERS: `${apiUrl}api/engineer/pbring/grid/admin/parameters`, // ?machine_type_name=&cn=&process_code= (GET)
+  PBRING_GRID_ADMIN_PARAMETERS_BULK: `${apiUrl}api/engineer/pbring/grid/admin/parameters/bulk`, // PUT { machine_type_name, cn, process_code, params:[{param_key,param_value}] }
+  PBRING_GRID_TOOLING_IMAGE: `${apiUrl}api/engineer/pbring/grid/tooling-image`, // ?machine_type_name=&family= (GET binary)
+  PBRING_GRID_ADMIN_TOOLING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/tooling-images`, // ?machine_type_name= (GET list)
+  PBRING_GRID_ADMIN_TOOLING_FAMILIES: `${apiUrl}api/engineer/pbring/grid/admin/tooling-families`, // ?machine_type_name= (GET dropdown source, from history)
+  PBRING_GRID_ADMIN_TOOLING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/tooling-image`, // POST (multipart: family) / DELETE ?machine_type_name=&family=
+  PBRING_GRID_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/grinding-image`, // ?machine_type_name=&cn=&process_code= (GET binary)
+  PBRING_GRID_ADMIN_GRINDING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/grinding-images`, // ?machine_type_name= (GET list)
+  PBRING_GRID_ADMIN_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/grinding-image`, // POST (multipart) / DELETE ?machine_type_name=&cn=&process_code=
 
   // Permissions Config — grant/revoke feature_perms (tooling_admin/sds_admin/
   // general_dwg_admin). Access restricted to AD + an explicit empno allowlist.

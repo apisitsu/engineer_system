@@ -11,8 +11,11 @@ const {
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
   getTemplateById, createTemplate, updateTemplate, deleteTemplate,
   parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
-  getParamConfig, saveParamConfig, buildStandardGridForMachine,
+  getManualParams, saveManualParams, buildStandardGridForMachine,
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
+  getToolingFamilyOptions,
+  getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
+  getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 
@@ -214,26 +217,177 @@ async function getTemplateBlankPdf(req, res) {
   }
 }
 
-async function getParamConfigRoute(req, res) {
+/**
+ * GET /grid/admin/parameters?machine_type_name=&cn=&process_code=
+ * cn omitted/null -> machine-default rows; cn set -> that CN's override rows
+ * (optionally scoped to one process_code), mirroring the real
+ * `/api/sds/v2/admin/parameters` GET semantics.
+ */
+async function getManualParamsRoute(req, res) {
   try {
-    const { machine_type_name: machineTypeName } = req.query;
+    const { machine_type_name: machineTypeName, cn, process_code: processCode } = req.query;
     if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
-    res.json(await getParamConfig(machineTypeName));
+    const cnVal = cn && cn !== 'null' ? cn : null;
+    res.json(await getManualParams(machineTypeName, cnVal, processCode && processCode !== 'null' ? processCode : null));
   } catch (err) {
-    console.error('[pbring:grid:admin:param-config:get]', err);
-    res.status(500).json({ error: err.message || 'Failed to load param config' });
+    console.error('[pbring:grid:admin:parameters:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load parameters' });
   }
 }
 
-async function putParamConfigRoute(req, res) {
+/**
+ * PUT /grid/admin/parameters/bulk - body { machine_type_name, cn, process_code, params: [{ param_key, param_value }] }
+ * cn omitted/null -> machine-default save; cn set -> CN override (optionally process-scoped).
+ */
+async function putManualParamsRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName, cn, process_code: processCode, params } = req.body || {};
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    const saved = await saveManualParams(machineTypeName, cn || null, processCode || null, params, req.user?.empno);
+    res.json({ success: true, saved, count: saved.length });
+  } catch (err) {
+    console.error('[pbring:grid:admin:parameters:put]', err);
+    res.status(500).json({ error: err.message || 'Failed to save parameters' });
+  }
+}
+
+function getUploadedImage(req) {
+  if (!req.files || !req.files.image) return null;
+  const file = Array.isArray(req.files.image) ? req.files.image[0] : req.files.image;
+  return file;
+}
+
+/** GET /grid/tooling-image?machine_type_name=&family= — serve image binary (a raw tooling_no also works, normalized server-side) */
+async function getToolingImageRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName, family } = req.query;
+    if (!machineTypeName || !family) return res.status(400).json({ error: 'machine_type_name and family are required' });
+    const img = await getToolingImageBinary(machineTypeName, family);
+    if (!img) return res.status(404).json({ error: 'Image not found' });
+    res.setHeader('Content-Type', img.mime_type || 'image/jpeg');
+    if (img.file_name) res.setHeader('Content-Disposition', `inline; filename="${img.file_name}"`);
+    res.send(img.image_data);
+  } catch (err) {
+    console.error('[pbring:grid:tooling-image:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load image' });
+  }
+}
+
+/** GET /grid/admin/tooling-images?machine_type_name= — list (metadata only) */
+async function getToolingImagesRoute(req, res) {
   try {
     const { machine_type_name: machineTypeName } = req.query;
     if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
-    const count = await saveParamConfig(machineTypeName, req.body?.rows, req.user?.empno);
-    res.json({ success: true, count });
+    res.json(await listToolingImages(machineTypeName));
   } catch (err) {
-    console.error('[pbring:grid:admin:param-config:put]', err);
-    res.status(500).json({ error: err.message || 'Failed to save param config' });
+    console.error('[pbring:grid:admin:tooling-images:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to list images' });
+  }
+}
+
+/** GET /grid/admin/tooling-families?machine_type_name= — DWG-family dropdown source, from pbring_sds_condition history */
+async function getToolingFamiliesRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName } = req.query;
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    res.json(await getToolingFamilyOptions(machineTypeName));
+  } catch (err) {
+    console.error('[pbring:grid:admin:tooling-families:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load tooling families' });
+  }
+}
+
+/** POST /grid/admin/tooling-image — multipart: machine_type_name, family, description, file (field: image) */
+async function postToolingImageRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName, family, description } = req.body;
+    if (!machineTypeName?.trim() || !family?.trim()) {
+      return res.status(400).json({ error: 'machine_type_name and family are required' });
+    }
+    const file = getUploadedImage(req);
+    if (!file) return res.status(400).json({ error: 'image file is required (field: image)' });
+    const row = await upsertToolingImage(machineTypeName.trim(), family.trim(), file, description, req.user?.empno);
+    res.json(row);
+  } catch (err) {
+    console.error('[pbring:grid:admin:tooling-image:post]', err);
+    res.status(500).json({ error: err.message || 'Failed to upload image' });
+  }
+}
+
+/** DELETE /grid/admin/tooling-image?machine_type_name=&family= */
+async function deleteToolingImageRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName, family } = req.query;
+    if (!machineTypeName || !family) return res.status(400).json({ error: 'machine_type_name and family are required' });
+    const ok = await deleteToolingImage(machineTypeName, family);
+    if (!ok) return res.status(404).json({ error: 'Image not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[pbring:grid:admin:tooling-image:delete]', err);
+    res.status(500).json({ error: err.message || 'Failed to delete image' });
+  }
+}
+
+/** GET /grid/grinding-image?machine_type_name=&cn=&process_code= — serve image binary */
+async function getGrindingImageRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName, cn, process_code: processCode } = req.query;
+    if (!machineTypeName || !cn || !processCode) {
+      return res.status(400).json({ error: 'machine_type_name, cn and process_code are required' });
+    }
+    const img = await getGrindingImageBinary(machineTypeName, cn, processCode);
+    if (!img) return res.status(404).json({ error: 'Image not found' });
+    res.setHeader('Content-Type', img.mime_type || 'image/jpeg');
+    if (img.file_name) res.setHeader('Content-Disposition', `inline; filename="${img.file_name}"`);
+    res.send(img.image_data);
+  } catch (err) {
+    console.error('[pbring:grid:grinding-image:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load image' });
+  }
+}
+
+/** GET /grid/admin/grinding-images?machine_type_name= — list (metadata only) */
+async function getGrindingImagesRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName } = req.query;
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    res.json(await listGrindingImages(machineTypeName));
+  } catch (err) {
+    console.error('[pbring:grid:admin:grinding-images:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to list images' });
+  }
+}
+
+/** POST /grid/admin/grinding-image — multipart: machine_type_name, cn, process_code, description, file (field: image) */
+async function postGrindingImageRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName, cn, process_code: processCode, description } = req.body;
+    if (!machineTypeName?.trim() || !cn?.trim() || !processCode?.trim()) {
+      return res.status(400).json({ error: 'machine_type_name, cn and process_code are required' });
+    }
+    const file = getUploadedImage(req);
+    if (!file) return res.status(400).json({ error: 'image file is required (field: image)' });
+    const row = await upsertGrindingImage(machineTypeName.trim(), cn.trim(), processCode.trim(), file, description, req.user?.empno);
+    res.json(row);
+  } catch (err) {
+    console.error('[pbring:grid:admin:grinding-image:post]', err);
+    res.status(500).json({ error: err.message || 'Failed to upload image' });
+  }
+}
+
+/** DELETE /grid/admin/grinding-image?machine_type_name=&cn=&process_code= */
+async function deleteGrindingImageRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName, cn, process_code: processCode } = req.query;
+    if (!machineTypeName || !cn || !processCode) {
+      return res.status(400).json({ error: 'machine_type_name, cn and process_code are required' });
+    }
+    const ok = await deleteGrindingImage(machineTypeName, cn, processCode);
+    if (!ok) return res.status(404).json({ error: 'Image not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[pbring:grid:admin:grinding-image:delete]', err);
+    res.status(500).json({ error: err.message || 'Failed to delete image' });
   }
 }
 
@@ -242,5 +396,10 @@ module.exports = {
   getTemplates, getMachineTypes, putMachineTemplate, putTemplateDefault, postReimport,
   getTemplate, postTemplate, putTemplate, deleteTemplate: deleteTemplateRoute,
   postXlsxUploadSheets, postXlsxUpload, getTemplateBlankPdf,
-  getParamConfig: getParamConfigRoute, putParamConfig: putParamConfigRoute,
+  getManualParams: getManualParamsRoute, putManualParams: putManualParamsRoute,
+  getToolingImage: getToolingImageRoute, getToolingImages: getToolingImagesRoute,
+  getToolingFamilies: getToolingFamiliesRoute,
+  postToolingImage: postToolingImageRoute, deleteToolingImage: deleteToolingImageRoute,
+  getGrindingImage: getGrindingImageRoute, getGrindingImages: getGrindingImagesRoute,
+  postGrindingImage: postGrindingImageRoute, deleteGrindingImage: deleteGrindingImageRoute,
 };

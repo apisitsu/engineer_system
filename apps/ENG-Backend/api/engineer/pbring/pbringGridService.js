@@ -164,7 +164,7 @@ function buildGridPdfHtml(grid) {
   const hasInk = (r, c) => {
     if (c < 0 || c >= cols) return true;
     const d = cells[baseOf(r, c)];
-    return !!(d && d.v != null && String(d.v).trim() !== '');
+    return !!(d && (d.img || (d.v != null && String(d.v).trim() !== '')));
   };
   const wMm = (c) => (colW[c] || 0) * scale;
   const spillWidthMm = (r, c, span, align) => {
@@ -205,11 +205,22 @@ function buildGridPdfHtml(grid) {
       ].filter(Boolean).join(';');
       const sp = span ? `${span.cs > 1 ? ` colspan="${span.cs}"` : ''}${span.rs > 1 ? ` rowspan="${span.rs}"` : ''}` : '';
 
-      let content = escHtml(cd && cd.v);
-      if (content && !(a && a.wrap)) {
-        const mm = spillWidthMm(r, c, span, (a && a.h) || 'left');
-        content = `<span style="display:inline-block;max-width:${mm.toFixed(3)}mm;`
-          + `overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;">${content}</span>`;
+      let content;
+      if (cd && cd.img) {
+        const rs = span ? span.rs : 1;
+        let cellHmm = 0;
+        for (let i = r; i < r + rs; i++) cellHmm += (rowH[i] || 0) * scale;
+        const imgPct = ((cd.imgScale || 1) * 100).toFixed(1);
+        content = `<div style="height:${cellHmm.toFixed(3)}mm;width:100%;overflow:hidden;`
+          + `display:flex;align-items:center;justify-content:center;">`
+          + `<img src="${cd.img}" style="max-width:${imgPct}%;max-height:${imgPct}%;object-fit:contain;display:block;"></div>`;
+      } else {
+        content = escHtml(cd && cd.v);
+        if (content && !(a && a.wrap)) {
+          const mm = spillWidthMm(r, c, span, (a && a.h) || 'left');
+          content = `<span style="display:inline-block;max-width:${mm.toFixed(3)}mm;`
+            + `overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;">${content}</span>`;
+        }
       }
       body += `<td${sp} style="${st}">${content}</td>`;
     }
@@ -587,121 +598,164 @@ function addrToRC(addr) {
   return `${parseInt(m[2], 10) - 1},${colLetterToNum(m[1]) - 1}`;
 }
 
-/** GET admin: per-machine GRIND/DRESS CONDITION row config, in display order. */
-async function getParamConfig(machineTypeName) {
+/**
+ * Manual-entry GRIND/DRESS CONDITION list + Grinding Wheel Config — exact
+ * replica of the real SDS "Excel Parameter Config"/"Excel Grinding Wheel
+ * Config" admin tabs (`MachineConfigTab` in SdsV2AdminPage.jsx): every cell
+ * is hand-typed by an admin, no auto-resolution from `pbring_sds_param`/
+ * `pbring_sds_condition`. Same row/column numbering as the real "Standard"
+ * template's own A:I condition area (rows 16-58) and AN:AV GW area (rows
+ * 53-58), since PB Ring's grinding machines render through that same live
+ * template — so a PB Ring admin sees literally the same row numbers as a
+ * real SDS admin would on this machine's sheet.
+ *
+ * Storage: `pbring_sds_parameter`, keyed exactly like `sds_parameter`
+ * (`row_N_COL`, `row_N_is_header`, `row_N_COL_type`, `gw_row_N_COL`, ...).
+ * `cn IS NULL` = machine default; `cn` set = CN override, optionally scoped
+ * to one `process_code` (NULL process_code on an override = applies to every
+ * process of that CN). Precedence at render time: CN+process > CN (process-
+ * agnostic) > machine default — identical to the real system.
+ */
+const PBRING_ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16); // rows 16-58
+const PBRING_COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+const PBRING_GW_ROW_RANGE = [53, 54, 55, 56, 57, 58];
+const PBRING_GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
+
+/** GET admin: machine-default rows (cn=null) or a CN-override's rows (cn set, optionally process_code-scoped). */
+async function getManualParams(machineTypeName, cn, processCode) {
+  if (!cn) {
+    const { rows } = await engPool.query(
+      `SELECT id, machine_type_name, param_key, param_value, updated_by, updated_at
+         FROM pbring_sds_parameter
+        WHERE cn IS NULL AND machine_type_name = $1 AND process_code IS NULL
+        ORDER BY param_key`,
+      [machineTypeName]
+    );
+    return rows;
+  }
+  const pc = processCode || null;
   const { rows } = await engPool.query(
-    `SELECT id, sort_order, label, param_key, unit, source, tool_number, condition_field
-       FROM pbring_sds_param_config WHERE machine_type_name = $1 ORDER BY sort_order`,
-    [machineTypeName]
+    `SELECT id, cn, machine_type_name, param_key, param_value, process_code, updated_by, updated_at
+       FROM pbring_sds_parameter
+      WHERE cn = $1 AND machine_type_name = $2 AND process_code IS NOT DISTINCT FROM $3
+      ORDER BY param_key`,
+    [cn, machineTypeName, pc]
   );
   return rows;
 }
 
 /**
- * PUT admin: replace a machine's whole param-config list in one go (delete +
- * bulk insert in a transaction) — the editor sends its full edited list
- * rather than per-row diffs, same pattern as `sds_machine_tool`'s bulk
- * combo-replace. `sort_order` is reassigned from the array's own order, so
- * the editor's row order is always what gets saved.
+ * PUT admin: bulk upsert + delete-by-omission, mirroring the real
+ * `/parameters/bulk` semantics. `params` is `[{ param_key, param_value }]`;
+ * a key with an empty/omitted value and an existing row id is deleted
+ * instead of written as an empty string, so clearing a cell removes the
+ * override rather than freezing a blank.
  */
-async function saveParamConfig(machineTypeName, rows, empno) {
-  const clean = (Array.isArray(rows) ? rows : [])
-    .map((r) => ({
-      label: (r.label || '').trim(),
-      param_key: (r.param_key || '').trim(),
-      unit: (r.unit || '').trim(),
-      source: r.source === 'condition' ? 'condition' : 'param',
-      tool_number: (r.tool_number || '').trim() || null,
-      condition_field: (r.condition_field || '').trim() || null,
-    }))
-    .filter((r) => r.param_key);
+async function saveManualParams(machineTypeName, cn, processCode, params, empno) {
+  const cnVal = cn || null;
+  const pcVal = cnVal ? (processCode || null) : null; // machine-default rows stay process-agnostic
+  const list = Array.isArray(params) ? params : [];
 
   const client = await engPool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('DELETE FROM pbring_sds_param_config WHERE machine_type_name = $1', [machineTypeName]);
-    if (clean.length) {
-      const cols = ['machine_type_name', 'sort_order', 'label', 'param_key', 'unit', 'source', 'tool_number', 'condition_field', 'created_by'];
-      const c = cols.length;
-      const placeholders = clean.map((_, ri) => `(${Array.from({ length: c }, (__, ci) => `$${ri * c + ci + 1}`).join(',')})`).join(',');
-      const values = clean.flatMap((r, i) => [
-        machineTypeName, i + 1, r.label || null, r.param_key, r.unit || null,
-        r.source, r.tool_number, r.condition_field, empno || null,
-      ]);
-      await client.query(`INSERT INTO pbring_sds_param_config (${cols.join(',')}) VALUES ${placeholders}`, values);
+    const saved = [];
+    for (const { param_key, param_value, delete: del } of list) {
+      if (!param_key || !String(param_key).trim()) continue;
+      const key = String(param_key).trim();
+      if (del || param_value == null || param_value === '') {
+        await client.query(
+          `DELETE FROM pbring_sds_parameter
+            WHERE machine_type_name = $1 AND param_key = $2
+              AND COALESCE(cn,'') = COALESCE($3,'') AND COALESCE(process_code,'') = COALESCE($4,'')`,
+          [machineTypeName, key, cnVal, pcVal]
+        );
+        continue;
+      }
+      const r = await client.query(
+        `INSERT INTO pbring_sds_parameter (cn, machine_type_name, param_key, param_value, process_code, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
+         DO UPDATE SET param_value = EXCLUDED.param_value, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+         RETURNING id, param_key, param_value`,
+        [cnVal, machineTypeName, key, String(param_value), pcVal, empno || null]
+      );
+      saved.push(r.rows[0]);
     }
     await client.query('COMMIT');
+    return saved;
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
   } finally {
     client.release();
   }
-  return clean.length;
 }
 
 /**
- * Writes the per-machine config rows into two DIFFERENT regions of the grid,
- * by source — not one continuous list:
- *
- * - `source='param'` rows (the numbered #01-#NN GRIND/DRESS CONDITION list)
- *   go in the left-hand area starting row 16 (0-based 15, confirmed live),
- *   columns A/E/F (label/value/unit). Never overlaps the T01-T20 tool area,
- *   which starts at column K (index 10).
- * - `source='condition'` rows (grinding/dressing-wheel spec+maker — KVD300/
- *   KVD350 today) go in the bottom-right area, same columns the real SDS
- *   system itself uses for its own "GW" section: `gw_row_N_AN` (label) /
- *   `gw_row_N_AP` (value), confirmed live against `sds_parameter` for
- *   KS-B80 (rows 53-55) — i.e. column AN (index 39, label) / AP (index 41,
- *   value), same column family as the "Grinding Area" diagram box, NOT the
- *   left-hand condition-parameter columns. Starts row 50 (0-based 49),
- *   ending well before the sheet's row-58 footer.
- *
- * The two row counters are independent, so a long #01-#NN list on one
- * machine never pushes the GW/DW rows down into territory the diagram box
- * needs, and vice versa.
+ * Render-time resolve: merges machine-default + CN-override (process-scoped
+ * beats process-agnostic beats machine-default) into one flat
+ * { param_key: param_value } map, for `applyManualParamsToGrid` below.
  */
-const CONDITION_START_ROW = 15; // 0-based (row 16, 1-based, confirmed live)
-const CONDITION_LABEL_COL = 0, CONDITION_VALUE_COL = 4, CONDITION_UNIT_COL = 5;
+async function resolveManualParamMap(machineTypeName, cn, processCode) {
+  const map = {};
+  const { rows: defaults } = await engPool.query(
+    `SELECT param_key, param_value FROM pbring_sds_parameter
+      WHERE cn IS NULL AND machine_type_name = $1 AND process_code IS NULL`,
+    [machineTypeName]
+  );
+  for (const r of defaults) map[r.param_key] = r.param_value;
 
-const GW_DETAIL_START_ROW = 49; // 0-based (row 50, 1-based) — bottom-right, same column family as the Grinding Area diagram
-const GW_DETAIL_LABEL_COL = 39, GW_DETAIL_VALUE_COL = 41; // AN / AP, matching the real sds_parameter gw_row_N_AN/AP convention
+  if (cn) {
+    const { rows: overrides } = await engPool.query(
+      `SELECT param_key, param_value, process_code FROM pbring_sds_parameter
+        WHERE cn = $1 AND machine_type_name = $2 AND process_code IS NULL`,
+      [cn, machineTypeName]
+    );
+    for (const r of overrides) map[r.param_key] = r.param_value;
 
-function applyConditionConfigToGrid(grid, configRows, paramMap, conditionByToolNumber = {}) {
-  let paramRowIdx = 0;
-  let gwRowIdx = 0;
-  configRows.forEach((cfg) => {
-    const isGwDetail = cfg.source === 'condition';
-    const r = isGwDetail ? GW_DETAIL_START_ROW + gwRowIdx : CONDITION_START_ROW + paramRowIdx;
-    if (isGwDetail) gwRowIdx += 1; else paramRowIdx += 1;
-    const labelCol = isGwDetail ? GW_DETAIL_LABEL_COL : CONDITION_LABEL_COL;
-    const valueCol = isGwDetail ? GW_DETAIL_VALUE_COL : CONDITION_VALUE_COL;
+    if (processCode) {
+      const { rows: scoped } = await engPool.query(
+        `SELECT param_key, param_value FROM pbring_sds_parameter
+          WHERE cn = $1 AND machine_type_name = $2 AND process_code = $3`,
+        [cn, machineTypeName, processCode]
+      );
+      for (const r of scoped) map[r.param_key] = r.param_value;
+    }
+  }
+  return map;
+}
 
-    const value = isGwDetail
-      ? (conditionByToolNumber[cfg.tool_number] || {})[cfg.condition_field]
-      : paramMap[cfg.param_key];
-    if (cfg.label) {
-      grid.cells[`${r},${labelCol}`] = {
-        v: cfg.label,
-        f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#000000' },
-        a: { h: null, v: 'middle', wrap: false },
-      };
+function colLetterToIndex0(letters) {
+  return colLetterToNum(letters) - 1;
+}
+
+/** Writes the resolved param map into the grid's A:I condition area and AN:AV GW area, by row/col — same cell styling as the real sheet (red value text, gray header-row fill). */
+function applyManualParamsToGrid(grid, paramMap) {
+  const writeRegion = (rowRange, colLetters) => {
+    for (const r of rowRange) {
+      const isHeader = paramMap[`row_${r}_is_header`] === '1' || paramMap[`gw_row_${r}_is_header`] === '1';
+      for (const c of colLetters) {
+        const prefix = colLetters === PBRING_GW_COL_LETTERS ? 'gw_row' : 'row';
+        const key = `${prefix}_${r}_${c}`;
+        const value = paramMap[key];
+        if (value == null || value === '') continue;
+        const isValueType = paramMap[`${key}_type`] === 'value';
+        grid.cells[`${r - 1},${colLetterToIndex0(c)}`] = {
+          v: String(value),
+          f: {
+            name: 'Calibri', size: 9,
+            bold: isHeader,
+            italic: false,
+            color: isValueType ? '#c00000' : '#000000',
+          },
+          a: { h: null, v: 'middle', wrap: false },
+        };
+      }
     }
-    if (value != null && value !== '') {
-      grid.cells[`${r},${valueCol}`] = {
-        v: String(value),
-        f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#c00000' },
-        a: { h: 'right', v: 'middle', wrap: false },
-      };
-    }
-    if (cfg.unit && !isGwDetail) {
-      grid.cells[`${r},${CONDITION_UNIT_COL}`] = {
-        v: cfg.unit,
-        f: { name: 'Calibri', size: 9, bold: false, italic: false, color: '#000000' },
-        a: { h: null, v: 'middle', wrap: false },
-      };
-    }
-  });
+  };
+  writeRegion(PBRING_ROW_RANGE, PBRING_COL_LETTERS);
+  writeRegion(PBRING_GW_ROW_RANGE, PBRING_GW_COL_LETTERS);
   return grid;
 }
 
@@ -713,6 +767,237 @@ function applyConditionConfigToGrid(grid, configRows, paramMap, conditionByToolN
  * not a replacement yet (the live `/grid/pdf` route still uses Phase 5 until
  * this is reviewed and cut over machine by machine).
  */
+/**
+ * Header single-cell override fields — exact replica of the real SDS
+ * `HEADER_CELL_FIELDS` (MachineConfigTab): hand-typed, machine-default or
+ * CN-override, stored as flat `pbring_sds_parameter` keys (no row_/gw_row_
+ * prefix) so `resolveManualParamMap` already resolves them with the usual
+ * CN+process > CN > machine-default precedence — no separate resolver
+ * needed. `program_no`/`program_name`/`category` have no PB Ring auto
+ * source and render blank until typed; `ct` already auto-fills from
+ * `pbring_sds_param` via `applyHeaderToGrid` — a manual value here
+ * overrides that, same as the real system's "an entered value overrides
+ * the auto factory value" rule, which is why this must run AFTER
+ * `applyHeaderToGrid` in `buildStandardGridForMachine`.
+ *
+ * Cell addresses confirmed live (shared, machine_type_name IS NULL, same
+ * `sds_excel_mapping` rows the real admin's hardcoded Z4/Z5/B4/B5 refer to
+ * — PB Ring renders through the identical "Standard" grid_json, so these
+ * are the same physical cells): category=B5, ct=B4, program_name=Z5,
+ * program_no=Z4.
+ */
+const PBRING_HEADER_OVERRIDE_FIELDS = [
+  { key: 'program_no', label: 'Program No', cell: 'Z4' },
+  { key: 'program_name', label: 'Program Name', cell: 'Z5' },
+  { key: 'ct', label: 'Cycle Time (CT)', cell: 'B4' },
+  { key: 'category', label: 'Category', cell: 'B5' },
+];
+
+async function loadHeaderOverrideAddressesLive() {
+  const { rows } = await engPool.query(
+    `SELECT cell_address, param_key FROM sds_excel_mapping
+      WHERE machine_type_name IS NULL AND param_key = ANY($1)`,
+    [PBRING_HEADER_OVERRIDE_FIELDS.map((f) => f.key)]
+  );
+  const addr = {};
+  for (const r of rows) addr[r.param_key] = r.cell_address;
+  return addr;
+}
+
+function applyHeaderOverridesToGrid(grid, headerAddresses, manualParamMap) {
+  for (const f of PBRING_HEADER_OVERRIDE_FIELDS) {
+    const cellAddr = headerAddresses[f.key];
+    const value = manualParamMap[f.key];
+    if (!cellAddr || value == null || value === '') continue;
+    grid.cells[addrToRC(cellAddr)] = {
+      v: String(value),
+      f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' },
+      a: { h: null, v: 'middle', wrap: false },
+    };
+  }
+}
+
+/**
+ * Tooling + Grinding Area photos — same visual boxes as the real SDS sheet
+ * (T01-T20 photo boxes, the Grinding Area picture), own tables
+ * (`pbring_tooling_image`/`pbring_grinding_image`), simple exact-match keys
+ * by explicit user decision (2026-10-08): tooling images key on
+ * (machine_type_name, tooling_no) directly — no DWG-family prefix matching;
+ * grinding-area images key on the exact (machine_type_name, cn,
+ * process_code) triplet — no CN/family/class fallback. Coordinates are
+ * duplicated from `sdsV2HeadlessController.js`'s `IMAGE_EXTENTS` (not
+ * imported — same no-coupling rule as everywhere else in this file): PB
+ * Ring renders through the literal same "Standard" grid_json, so these are
+ * the same physical boxes on the same sheet.
+ */
+const PBRING_IMAGE_EXTENTS = {
+  tool_image_T01: { tl: 'K18', br: 'P23' }, tool_image_T02: { tl: 'Q18', br: 'V23' },
+  tool_image_T03: { tl: 'W18', br: 'AB23' }, tool_image_T04: { tl: 'AC18', br: 'AH23' },
+  tool_image_T05: { tl: 'AI18', br: 'AN23' }, tool_image_T06: { tl: 'K28', br: 'P33' },
+  tool_image_T07: { tl: 'Q28', br: 'V33' }, tool_image_T08: { tl: 'W28', br: 'AB33' },
+  tool_image_T09: { tl: 'AC28', br: 'AH33' }, tool_image_T10: { tl: 'AI28', br: 'AN33' },
+  tool_image_T11: { tl: 'K38', br: 'P43' }, tool_image_T12: { tl: 'Q38', br: 'V43' },
+  tool_image_T13: { tl: 'W38', br: 'AB43' }, tool_image_T14: { tl: 'AC38', br: 'AH43' },
+  tool_image_T15: { tl: 'AI38', br: 'AN43' }, tool_image_T16: { tl: 'K48', br: 'P53' },
+  tool_image_T17: { tl: 'Q48', br: 'V53' }, tool_image_T18: { tl: 'W48', br: 'AB53' },
+  tool_image_T19: { tl: 'AC48', br: 'AH53' }, tool_image_T20: { tl: 'AI48', br: 'AN53' },
+  grinding_layout_image: { tl: 'AO26', br: 'AU45' },
+};
+
+const toDataUri = (row) => (row ? `data:${row.mime_type || 'image/jpeg'};base64,${row.image_data.toString('base64')}` : null);
+
+/**
+ * DWG-family extraction — same rule as the real `sds_tooling_image`'s own
+ * grouping (`split_part(tool_dwg_no,'-',1) || '-' || split_part(tool_dwg_no,'-',2)`):
+ * first two dash-segments, e.g. "4036-02-0001" -> "4036-02". A tooling_no
+ * with fewer than 2 dash-segments (a plain name, no DWG number) has no
+ * meaningful family — falls back to the trimmed value itself, so one photo
+ * still covers every row that shares that exact name.
+ */
+function toolingFamily(toolingNo) {
+  const s = String(toolingNo || '').trim();
+  const parts = s.split('-');
+  return parts.length >= 2 ? `${parts[0]}-${parts[1]}` : s;
+}
+
+/**
+ * Dropdown source for the Tooling Images upload UI — every DWG family
+ * (or plain name) this machine has actually used, from `pbring_sds_condition`
+ * history, most-used first, with a few real tooling_no examples per family
+ * so the admin can tell which drawings a family covers before uploading.
+ */
+async function getToolingFamilyOptions(machineTypeName) {
+  const { rows } = await engPool.query(
+    `SELECT tooling_no, count(*)::int AS n FROM pbring_sds_condition
+      WHERE mc_key = $1 AND tooling_no IS NOT NULL AND trim(tooling_no) <> ''
+      GROUP BY tooling_no ORDER BY n DESC`,
+    [machineTypeName]
+  );
+  const byFamily = new Map();
+  for (const r of rows) {
+    const no = r.tooling_no.trim();
+    const fam = toolingFamily(no);
+    if (!byFamily.has(fam)) byFamily.set(fam, { family: fam, count: 0, examples: [] });
+    const g = byFamily.get(fam);
+    g.count += r.n;
+    if (g.examples.length < 5 && !g.examples.includes(no)) g.examples.push(no);
+  }
+  return [...byFamily.values()].sort((a, b) => b.count - a.count);
+}
+
+async function listToolingImages(machineTypeName) {
+  const { rows } = await engPool.query(
+    `SELECT id, machine_type_name, family, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
+       FROM pbring_tooling_image WHERE machine_type_name = $1 ORDER BY family`,
+    [machineTypeName]
+  );
+  return rows;
+}
+
+async function upsertToolingImage(machineTypeName, toolingNoOrFamily, file, description, empno) {
+  const family = toolingFamily(toolingNoOrFamily);
+  const mime = file.mimetype || 'image/jpeg';
+  const { rows } = await engPool.query(
+    `INSERT INTO pbring_tooling_image (machine_type_name, family, image_data, mime_type, file_name, description, created_by, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+     ON CONFLICT (machine_type_name, family) DO UPDATE SET
+       image_data = EXCLUDED.image_data, mime_type = EXCLUDED.mime_type, file_name = EXCLUDED.file_name,
+       description = EXCLUDED.description, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+     RETURNING id, machine_type_name, family, mime_type, file_name, description, updated_at`,
+    [machineTypeName, family, file.data, mime, file.name, description || null, empno || null]
+  );
+  return rows[0];
+}
+
+async function getToolingImageBinary(machineTypeName, toolingNoOrFamily) {
+  const family = toolingFamily(toolingNoOrFamily);
+  const { rows } = await engPool.query(
+    `SELECT image_data, mime_type, file_name FROM pbring_tooling_image
+      WHERE machine_type_name = $1 AND family = $2`,
+    [machineTypeName, family]
+  );
+  return rows[0] || null;
+}
+
+async function deleteToolingImage(machineTypeName, toolingNoOrFamily) {
+  const family = toolingFamily(toolingNoOrFamily);
+  const { rowCount } = await engPool.query(
+    `DELETE FROM pbring_tooling_image WHERE machine_type_name = $1 AND family = $2`,
+    [machineTypeName, family]
+  );
+  return rowCount > 0;
+}
+
+async function listGrindingImages(machineTypeName) {
+  const { rows } = await engPool.query(
+    `SELECT id, machine_type_name, cn, process_code, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
+       FROM pbring_grinding_image WHERE machine_type_name = $1 ORDER BY cn, process_code`,
+    [machineTypeName]
+  );
+  return rows;
+}
+
+async function upsertGrindingImage(machineTypeName, cn, processCode, file, description, empno) {
+  const mime = file.mimetype || 'image/jpeg';
+  const { rows } = await engPool.query(
+    `INSERT INTO pbring_grinding_image (machine_type_name, cn, process_code, image_data, mime_type, file_name, description, created_by, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+     ON CONFLICT (machine_type_name, cn, process_code) DO UPDATE SET
+       image_data = EXCLUDED.image_data, mime_type = EXCLUDED.mime_type, file_name = EXCLUDED.file_name,
+       description = EXCLUDED.description, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+     RETURNING id, machine_type_name, cn, process_code, mime_type, file_name, description, updated_at`,
+    [machineTypeName, cn, processCode, file.data, mime, file.name, description || null, empno || null]
+  );
+  return rows[0];
+}
+
+async function getGrindingImageBinary(machineTypeName, cn, processCode) {
+  const { rows } = await engPool.query(
+    `SELECT image_data, mime_type, file_name FROM pbring_grinding_image
+      WHERE machine_type_name = $1 AND cn = $2 AND process_code = $3`,
+    [machineTypeName, cn, processCode]
+  );
+  return rows[0] || null;
+}
+
+async function deleteGrindingImage(machineTypeName, cn, processCode) {
+  const { rowCount } = await engPool.query(
+    `DELETE FROM pbring_grinding_image WHERE machine_type_name = $1 AND cn = $2 AND process_code = $3`,
+    [machineTypeName, cn, processCode]
+  );
+  return rowCount > 0;
+}
+
+/**
+ * Places an image at a fixed extent's top-left cell, merging the range to
+ * fill it — skips placement if any text was already written inside that
+ * box (defensive; the Standard template's photo boxes and text addresses
+ * don't overlap by design, but this mirrors the real system's own guard
+ * cheaply). Mutates `grid.cells`/`grid.merges` in place.
+ */
+function placeImageAtExtent(grid, extentKey, dataUri, scale = 1) {
+  if (!dataUri) return;
+  const ext = PBRING_IMAGE_EXTENTS[extentKey];
+  if (!ext) return;
+  const tlRC = addrToRC(ext.tl), brRC = addrToRC(ext.br);
+  const [tlR, tlC] = tlRC.split(',').map(Number);
+  const [brR, brC] = brRC.split(',').map(Number);
+
+  for (let r = tlR; r <= brR; r++) {
+    for (let c = tlC; c <= brC; c++) {
+      const existing = grid.cells[`${r},${c}`];
+      if (existing && existing.v != null && String(existing.v).trim() !== '') return; // occupied — skip
+    }
+  }
+
+  const key = `${tlR},${tlC}`;
+  grid.cells[key] = { ...(grid.cells[key] || {}), img: dataUri, imgScale: scale };
+  grid.merges = grid.merges || [];
+  if (!grid.merges.some((m) => m.r1 === tlR && m.c1 === tlC)) {
+    grid.merges.push({ r1: tlR, c1: tlC, r2: brR, c2: brC });
+  }
+}
+
 async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
   const grid = await loadStandardGridLive();
   if (!grid) return null;
@@ -725,8 +1010,35 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
   const toolAddresses = await loadToolSlotAddressesLive();
   applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses);
 
-  const configRows = await getParamConfig(machineTypeName);
-  applyConditionConfigToGrid(grid, configRows, paramMap, conditionByToolNumber);
+  const manualParamMap = await resolveManualParamMap(machineTypeName, cn, processCode);
+  applyManualParamsToGrid(grid, manualParamMap);
+
+  const headerOverrideAddresses = await loadHeaderOverrideAddressesLive();
+  applyHeaderOverridesToGrid(grid, headerOverrideAddresses, manualParamMap);
+
+  // Images last — placeImageAtExtent checks for text collisions against
+  // everything already written, and tool images need the final ordering
+  // (same as the text slots) to land in the right box. Matched by DWG
+  // family (toolingFamily), not exact tooling_no — one uploaded photo
+  // covers every drawing that shares a family.
+  const families = [...new Set(Object.values(conditionByToolNumber).map((r) => r.tooling_no && toolingFamily(r.tooling_no)).filter(Boolean))];
+  const toolingImageRows = await engPool.query(
+    `SELECT family, image_data, mime_type FROM pbring_tooling_image
+      WHERE machine_type_name = $1 AND family = ANY($2)`,
+    [machineTypeName, families]
+  );
+  const imgByFamily = new Map(toolingImageRows.rows.map((r) => [r.family, r]));
+  const ordered = orderToolNumbers(Object.keys(conditionByToolNumber));
+  ordered.forEach((toolNumber, i) => {
+    const row = conditionByToolNumber[toolNumber];
+    const img = row.tooling_no && imgByFamily.get(toolingFamily(row.tooling_no));
+    if (!img) return;
+    const slot = `T${String(i + 1).padStart(2, '0')}`;
+    placeImageAtExtent(grid, `tool_image_${slot}`, toDataUri(img));
+  });
+
+  const grindingImg = await getGrindingImageBinary(machineTypeName, cn, processCode);
+  placeImageAtExtent(grid, 'grinding_layout_image', toDataUri(grindingImg));
 
   return grid;
 }
@@ -889,9 +1201,15 @@ module.exports = {
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
   getTemplateById, createTemplate, updateTemplate, deleteTemplate,
   parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
-  loadStandardGridLive, getParamConfig, saveParamConfig, applyConditionConfigToGrid, buildStandardGridForMachine,
+  loadStandardGridLive, buildStandardGridForMachine,
   loadToolSlotAddressesLive, applyToolSlotsToGrid, loadHeaderAddressesLive, applyHeaderToGrid,
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
   loadTurningGridLive, loadTurningHeaderAddressesLive, applyTurningHeaderToGrid,
   loadTurningToolSlotAddressesLive, applyTurningToolSlotsToGrid,
+  PBRING_ROW_RANGE, PBRING_COL_LETTERS, PBRING_GW_ROW_RANGE, PBRING_GW_COL_LETTERS,
+  getManualParams, saveManualParams, resolveManualParamMap, applyManualParamsToGrid,
+  PBRING_HEADER_OVERRIDE_FIELDS, loadHeaderOverrideAddressesLive, applyHeaderOverridesToGrid,
+  toolingFamily, getToolingFamilyOptions,
+  getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
+  getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
 };

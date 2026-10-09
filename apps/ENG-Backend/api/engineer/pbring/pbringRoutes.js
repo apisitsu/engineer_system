@@ -103,7 +103,22 @@ router.get('/grid/admin/templates/:id/pdf-blank', isPbringAdmin, pbringGridContr
 // row definitions (label/param_key/unit), seeded from the xlsx import,
 // editable here. Independent of sds_parameter — see pbringGridService.js's
 // Phase 6 header note for why (PB Ring's CN is a real factory CN).
-router.get('/grid/admin/param-config', isPbringAdmin, pbringGridController.getParamConfig);
-router.put('/grid/admin/param-config', isPbringAdmin, pbringGridController.putParamConfig);
+router.get('/grid/admin/parameters', isPbringAdmin, pbringGridController.getManualParams);
+router.put('/grid/admin/parameters/bulk', isPbringAdmin, pbringGridController.putManualParams);
+
+// Tooling + Grinding Area photos — own tables (pbring_tooling_image/
+// pbring_grinding_image), simple exact-match keys (machine+tooling_no;
+// machine+cn+process_code). Reads open to any authenticated user (the PDF
+// route needs them with no admin check); uploads/deletes gated isPbringAdmin.
+router.get('/grid/tooling-image', pbringGridController.getToolingImage);
+router.get('/grid/admin/tooling-images', isPbringAdmin, pbringGridController.getToolingImages);
+router.get('/grid/admin/tooling-families', isPbringAdmin, pbringGridController.getToolingFamilies);
+router.post('/grid/admin/tooling-image', isPbringAdmin, pbringGridController.postToolingImage);
+router.delete('/grid/admin/tooling-image', isPbringAdmin, pbringGridController.deleteToolingImage);
+
+router.get('/grid/grinding-image', pbringGridController.getGrindingImage);
+router.get('/grid/admin/grinding-images', isPbringAdmin, pbringGridController.getGrindingImages);
+router.post('/grid/admin/grinding-image', isPbringAdmin, pbringGridController.postGrindingImage);
+router.delete('/grid/admin/grinding-image', isPbringAdmin, pbringGridController.deleteGrindingImage);
 
 module.exports = router;
