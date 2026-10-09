@@ -162,70 +162,6 @@ const sectionTitle = (label, C) => (
   </div>
 );
 
-// Month-over-month change badge — `delta` is { complete, pending, pct, totalFrom, totalTo }
-// comparing the current month's cumulative snapshot against the immediately preceding
-// month's (see `monthDelta` in the main component). `totalFrom`/`totalTo` are the actual
-// requirement counts (complete+pending) last month and now, shown as "3,670 → 3,685" so
-// the old figure is visible next to the new one, not just the +/- delta. Renders nothing
-// until both months exist.
-const DeltaBadge = ({ delta, C }) => {
-  if (!delta) return null;
-  const arrow = delta.pct > 0 ? '▲' : delta.pct < 0 ? '▼' : '●';
-  const color = delta.pct > 0 ? C.green : delta.pct < 0 ? C.red : C.textSec;
-  const sign = (n) => (n > 0 ? '+' : '');
-  return (
-    <Tooltip title={`Total last month: ${delta.totalFrom.toLocaleString()} → ${delta.totalTo.toLocaleString()}. Complete ${sign(delta.complete)}${delta.complete.toLocaleString()}, Pending ${sign(delta.pending)}${delta.pending.toLocaleString()}`}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 4, cursor: 'help', flexWrap: 'wrap' }}>
-        <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 600 }}>
-          {delta.totalFrom.toLocaleString()}→{delta.totalTo.toLocaleString()}
-        </Text>
-        <Text style={{ color, fontSize: 10, fontWeight: 700 }}>
-          {arrow} {sign(delta.complete)}{delta.complete.toLocaleString()}
-        </Text>
-        <Text style={{ color, fontSize: 10, fontWeight: 700 }}>({sign(delta.pct)}{delta.pct}%)</Text>
-        <Text style={{ color: C.textSec, fontSize: 9 }}>vs last month</Text>
-      </div>
-    </Tooltip>
-  );
-};
-
-// A small centered up-arrow between two stacked PrevMonthPctRow rows (or the live row and
-// the first of them) — a plain flow connector reading "this feeds into the row above",
-// not a trend indicator, so it always points up regardless of whether the % rose or fell.
-// Renders nothing until both sides exist (nothing to connect otherwise).
-const TrendArrow = ({ from, to, C }) => {
-  if (from == null || to == null) return null;
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', margin: '-2px 0 3px' }}>
-      <Text style={{ color: C.textSec, fontSize: 11, fontWeight: 700 }}>▲</Text>
-    </div>
-  );
-};
-
-// The previous (closed/frozen) month's own KZW/THAI/combined % row — a stable reference
-// sitting right under the live current-month row, which keeps moving until its month
-// closes. `snapshot` is { pctSaved, pct }; `label` is e.g. "Aug 26" (see `monthDelta`
-// in the main component). Renders nothing until the previous month's data exists.
-const PrevMonthPctRow = ({ label, snapshot, C }) => {
-  if (!snapshot) return null;
-  const { pctSaved, pct } = snapshot;
-  const boost = Math.max(0, pct - pctSaved);
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, opacity: 0.7 }}>
-      <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 600 }}>{label}</Text>
-      <Text style={{ fontSize: 10 }}>
-        <span style={{ color: pctSaved >= 90 ? C.green : C.red, fontWeight: 700 }}>{pctSaved}%</span>
-        <span style={{ color: C.textSec, fontSize: 9 }}> KZW</span>
-        {boost > 0 && (<>
-          <span style={{ color: C.greenSoft, fontWeight: 700 }}> +{boost.toFixed(1)}%</span>
-          <span style={{ color: C.textSec, fontSize: 9 }}> THAI*</span>
-        </>)}
-        <span style={{ color: pct >= 90 ? C.green : C.red, fontWeight: 800 }}> → {pct}%</span>
-      </Text>
-    </div>
-  );
-};
-
 // ── Part Type Card ─────────────────────────────────────────────────────────────
 // Minimal stat card — title + total only, same visual language (coloured top border,
 // active ring, dimmed sibling) as MiniStatCard below. `onClick` makes the card a
@@ -258,11 +194,19 @@ const PartTypeCard = ({ pt, C, onClick, active, dimmed }) => {
 // ── Mini Stat Card ───────────────────────────────────────────────────────────────
 // Same title+number shape as the (now minimal) PartTypeCard, for a non-part-type stat
 // (Complete / Pending) sitting alongside the wide TOTAL card.
-const MiniStatCard = ({ label, value, suffix, color, C }) => (
-  <div style={{
-    ...cardStyleOf(C), borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box',
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  }}>
+const MiniStatCard = ({ label, value, suffix, color, C, onClick, active, dimmed }) => (
+  <div
+    role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
+    aria-pressed={onClick ? !!active : undefined}
+    onClick={onClick}
+    onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+    style={{
+      ...cardStyleOf(C), borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      cursor: onClick ? 'pointer' : 'default',
+      boxShadow: active ? `0 0 0 2px ${color}` : 'none',
+      opacity: dimmed ? 0.6 : 1, transition: 'box-shadow 0.15s, opacity 0.15s',
+    }}>
     <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>{label}</Text>
     <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{(value ?? 0).toLocaleString()}{suffix}</Text>
   </div>
@@ -275,8 +219,8 @@ const SubStatCard = ({ label, value, suffix, color, C }) => (
     ...cardStyleOf(C), borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box',
     padding: '8px 12px',
   }}>
-    <div style={{ color, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label}</div>
-    <div style={{ color: C.textPri, fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>{(value ?? 0).toLocaleString()}{suffix}</div>
+    <div style={{ color, fontSize: 11, fontWeight: 500, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label}</div>
+    <div style={{ color: C.textPri, fontSize: 20, fontWeight: 500, lineHeight: 1.3 }}>{(value ?? 0).toLocaleString()}{suffix}</div>
   </div>
 );
 
@@ -332,7 +276,8 @@ export default function SdsCoverageDashboard() {
   const goToTable = () => attentionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const pickPartType = (pt) => setFilterPt(cur => (cur === pt ? '' : pt));
   const pickMonth = (m) => setFilterMonth(cur => (cur === m ? '' : m));
-  const clearSelection = () => { setFilterPt(''); setFilterMonth(''); };
+  const pickReason = (r) => setFilterReason(cur => (cur === r ? '' : r));
+  const clearSelection = () => { setFilterPt(''); setFilterMonth(''); setFilterReason(''); };
 
   // The cohort's full sheet list lives behind its own endpoint (the main payload only
   // carries pending rows). A failed / unavailable load leaves `monthRows` null and the
@@ -653,36 +598,6 @@ export default function SdsCoverageDashboard() {
   // otherwise put the previous month behind the `isPrevLast` synthetic row. Each row's
   // `complete`/`pending`/`complete_pct` (and `byPartType[pt].*`) are CUMULATIVE, so the
   // difference between two adjacent months is exactly that month's net change.
-  const monthDelta = useMemo(() => {
-    const all = data?.monthlyStatus || [];
-    const curMonth = new Date().toISOString().slice(0, 7);
-    const idx = all.findIndex(r => r.month === curMonth);
-    if (idx < 1) return null; // no current-month row yet, or nothing before it to diff against
-    const cur = all[idx], prev = all[idx - 1];
-    const diff = (c, p) => (c && p) ? {
-      complete: (c.complete ?? 0) - (p.complete ?? 0),
-      pending: (c.pending ?? 0) - (p.pending ?? 0),
-      pct: parseFloat(((c.complete_pct ?? 0) - (p.complete_pct ?? 0)).toFixed(1)),
-      // requirement count (complete+pending) each side, so the card can show the actual
-      // old figure next to the new one ("3,670 → 3,685"), not just the +/- delta.
-      totalFrom: (p.complete ?? 0) + (p.pending ?? 0),
-      totalTo:   (c.complete ?? 0) + (c.pending ?? 0),
-    } : null;
-    // A closed month's own KZW/THAI/combined % breakdown (not a delta) — lets the TOTAL
-    // card show a short history underneath the live row, e.g. current month = Sep (still
-    // open, keeps moving) with "Aug 26" then "Jul 26" underneath for stable reference
-    // points. `prev2` is one month further back than `prev`, or null if there isn't one
-    // yet (early in the FY). Part-type cards are title+total only now, so this stays
-    // TOTAL-only — no per-type consumer left (see PartTypeCard).
-    const pctRow = (row) => row ? { pctSaved: row.complete_saved_pct ?? 0, pct: row.complete_pct ?? 0 } : null;
-    const prev2 = idx >= 2 ? all[idx - 2] : null;
-    return {
-      total: diff(cur, prev),
-      prevLabel: fmtMonth(prev.month), prevTotalPct: pctRow(prev),
-      prev2Label: prev2 ? fmtMonth(prev2.month) : null, prev2TotalPct: pctRow(prev2),
-    };
-  }, [data]);
-
   // Bars are stamp-GATED complete (KZW baseline + THAI T-Select #1) vs pending. Stable
   // against a later bulk sign because the BACKEND now buckets each completion by the
   // month it was fully stamped (max sign date), not the part's first-produced month —
@@ -1008,14 +923,14 @@ export default function SdsCoverageDashboard() {
   const reasonOptions = useMemo(() => {
     const reasons = [...new Set(listRows.map(r => r.pending_reason).filter(Boolean))].sort();
     const hasLimitAnomaly = listRows.some(r => r.limit_excluded);
-    const hasComplete = listRows.some(r => r.coverage_level === 'COMPLETE');
-    const hasPending = listRows.some(r => r.coverage_level !== 'COMPLETE');
+    // COMPLETE/PENDING are always listed (even when the current list is one or the
+    // other already, e.g. the default "CNs Requiring Action" is pending-only) so the
+    // dropdown always has a label to show — the Complete/Pending/%Complete cards set
+    // this same filterReason value on click, and with no matching option the Select
+    // falls back to printing the raw "COMPLETE"/"PENDING" string instead of a label.
     return [{ value: '', label: 'All Reasons' },
-      ...(hasComplete ? [{ value: 'COMPLETE', label: 'Complete (PDF ready)' }] : []),
-      // Only useful when the list is a mix (a month cohort) — the default "CNs
-      // Requiring Action" list is pending-only already, so this would just repeat
-      // "All Reasons" there and is left out.
-      ...(hasComplete && hasPending ? [{ value: 'PENDING', label: 'Pending (all reasons)' }] : []),
+      { value: 'COMPLETE', label: 'Complete (PDF ready)' },
+      { value: 'PENDING', label: 'Pending (all reasons)' },
       ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r })),
       ...(hasLimitAnomaly ? [{ value: 'LIMIT_ANOMALY', label: 'Limit Anomaly' }] : [])];
   }, [listRows]);
@@ -1195,12 +1110,6 @@ export default function SdsCoverageDashboard() {
                         </Text>
                       </Tooltip>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>SDS reqs</Text>
-                      <Tooltip title="Unique CNs across the selected part types (deduplicated across machine × process)">
-                        <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(cardKpi?.uniqueCnCount ?? 0).toLocaleString()} Unique CNs</Text>
-                      </Tooltip>
-                    </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
                       <Tooltip title="Complete / Pending sheets">
@@ -1230,79 +1139,67 @@ export default function SdsCoverageDashboard() {
                         </div>
                       </>);
                     })()}
-                    {/* The month history rows and "vs last month" badges compare the LIVE
-                        totals over time — meaningless for a single production cohort. */}
-                    {!cohort && <>
-                      <TrendArrow from={monthDelta?.prevTotalPct?.pct} to={cardKpi?.completePct ?? 0} C={C} />
-                      <PrevMonthPctRow label={monthDelta?.prevLabel} snapshot={monthDelta?.prevTotalPct} C={C} />
-                      <TrendArrow from={monthDelta?.prev2TotalPct?.pct} to={monthDelta?.prevTotalPct?.pct} C={C} />
-                      <PrevMonthPctRow label={monthDelta?.prev2Label} snapshot={monthDelta?.prev2TotalPct} C={C} />
-                    </>}
-                    <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                      <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(cardKpi?.completeSaved ?? cardKpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
-                      {Math.max(0, (cardKpi?.complete ?? 0) - (cardKpi?.completeSaved ?? cardKpi?.complete ?? 0)) > 0 && (
-                        <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: C.greenSoft, background: hexToRgba(C.greenSoft, 0.18), borderColor: C.greenSoft }}>+{Math.max(0, (cardKpi?.complete ?? 0) - (cardKpi?.completeSaved ?? cardKpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
-                        </Tooltip>
-                      )}
-                    </div>
-                    {!cohort && <DeltaBadge delta={monthDelta?.total} C={C} />}
                   </div>
                 </Col>
                 {/* Complete/Pending on top, Ball/Race/Mecha/Sleeve underneath — same
                     column width as TOTAL's neighbour, stacked to use the height TOTAL's
                     richer content takes up. */}
                 <Col span={16}>
-                  <Row gutter={[10, 10]} style={{ marginBottom: 6 }}>
+                  {/* Complete/%Complete each carry a KZW/THAI breakdown underneath, making
+                      their column two stacked cards tall; Pending has no such breakdown, so
+                      `align="stretch"` (all three in ONE row) lets its single card grow to
+                      fill that same combined height instead of leaving empty space below it. */}
+                  <Row gutter={[10, 10]} align="stretch" style={{ marginBottom: 10 }}>
                     <Col span={8}>
-                      <MiniStatCard label="Complete" value={scopedStats.complete} color={C.green} C={C} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
+                        <MiniStatCard label="Complete" value={scopedStats.complete} color={C.green} C={C}
+                          onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
+                          dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
+                        <Row gutter={[8, 8]} style={{ flex: 1 }}>
+                          <Col span={12}>
+                            <SubStatCard label="KZW complete" value={scopedStats.completeSaved} color={C.green} C={C} />
+                          </Col>
+                          <Col span={12}>
+                            {scopedStats.complete - scopedStats.completeSaved > 0 && (
+                              <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+                                <div style={{ height: '100%' }}>
+                                  <SubStatCard label="THAI complete *" value={scopedStats.complete - scopedStats.completeSaved}
+                                    color={C.greenSoft} C={C} />
+                                </div>
+                              </Tooltip>
+                            )}
+                          </Col>
+                        </Row>
+                      </div>
                     </Col>
                     <Col span={8}>
-                      <MiniStatCard label="Pending" value={scopedStats.pending} color={C.yellow} C={C} />
+                      <MiniStatCard label="Pending" value={scopedStats.pending} color={C.yellow} C={C}
+                        onClick={() => pickReason('PENDING')} active={filterReason === 'PENDING'}
+                        dimmed={!!filterReason && filterReason !== 'PENDING'} />
                     </Col>
                     <Col span={8}>
-                      <MiniStatCard label="% Complete" value={scopedStats.completePct} suffix="%"
-                        color={scopedStats.completePct >= 90 ? C.green : C.red} C={C} />
-                    </Col>
-                  </Row>
-                  {/* KZW/THAI breakdown — same two columns as Complete / % Complete above,
-                      empty under Pending (pending has no KZW/THAI split). */}
-                  <Row gutter={[10, 10]} style={{ marginBottom: 10 }}>
-                    <Col span={8}>
-                      <Row gutter={[8, 8]}>
-                        <Col span={12}>
-                          <SubStatCard label="KZW complete" value={scopedStats.completeSaved} color={C.green} C={C} />
-                        </Col>
-                        <Col span={12}>
-                          {scopedStats.complete - scopedStats.completeSaved > 0 && (
-                            <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                              <div style={{ height: '100%' }}>
-                                <SubStatCard label="THAI complete *" value={scopedStats.complete - scopedStats.completeSaved}
-                                  color={C.greenSoft} C={C} />
-                              </div>
-                            </Tooltip>
-                          )}
-                        </Col>
-                      </Row>
-                    </Col>
-                    <Col span={8} />
-                    <Col span={8}>
-                      <Row gutter={[8, 8]}>
-                        <Col span={12}>
-                          <SubStatCard label="KZW %" value={scopedStats.completeSavedPct} suffix="%"
-                            color={scopedStats.completeSavedPct >= 90 ? C.green : C.red} C={C} />
-                        </Col>
-                        <Col span={12}>
-                          {scopedStats.completePct - scopedStats.completeSavedPct > 0 && (
-                            <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                              <div style={{ height: '100%' }}>
-                                <SubStatCard label="THAI % *" value={(scopedStats.completePct - scopedStats.completeSavedPct).toFixed(1)} suffix="%"
-                                  color={C.greenSoft} C={C} />
-                              </div>
-                            </Tooltip>
-                          )}
-                        </Col>
-                      </Row>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
+                        <MiniStatCard label="% Complete" value={scopedStats.completePct} suffix="%"
+                          color={scopedStats.completePct >= 90 ? C.green : C.red} C={C}
+                          onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
+                          dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
+                        <Row gutter={[8, 8]} style={{ flex: 1 }}>
+                          <Col span={12}>
+                            <SubStatCard label="KZW %" value={scopedStats.completeSavedPct} suffix="%"
+                              color={scopedStats.completeSavedPct >= 90 ? C.green : C.red} C={C} />
+                          </Col>
+                          <Col span={12}>
+                            {scopedStats.completePct - scopedStats.completeSavedPct > 0 && (
+                              <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+                                <div style={{ height: '100%' }}>
+                                  <SubStatCard label="THAI % *" value={(scopedStats.completePct - scopedStats.completeSavedPct).toFixed(1)} suffix="%"
+                                    color={C.greenSoft} C={C} />
+                                </div>
+                              </Tooltip>
+                            )}
+                          </Col>
+                        </Row>
+                      </div>
                     </Col>
                   </Row>
                   <Row gutter={[10, 10]}>
