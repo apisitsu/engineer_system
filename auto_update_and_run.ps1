@@ -162,6 +162,13 @@ function Ensure-ConstanceConfig {
         }
         $raw = [System.IO.File]::ReadAllText((Resolve-Path $constFile), [System.Text.Encoding]::UTF8)
         if ($raw.Length -gt 0 -and [int]$raw[0] -eq 65279) { $raw = $raw.Substring(1) }
+        
+        # If already configured with getDynamicApiUrl, keep it intact
+        if ($raw -match 'getDynamicApiUrl' -and $raw -match 'export const apiUrl\s*=') {
+            Write-Host "constance.js is already configured with smart dynamic API URL resolution." -ForegroundColor Cyan
+            return
+        }
+
         $updated = $raw -replace '(?m)^(\s*)export const apiUrl\s*=', '$1// export const apiUrl ='
         if ($updated -match '(?m)^\s*//\s*export const apiUrl\s*=\s*"http://plbmp130.lb.minebea.local:2005/";') {
             $updated = $updated -replace '(?m)^\s*//\s*export const apiUrl\s*=\s*"http://plbmp130.lb.minebea.local:2005/";', 'export const apiUrl = "http://plbmp130.lb.minebea.local:2005/";'

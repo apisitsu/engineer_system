@@ -6,10 +6,11 @@ import {
 import { 
     SettingOutlined, SaveOutlined, PlusOutlined, DeleteOutlined, 
     SafetyCertificateOutlined, MailOutlined, TeamOutlined, ControlOutlined,
-    UserOutlined 
+    SendOutlined, ThunderboltOutlined 
 } from '@ant-design/icons';
 import axios from 'axios';
-import { server } from '../../../../../constance/constance';
+import { server, GAS_EMAIL_WEBAPP } from '../../../../../constance/constance';
+import { sendGasEmail } from '../../../../../services/ecntEmailService';
 
 const { Text, Paragraph } = Typography;
 
@@ -18,6 +19,8 @@ const ALL_DEPTS = ['ENG', 'QA', 'QC', 'PD1', 'PD2', 'MC', 'MM', 'PC', 'TOP'];
 export default function EcntSettingsModal({ open, onClose, currentConfig = {}, onConfigUpdated }) {
     const { message: antdMessage } = App.useApp();
     const [loading, setLoading] = useState(false);
+    const [testingEmail, setTestingEmail] = useState(false);
+    const [testEmailResult, setTestEmailResult] = useState(null);
     const [form] = Form.useForm();
 
     const [concernDepts, setConcernDepts] = useState([]);
@@ -68,21 +71,40 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
 
             setConcernDepts(depts);
             setSystemAdmins(admins);
+            setTestEmailResult(null);
 
             form.setFieldsValue({
-                // Eng Mgr
+                // 1. Stage 2-Risk: Lead Engineer (Risk Assessment - พี่โอ)
+                lead_risk_select: assignees.lead_engineer_risk?.emp_no || undefined,
+                lead_risk_emp: assignees.lead_engineer_risk?.emp_no || 'LB269',
+                lead_risk_name: assignees.lead_engineer_risk?.name || 'Nathaporn Yammanus',
+                lead_risk_email: assignees.lead_engineer_risk?.email || 'nathaporn.y@minebea.co.th',
+
+                // 2. Stage 3 & 5 & 10: Eng Dept Manager (พี่แจ็ค)
                 eng_mgr_select: assignees.eng_mgr?.emp_no || undefined,
                 eng_mgr_emp: assignees.eng_mgr?.emp_no || 'LB371',
                 eng_mgr_name: assignees.eng_mgr?.name || 'Teerapol Kantapoom',
                 eng_mgr_email: assignees.eng_mgr?.email || 'teerapol.k@minebea.co.th',
 
-                // QC PIC
-                qc_pic_select: assignees.default_qc_pic?.emp_no || undefined,
-                qc_pic_emp: assignees.default_qc_pic?.emp_no || 'qc_admin',
-                qc_pic_name: assignees.default_qc_pic?.name || 'QC User',
-                qc_pic_email: assignees.default_qc_pic?.email || 'qc.pic@minebea.co.th',
+                // 3. Stage 4 & 8: Default Lead Engineer (ECN Creation & Summary)
+                default_lead_select: assignees.default_lead_engineer?.emp_no || undefined,
+                default_lead_emp: assignees.default_lead_engineer?.emp_no || 'LB269',
+                default_lead_name: assignees.default_lead_engineer?.name || 'Nathaporn Yammanus',
+                default_lead_email: assignees.default_lead_engineer?.email || 'nathaporn.y@minebea.co.th',
 
-                // Dept Mgr mappings
+                // 4. Stage 6: QC MSA Decision PIC
+                qc_msa_select: assignees.qc_msa_pic?.emp_no || assignees.default_qc_pic?.emp_no || undefined,
+                qc_msa_emp: assignees.qc_msa_pic?.emp_no || assignees.default_qc_pic?.emp_no || 'LB125',
+                qc_msa_name: assignees.qc_msa_pic?.name || assignees.default_qc_pic?.name || 'Patcharayada Waiyaboon',
+                qc_msa_email: assignees.qc_msa_pic?.email || assignees.default_qc_pic?.email || 'patcharayada.w@minebea.co.th',
+
+                // 5. Stage 7: QC FAI Decision PIC
+                qc_fai_select: assignees.qc_fai_pic?.emp_no || assignees.default_qc_pic?.emp_no || undefined,
+                qc_fai_emp: assignees.qc_fai_pic?.emp_no || assignees.default_qc_pic?.emp_no || 'LB125',
+                qc_fai_name: assignees.qc_fai_pic?.name || assignees.default_qc_pic?.name || 'Patcharayada Waiyaboon',
+                qc_fai_email: assignees.qc_fai_pic?.email || assignees.default_qc_pic?.email || 'patcharayada.w@minebea.co.th',
+
+                // 6. Dept Mgr mappings (Stage 2)
                 ...ALL_DEPTS.reduce((acc, d) => {
                     const mapped = assignees.dept_mgr_mapping?.[d] || {};
                     acc[`dept_mgr_${d}_select`] = mapped.emp_no || undefined;
@@ -93,10 +115,11 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                 }, {}),
 
                 // Email settings
-                gas_webapp_url: email.gas_webapp_url || '',
+                gas_webapp_url: email.gas_webapp_url || GAS_EMAIL_WEBAPP || 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyBwUbuPNdv9hGJd5s_SjVynpVxW5hPe4I45CtDB614JMeEzEsJTjPw_-GQv7f41o-TIQ/exec',
                 email_enabled: email.enabled !== false,
+                test_recipient: 'nanthiwa.k@minebea.co.th',
                 notify_stages: email.notify_on_stages || [
-                    'STAGE_2', 'STAGE_2_R1', 'STAGE_3', 'STAGE_4', 'STAGE_5_R1', 'STAGE_7', 'STAGE_9', 'STAGE_10'
+                    'STAGE_2', 'STAGE_2_R1', 'STAGE_2_RISK', 'STAGE_3', 'STAGE_3_R1', 'STAGE_4', 'STAGE_5', 'STAGE_5_R1', 'STAGE_6', 'STAGE_7', 'STAGE_8', 'STAGE_9', 'STAGE_10'
                 ]
             });
         }
@@ -133,7 +156,6 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
         return `${u.u_name} (${u.u_code}${nicknamePart})${deptPart}${rolePart}`;
     };
 
-
     const handleSave = async () => {
         try {
             const values = await form.validateFields();
@@ -151,15 +173,35 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
 
             const stage_assignees = {
                 dept_mgr_mapping,
+                lead_engineer_risk: {
+                    emp_no: values.lead_risk_emp || 'LB269',
+                    name: values.lead_risk_name || 'Nathaporn Yammanus',
+                    email: values.lead_risk_email || 'nathaporn.y@minebea.co.th'
+                },
                 eng_mgr: {
-                    emp_no: values.eng_mgr_emp,
-                    name: values.eng_mgr_name,
-                    email: values.eng_mgr_email
+                    emp_no: values.eng_mgr_emp || 'LB371',
+                    name: values.eng_mgr_name || 'Teerapol Kantapoom',
+                    email: values.eng_mgr_email || 'teerapol.k@minebea.co.th'
+                },
+                default_lead_engineer: {
+                    emp_no: values.default_lead_emp || 'LB269',
+                    name: values.default_lead_name || 'Nathaporn Yammanus',
+                    email: values.default_lead_email || 'nathaporn.y@minebea.co.th'
+                },
+                qc_msa_pic: {
+                    emp_no: values.qc_msa_emp || 'LB125',
+                    name: values.qc_msa_name || 'Patcharayada Waiyaboon',
+                    email: values.qc_msa_email || 'patcharayada.w@minebea.co.th'
+                },
+                qc_fai_pic: {
+                    emp_no: values.qc_fai_emp || 'LB125',
+                    name: values.qc_fai_name || 'Patcharayada Waiyaboon',
+                    email: values.qc_fai_email || 'patcharayada.w@minebea.co.th'
                 },
                 default_qc_pic: {
-                    emp_no: values.qc_pic_emp,
-                    name: values.qc_pic_name,
-                    email: values.qc_pic_email
+                    emp_no: values.qc_fai_emp || values.qc_msa_emp || 'LB125',
+                    name: values.qc_fai_name || values.qc_msa_name || 'Patcharayada Waiyaboon',
+                    email: values.qc_fai_email || values.qc_msa_email || 'patcharayada.w@minebea.co.th'
                 }
             };
 
@@ -178,7 +220,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                 axios.post(`${baseUrl}/api/ecnt/config`, {
                     key: 'stage_assignees',
                     value: stage_assignees,
-                    description: 'Mapping of department managers and primary stage PICs'
+                    description: 'Stage Default Assignees and Department Manager Mappings'
                 }, authConfig),
 
                 axios.post(`${baseUrl}/api/ecnt/config`, {
@@ -215,6 +257,64 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
             antdMessage.error(err.response?.data?.error || "Failed to save settings.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Live Test Email via GAS
+    const handleTestSendEmail = async () => {
+        try {
+            const values = await form.getFieldsValue();
+            const gasUrl = values.gas_webapp_url || GAS_EMAIL_WEBAPP;
+            const recipient = values.test_recipient || 'nanthiwa.k@minebea.co.th';
+
+            if (!gasUrl) {
+                antdMessage.error("Please enter a valid Google Apps Script Web App URL first.");
+                return;
+            }
+
+            setTestingEmail(true);
+            setTestEmailResult(null);
+
+            const testPayload = {
+                funct: "sendEcntEmail",
+                recipients: recipient,
+                doc_type: "ECR",
+                doc_no: "ECR-TEST-VERIFY",
+                title: "Live Email Notification Engine Verification Test",
+                customer: "Minebea Internal System Test",
+                requester: values.eng_mgr_name || "System Admin",
+                department: "ENG",
+                stage_title: "3. ECR Risk Assessment & Dept Mgr Verification",
+                priority: "NORMAL",
+                is_rework: false,
+                action_required: "This is a live diagnostic verification email to confirm that Google Apps Script email dispatching works properly.",
+                notes: `Triggered from ECNT V2 System Settings at ${new Date().toLocaleString('en-GB')}`,
+                direct_url: "http://localhost:3000/eng/process_eng/ecnt_v2"
+            };
+
+            const result = await sendGasEmail(gasUrl, testPayload);
+            if (result.success) {
+                setTestEmailResult({
+                    status: 'success',
+                    message: `✅ Test email successfully dispatched to ${recipient}! Please check inbox/spam folder.`
+                });
+                antdMessage.success(`Test email dispatched to ${recipient}!`);
+            } else {
+                setTestEmailResult({
+                    status: 'error',
+                    message: `❌ Email test encountered an issue: ${result.error || result.reason || 'Failed'}`
+                });
+                antdMessage.warning("Dispatched via fallback mode. Please check recipient inbox.");
+            }
+        } catch (err) {
+            console.error("Test email error:", err);
+            setTestEmailResult({
+                status: 'error',
+                message: `❌ Exception: ${err.message}`
+            });
+            antdMessage.error(`Failed to send test email: ${err.message}`);
+        } finally {
+            setTestingEmail(false);
         }
     };
 
@@ -438,6 +538,56 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
         }
     ];
 
+    // Helper renderer for PIC configuration row
+    const renderPicConfigRow = ({ title, tag, tagColor, prefix, required = true }) => (
+        <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
+            <Row gutter={12} align="bottom">
+                <Col xs={24} md={10}>
+                    <Form.Item 
+                        name={`${prefix}_select`} 
+                        label={
+                            <Space size={6}>
+                                <Tag color={tagColor} style={{ fontWeight: 700, margin: 0 }}>{tag}</Tag>
+                                <Text strong>{title}</Text>
+                            </Space>
+                        }
+                        style={{ marginBottom: 4 }}
+                    >
+                        <Select
+                            showSearch
+                            placeholder="🔍 Pick from registered users..."
+                            allowClear
+                            loading={loadingUsers}
+                            onChange={(val) => handleSelectCandidate(val, prefix)}
+                            filterOption={(input, option) =>
+                                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                            options={userCandidates.map(u => ({
+                                value: u.u_code,
+                                label: formatUserOptionLabel(u)
+                            }))}
+                        />
+                    </Form.Item>
+                </Col>
+                <Col xs={24} md={5}>
+                    <Form.Item name={`${prefix}_name`} label="PIC Name" rules={required ? [{ required: true }] : []} style={{ marginBottom: 4 }}>
+                        <Input placeholder="Full Name" />
+                    </Form.Item>
+                </Col>
+                <Col xs={24} md={4}>
+                    <Form.Item name={`${prefix}_emp`} label="Emp ID" rules={required ? [{ required: true }] : []} style={{ marginBottom: 4 }}>
+                        <Input placeholder="Emp No" />
+                    </Form.Item>
+                </Col>
+                <Col xs={24} md={5}>
+                    <Form.Item name={`${prefix}_email`} label="Email" rules={required ? [{ required: true, type: 'email' }] : []} style={{ marginBottom: 4 }}>
+                        <Input placeholder="Email" />
+                    </Form.Item>
+                </Col>
+            </Row>
+        </div>
+    );
+
     return (
         <Modal
             open={open}
@@ -448,7 +598,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                     <span style={{ fontSize: 16, fontWeight: 700 }}>ECNT V2 System Settings & Dynamic Stage Configuration</span>
                 </Space>
             }
-            width={960}
+            width={980}
             footer={[
                 <Button key="cancel" onClick={onClose}>
                     Cancel
@@ -472,122 +622,80 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                     items={[
                         {
                             key: 'stage_pics',
-                            label: <span><TeamOutlined /> Stage PICs & Managers</span>,
+                            label: <span><TeamOutlined /> Stage PICs & Default Assignees</span>,
                             children: (
-                                <div style={{ maxHeight: '62vh', overflowY: 'auto', paddingRight: 8 }}>
+                                <div style={{ maxHeight: '64vh', overflowY: 'auto', paddingRight: 8 }}>
                                     <Alert
-                                        message="Registered Personnel Selection"
-                                        description="You can select personnel directly from registered company users (test accounts with nickname 'Admin' are automatically filtered out). Selecting a user automatically populates Name, Emp No, and Email."
+                                        message="Stage Default Assignees Configuration (การตั้งค่าผู้รับผิดชอบเริ่มต้นแต่ละขั้นตอน)"
+                                        description="คุณสามารถระบุผู้รับผิดชอบเริ่มต้น (Default PIC) สำหรับแต่ละขั้นตอนที่สำคัญได้โดยเลือกจากรายชื่อพนักงานในระบบ (ระบบจะตัดบัญชีทดสอบ 'Admin' ออกอัตโนมัติ) หรือระบุข้อมูลชื่อ รหัส และอีเมลโดยตรง การตั้งค่านี้จะถูกนำไปใช้ทันทีกับ Stepper, การแจ้งเตือน Email และการตรวจสอบสิทธิ์ในระบบ"
                                         type="info"
                                         showIcon
                                         style={{ marginBottom: 16 }}
                                     />
 
-                                    {/* 1. Global Engineering & QC Assignees */}
+                                    {/* 1. Core Engineering & Decision Stages */}
                                     <Card 
                                         size="small" 
-                                        title={<Space><UserOutlined style={{ color: '#1890ff' }} /><Text strong>Global Engineering & QC Assignees</Text></Space>} 
+                                        title={
+                                            <Space>
+                                                <ThunderboltOutlined style={{ color: '#1890ff' }} />
+                                                <Text strong>Core Stage Default Assignees (ผู้รับผิดชอบหลักประจำแต่ละ Stage)</Text>
+                                            </Space>
+                                        } 
                                         style={{ marginBottom: 16, borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
                                     >
-                                        {/* Engineering Manager */}
-                                        <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
-                                            <Row gutter={12} align="bottom">
-                                                <Col xs={24} md={10}>
-                                                    <Form.Item 
-                                                        name="eng_mgr_select" 
-                                                        label={<Text strong>Select Engineering Manager</Text>}
-                                                        style={{ marginBottom: 4 }}
-                                                    >
-                                                        <Select
-                                                            showSearch
-                                                            placeholder="🔍 Pick from registered users..."
-                                                            allowClear
-                                                            loading={loadingUsers}
-                                                            onChange={(val) => handleSelectCandidate(val, 'eng_mgr')}
-                                                            filterOption={(input, option) =>
-                                                                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                                                            }
-                                                            options={userCandidates.map(u => ({
-                                                                value: u.u_code,
-                                                                label: formatUserOptionLabel(u)
-                                                            }))}
-                                                        />
-                                                    </Form.Item>
-                                                </Col>
-                                                <Col xs={24} md={5}>
-                                                    <Form.Item name="eng_mgr_name" label="Manager Name" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
-                                                        <Input placeholder="Full Name" />
-                                                    </Form.Item>
-                                                </Col>
-                                                <Col xs={24} md={4}>
-                                                    <Form.Item name="eng_mgr_emp" label="Emp ID" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
-                                                        <Input placeholder="Emp No" />
-                                                    </Form.Item>
-                                                </Col>
-                                                <Col xs={24} md={5}>
-                                                    <Form.Item name="eng_mgr_email" label="Email" rules={[{ required: true, type: 'email' }]} style={{ marginBottom: 4 }}>
-                                                        <Input placeholder="Email" />
-                                                    </Form.Item>
-                                                </Col>
-                                            </Row>
-                                        </div>
+                                        {/* Stage 2-Risk: Lead Engineer Risk Assessment */}
+                                        {renderPicConfigRow({
+                                            title: 'Stage 2-Risk: Lead Engineer (Technical Risk Assessment - พี่โอ)',
+                                            tag: 'STAGE 2-RISK',
+                                            tagColor: 'cyan',
+                                            prefix: 'lead_risk'
+                                        })}
 
-                                        {/* Default QC PIC */}
-                                        <div>
-                                            <Row gutter={12} align="bottom">
-                                                <Col xs={24} md={10}>
-                                                    <Form.Item 
-                                                        name="qc_pic_select" 
-                                                        label={<Text strong>Select Default QC MSA/FAI PIC</Text>}
-                                                        style={{ marginBottom: 4 }}
-                                                    >
-                                                        <Select
-                                                            showSearch
-                                                            placeholder="🔍 Pick from registered users..."
-                                                            allowClear
-                                                            loading={loadingUsers}
-                                                            onChange={(val) => handleSelectCandidate(val, 'qc_pic')}
-                                                            filterOption={(input, option) =>
-                                                                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                                                            }
-                                                            options={userCandidates.map(u => ({
-                                                                value: u.u_code,
-                                                                label: formatUserOptionLabel(u)
-                                                            }))}
-                                                        />
-                                                    </Form.Item>
-                                                </Col>
-                                                <Col xs={24} md={5}>
-                                                    <Form.Item name="qc_pic_name" label="QC PIC Name" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
-                                                        <Input placeholder="Full Name" />
-                                                    </Form.Item>
-                                                </Col>
-                                                <Col xs={24} md={4}>
-                                                    <Form.Item name="qc_pic_emp" label="Emp ID" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
-                                                        <Input placeholder="Emp No" />
-                                                    </Form.Item>
-                                                </Col>
-                                                <Col xs={24} md={5}>
-                                                    <Form.Item name="qc_pic_email" label="Email" rules={[{ required: true, type: 'email' }]} style={{ marginBottom: 4 }}>
-                                                        <Input placeholder="Email" />
-                                                    </Form.Item>
-                                                </Col>
-                                            </Row>
-                                        </div>
+                                        {/* Stage 3 & 5 & 10: Engineering Department Manager */}
+                                        {renderPicConfigRow({
+                                            title: 'Stage 3, 5, 10: Engineering Department Manager (ผู้จัดการแผนกวิศวกรรม - พี่แจ็ค)',
+                                            tag: 'ENG MGR',
+                                            tagColor: 'blue',
+                                            prefix: 'eng_mgr'
+                                        })}
+
+                                        {/* Stage 4 & 8: Default Lead Engineer for ECN Formulation */}
+                                        {renderPicConfigRow({
+                                            title: 'Stage 4 & 8: Default Lead Engineer (ECN Formulation & Summary - พี่โอ)',
+                                            tag: 'STAGE 4 & 8',
+                                            tagColor: 'geekblue',
+                                            prefix: 'default_lead'
+                                        })}
+
+                                        {/* Stage 6: QC MSA Decision PIC */}
+                                        {renderPicConfigRow({
+                                            title: 'Stage 6: QC MSA Decision PIC (ผู้ประเมินระบบการวัด MSA)',
+                                            tag: 'STAGE 6 QC',
+                                            tagColor: 'gold',
+                                            prefix: 'qc_msa'
+                                        })}
+
+                                        {/* Stage 7: QC FAI Decision PIC */}
+                                        {renderPicConfigRow({
+                                            title: 'Stage 7: QC FAI Decision PIC (ผู้ประเมินการตรวจชิ้นงาน FAI)',
+                                            tag: 'STAGE 7 QC',
+                                            tagColor: 'orange',
+                                            prefix: 'qc_fai'
+                                        })}
                                     </Card>
 
                                     {/* 2. Department Managers Mapping */}
                                     <Card 
                                         size="small" 
-                                        title={<Space><TeamOutlined style={{ color: '#52c41a' }} /><Text strong>Department Managers Mapping (Block 3 Approval Routing)</Text></Space>} 
+                                        title={<Space><TeamOutlined style={{ color: '#52c41a' }} /><Text strong>Department Managers Mapping (Block 3 Approval Routing ตามแผนก)</Text></Space>} 
                                         style={{ borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
                                     >
                                         <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
-                                            When an ECR is created for a specific department, its Block 3 approval request is dispatched to the manager configured below.
+                                            เมื่อมีการสร้าง ECR จากแผนกใด ระบบจะส่งคำขออนุมัติ Block 3 ไปยังผู้จัดการของแผนกนั้นตามที่กำหนดด้านล่างนี้
                                         </Paragraph>
 
                                         {ALL_DEPTS.map(dept => {
-                                            // Pre-sort candidates so users of this department appear first
                                             const deptSortedCandidates = [...userCandidates].sort((a, b) => {
                                                 const aMatch = a.u_department === dept ? -1 : 1;
                                                 const bMatch = b.u_department === dept ? -1 : 1;
@@ -689,7 +797,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                             key: 'email_settings',
                             label: <span><MailOutlined /> GAS & Email Notifications</span>,
                             children: (
-                                <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                                <div style={{ maxHeight: '64vh', overflowY: 'auto', paddingRight: 8 }}>
                                     <Card size="small" style={{ borderRadius: 8, marginBottom: 16 }}>
                                         <Form.Item 
                                             name="email_enabled" 
@@ -733,10 +841,18 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                                                             </Checkbox>
                                                         </Col>
                                                         <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_2_RISK">
+                                                                <Space size={6}>
+                                                                    <Tag color="cyan" style={{ margin: 0, fontSize: 11 }}>Stage 2-Risk</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Lead Engineer Risk Assessment</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
                                                             <Checkbox value="STAGE_3">
                                                                 <Space size={6}>
-                                                                    <Tag color="cyan" style={{ margin: 0, fontSize: 11 }}>Stage 3</Tag>
-                                                                    <Text style={{ fontSize: 13 }}>Eng Dept Manager Review</Text>
+                                                                    <Tag color="geekblue" style={{ margin: 0, fontSize: 11 }}>Stage 3</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Eng Dept Manager ECR Review</Text>
                                                                 </Space>
                                                             </Checkbox>
                                                         </Col>
@@ -751,8 +867,16 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                                                         <Col xs={24} sm={12}>
                                                             <Checkbox value="STAGE_4">
                                                                 <Space size={6}>
-                                                                    <Tag color="geekblue" style={{ margin: 0, fontSize: 11 }}>Stage 4</Tag>
+                                                                    <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>Stage 4</Tag>
                                                                     <Text style={{ fontSize: 13 }}>Assigned Engineer ECN Creation</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_5">
+                                                                <Space size={6}>
+                                                                    <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>Stage 5</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Eng Dept Manager ECN Review</Text>
                                                                 </Space>
                                                             </Checkbox>
                                                         </Col>
@@ -765,17 +889,33 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                                                             </Checkbox>
                                                         </Col>
                                                         <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_6">
+                                                                <Space size={6}>
+                                                                    <Tag color="gold" style={{ margin: 0, fontSize: 11 }}>Stage 6</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>QC MSA Decision</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
                                                             <Checkbox value="STAGE_7">
                                                                 <Space size={6}>
-                                                                    <Tag color="magenta" style={{ margin: 0, fontSize: 11 }}>Stage 7</Tag>
-                                                                    <Text style={{ fontSize: 13 }}>QC MSA & FAI Evaluation</Text>
+                                                                    <Tag color="volcano" style={{ margin: 0, fontSize: 11 }}>Stage 7</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>QC FAI Decision</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_8">
+                                                                <Space size={6}>
+                                                                    <Tag color="magenta" style={{ margin: 0, fontSize: 11 }}>Stage 8</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Eng Summary & Concern Dispatch</Text>
                                                                 </Space>
                                                             </Checkbox>
                                                         </Col>
                                                         <Col xs={24} sm={12}>
                                                             <Checkbox value="STAGE_9">
                                                                 <Space size={6}>
-                                                                    <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>Stage 9</Tag>
+                                                                    <Tag color="green" style={{ margin: 0, fontSize: 11 }}>Stage 9</Tag>
                                                                     <Text style={{ fontSize: 13 }}>Concern Multi-Dept Sign-offs</Text>
                                                                 </Space>
                                                             </Checkbox>
@@ -783,7 +923,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                                                         <Col xs={24} sm={12}>
                                                             <Checkbox value="STAGE_10">
                                                                 <Space size={6}>
-                                                                    <Tag color="green" style={{ margin: 0, fontSize: 11 }}>Stage 10</Tag>
+                                                                    <Tag color="success" style={{ margin: 0, fontSize: 11 }}>Stage 10</Tag>
                                                                     <Text style={{ fontSize: 13 }}>Final Close & ECN Release</Text>
                                                                 </Space>
                                                             </Checkbox>
@@ -794,11 +934,58 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                                         </Form.Item>
                                     </Card>
 
+                                    {/* 3. Live Email Dispatch Verification Panel */}
+                                    <Card 
+                                        size="small" 
+                                        title={<Space><SendOutlined style={{ color: '#52c41a' }} /><Text strong>Live Email Dispatch Verification (ทดสอบส่งอีเมลทันที)</Text></Space>} 
+                                        style={{ borderRadius: 8, marginBottom: 16, border: '1px solid #b7eb8f', background: '#f6ffed' }}
+                                    >
+                                        <Paragraph style={{ fontSize: 12, marginBottom: 8, color: '#389e0d' }}>
+                                            คุณสามารถกดส่งอีเมลทดสอบจริงจากหน้านี้ไปยัง <b>nanthiwa.k@minebea.co.th</b> หรือระบุอีเมลอื่นเพื่อทดสอบการเชื่อมต่อกับ Google Apps Script ได้ทันที
+                                        </Paragraph>
+
+                                        <Row gutter={12} align="bottom">
+                                            <Col xs={24} md={15}>
+                                                <Form.Item 
+                                                    name="test_recipient" 
+                                                    label={<Text strong>Email ผู้รับสำหรับการทดสอบ</Text>}
+                                                    style={{ marginBottom: 4 }}
+                                                >
+                                                    <Input placeholder="nanthiwa.k@minebea.co.th" />
+                                                </Form.Item>
+                                            </Col>
+                                            <Col xs={24} md={9}>
+                                                <Button 
+                                                    type="primary" 
+                                                    icon={<SendOutlined />} 
+                                                    loading={testingEmail}
+                                                    onClick={handleTestSendEmail}
+                                                    style={{ background: '#52c41a', borderColor: '#52c41a', width: '100%', marginBottom: 4 }}
+                                                >
+                                                    ส่งอีเมลทดสอบหา nanthiwa.k
+                                                </Button>
+                                            </Col>
+                                        </Row>
+
+                                        {testEmailResult && (
+                                            <Alert
+                                                message={testEmailResult.message}
+                                                type={testEmailResult.status === 'success' ? 'success' : 'warning'}
+                                                showIcon
+                                                style={{ marginTop: 12 }}
+                                            />
+                                        )}
+
+                                        <div style={{ marginTop: 10, fontSize: 11, color: '#666' }}>
+                                            🔗 ต้องการเปิดเครื่องมือทดสอบเต็มรูปแบบ? <a href="/test_mail.html" target="_blank" rel="noreferrer">คลิกที่นี่เพื่อเปิด test_mail.html ในแท็บใหม่</a>
+                                        </div>
+                                    </Card>
+
                                     <Card size="small" title={<Text strong>Google Apps Script Deployment Quick Reference</Text>} style={{ borderRadius: 8, background: '#fafafa' }}>
                                         <Paragraph style={{ fontSize: 12, margin: 0, color: '#595959' }}>
-                                            The standalone Google Apps Script file is located at <code>src/utils/gas_enterprise_email_engine.gs</code>.<br />
+                                            The standalone Google Apps Script file is located at <code>apps/ENG-Frontend/src/utils/gas_enterprise_email_engine.gs</code>.<br />
                                             1. Paste that code into Google Apps Script at script.google.com<br />
-                                            2. Deploy as Web App with <strong>Execute as: Me</strong> and <strong>Who has access: Anyone</strong>.<br />
+                                            2. Deploy as Web App with <strong>Execute as: Me</strong> and <strong>Who has access: Anyone</strong> (or Anyone within minebea.co.th).<br />
                                             3. Paste the generated deployment URL above.
                                         </Paragraph>
                                     </Card>
@@ -809,7 +996,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                             key: 'system_admins',
                             label: <span><SafetyCertificateOutlined /> Authorized Admins</span>,
                             children: (
-                                <div style={{ maxHeight: '62vh', overflowY: 'auto', paddingRight: 8 }}>
+                                <div style={{ maxHeight: '64vh', overflowY: 'auto', paddingRight: 8 }}>
                                     <Alert
                                         message="Authorized System Administrators"
                                         description="Users configured below are granted full privileges to access and modify ECNT System Settings, regardless of standard stage ownership."

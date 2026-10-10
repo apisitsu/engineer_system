@@ -7,11 +7,12 @@ import moment from 'moment';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
 import { DISCUSSION_CATEGORIES } from '../utils/ecntConstants';
+import { uploadEcntFileToDrive } from '../../../../../utils/uploadFileToDrive';
 
 const { TextArea } = Input;
 const { Text, Paragraph } = Typography;
 
-export default function DiscussionThread({ documentType, documentId, activeStageCode }) {
+export default function DiscussionThread({ documentType, documentId, activeStageCode, ecrNo = '', ecnNo = '' }) {
     const { message: antdMessage } = App.useApp();
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -44,29 +45,44 @@ export default function DiscussionThread({ documentType, documentId, activeStage
     }, [documentType, documentId]);
 
     const handleUploadFile = async (file) => {
-        setUploading(true);
+        // Open helper popup synchronously within user click/interaction gesture
+        let popup = null;
         try {
-            const formData = new FormData();
-            formData.append('file', file);
+            popup = window.open('about:blank', 'gas_upload', 'width=460,height=420,left=350,top=150');
+        } catch (e) {
+            popup = null;
+        }
 
-            const res = await axios.post(`${server.URL}/api/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                withCredentials: true
-            });
+        setUploading(true);
+        const msgKey = `disc_up_${Date.now()}`;
+        antdMessage.loading({ content: `กำลังอัปโหลด ${file.name} ไปยัง Google Drive...`, key: msgKey, duration: 0 });
+        try {
+            const targetEcr = ecrNo || (documentType === 'ECR' ? `ECR_${documentId}` : '') || 'ECNT_General';
+            const targetEcn = ecnNo || (documentType === 'ECN' ? `ECN_${documentId}` : '');
 
-            if (res.data && res.data.success) {
+            const gasRes = await uploadEcntFileToDrive(file, {
+                ecrNo: targetEcr,
+                ecnNo: targetEcn,
+                fieldName: 'discussion'
+            }, { popup });
+
+            if (gasRes && gasRes.success) {
                 const newAtt = {
-                    file_name: res.data.file_name,
-                    file_url: res.data.file_url,
-                    file_type: file.type || '',
-                    file_size: file.size || null
+                    file_name: gasRes.fileName || file.name,
+                    file_url: gasRes.webViewLink,
+                    file_type: gasRes.mimeType || file.type || '',
+                    file_size: gasRes.fileSize || file.size || null,
+                    drive_file_id: gasRes.fileId,
+                    drive_folder_url: gasRes.folderUrl
                 };
                 setAttachments(prev => [...prev, newAtt]);
-                antdMessage.success("Image/File attached successfully");
+                antdMessage.success({ content: `แนบไฟล์ ${file.name} จาก Google Drive สำเร็จ`, key: msgKey, duration: 3 });
+            } else {
+                throw new Error(gasRes?.error || "Failed to upload to Google Drive");
             }
         } catch (err) {
-            console.error("Upload error:", err);
-            antdMessage.error("Failed to upload attachment");
+            console.error("[DiscussionThread] Upload error:", err);
+            antdMessage.error({ content: `ไม่สามารถอัปโหลดไปยัง Google Drive ได้: ${err.message}`, key: msgKey, duration: 4 });
         } finally {
             setUploading(false);
         }
@@ -126,6 +142,12 @@ export default function DiscussionThread({ documentType, documentId, activeStage
 
     const getFullUrl = (url) => {
         if (!url) return '';
+        if (url.includes('drive.google.com')) {
+            const fileIdMatch = url.match(/\/d\/([^/?#]+)/) || url.match(/[?&]id=([^/&?#]+)/);
+            if (fileIdMatch && fileIdMatch[1]) {
+                return `https://drive.google.com/thumbnail?id=${fileIdMatch[1]}&sz=w800`;
+            }
+        }
         if (url.startsWith('http')) return url;
         return `${server.URL}${url}`;
     };

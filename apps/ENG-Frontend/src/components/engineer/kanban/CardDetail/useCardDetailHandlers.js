@@ -14,6 +14,7 @@
 import { useCallback } from 'react';
 import { useKanbanStore } from '../store/kanbanStore';
 import { GAS_DRIVE_URL } from '../../../../constance/constance';
+import { openGoogleDriveAuthWindow } from '../../../../utils/uploadFileToDrive';
 import Swal from 'sweetalert2';
 
 /**
@@ -366,15 +367,73 @@ export const useCardDetailHandlers = (deps) => {
 
             if (!result.isConfirmed) return;
 
-            // Open popup from Swal confirm click (fresh user gesture)
-            const popup = window.open('about:blank', 'gas_upload', 'width=480,height=520,left=300,top=100');
+            // Open helper popup synchronously from user confirmation gesture
+            let popup = null;
+            try {
+                popup = window.open('about:blank', 'gas_upload', 'width=460,height=420,left=350,top=150');
+            } catch (e) {
+                popup = null;
+            }
+
+            // In-page uploading status modal on the main dashboard
+            Swal.fire({
+                title: 'กำลังอัปโหลดไฟล์...',
+                html: `<div style="text-align:center;font-size:14px;padding:8px 0;">
+                    <p style="margin:0 0 8px;font-weight:600;color:#1e293b;">📄 ${file.name}</p>
+                    <p style="margin:0;color:#64748b;font-size:13px;">ระบบกำลังนำส่งไฟล์ไปยัง Google Drive กรุณารอสักครู่...</p>
+                </div>`,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
 
             setIsUploadingFile(true);
             try {
-                await addFileAttachment(card.id, file, popup);
+                await addFileAttachment(card.id, file, { popup });
+                Swal.fire({
+                    icon: 'success',
+                    title: 'อัปโหลดสำเร็จ',
+                    text: `ไฟล์ ${file.name} ถูกบันทึกลงใน Google Drive แล้ว`,
+                    timer: 2000,
+                    showConfirmButton: false,
+                });
             } catch (err) {
                 console.error('[CardDetail] File upload failed:', err);
                 try { if (popup && !popup.closed) popup.close(); } catch {}
+                const errMsg = err.message || '';
+                const isAuthError = err.isAuthRequired || 
+                                    errMsg.toLowerCase().includes('auth') || 
+                                    errMsg.toLowerCase().includes('permission') || 
+                                    errMsg.toLowerCase().includes('timed out') ||
+                                    errMsg.toLowerCase().includes('สิทธิ์');
+
+                if (isAuthError) {
+                    const authPrompt = await Swal.fire({
+                        icon: 'warning',
+                        title: 'จำเป็นต้องยืนยันสิทธิ์ Google Drive',
+                        html: `<div style="font-size:13px;color:#475569;text-align:left;">
+                            <p>ไม่สามารถอัปโหลดไฟล์ในเบื้องหลังได้ เนื่องจากระบบต้องการการเข้าสู่ระบบหรืออนุญาตสิทธิ์ Google Apps Script ก่อน</p>
+                            <p style="color:#ef4444;margin:6px 0 0;font-size:12px;">รายละเอียด: ${errMsg}</p>
+                        </div>`,
+                        showCancelButton: true,
+                        confirmButtonText: '🔑 เปิดหน้าต่างยืนยันสิทธิ์ (Popup)',
+                        cancelButtonText: 'ปิด',
+                        confirmButtonColor: theme.colors.primary,
+                    });
+
+                    if (authPrompt.isConfirmed) {
+                        openGoogleDriveAuthWindow();
+                    }
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'เกิดข้อผิดพลาดในการอัปโหลด',
+                        text: errMsg,
+                    });
+                }
             } finally {
                 setIsUploadingFile(false);
             }

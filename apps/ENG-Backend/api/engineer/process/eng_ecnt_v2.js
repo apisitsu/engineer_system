@@ -16,11 +16,22 @@ const generateEcrNo = async () => {
     return `${prefix}${seq.toString().padStart(2, '0')}`;
 };
 
+const getNextEcrNo = async (req, res) => {
+    try {
+        const nextNo = await generateEcrNo();
+        res.json({ success: true, nextEcrNo: nextNo });
+    } catch (err) {
+        console.error("getNextEcrNo Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
 // Stage Definition Lookup
 const STAGE_META = {
     STAGE_1: { title: '1. ECR Initiation', type: 'STANDARD', picRole: 'Requester' },
     STAGE_2: { title: '2. Dept Mgr Review', type: 'DECISION', picRole: 'Dept Manager' },
     STAGE_2_R1: { title: '2-R1. Dept Mgr Clarification (Requester Rework)', type: 'RETURN_LOOP', picRole: 'Requester' },
+    STAGE_2_RISK: { title: '2.5. ECR Risk Assessment', type: 'STANDARD', picRole: 'Eng. Assigned', defaultPic: 'NATHAPORN YAMMANUS' },
     STAGE_3: { title: '3. Eng Dept Mgr ECR Review', type: 'DECISION', picRole: 'Eng. Dept Manager', defaultPic: 'TEERAPOL KANTAPOOM' },
     STAGE_3_R1: { title: '3-R1. Eng Mgr Clarification (Requester Rework)', type: 'RETURN_LOOP', picRole: 'Requester' },
     STAGE_4: { title: '4. ECN Creation & Impact Assessment', type: 'STANDARD', picRole: 'Eng. Assigned', defaultPic: 'NATHAPORN YAMMANUS' },
@@ -126,8 +137,19 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
                 return { authorized: false, reason: `Only the requester (${ecr.request_by_name || ecr.request_by}) is authorized to revise or resubmit this ECR.` };
             }
 
-            // Block 3: Dept Mgr Review
+            // Block 3: Dept Mgr Review or Risk Assessment
             if (blockNumber === 3) {
+                if (ecr.current_stage_code === 'STAGE_2_RISK' || ecr.process_status === 'Pending Risk Assessment') {
+                    const configuredLeadRisk = stageAssignees?.lead_engineer_risk;
+                    const isConfiguredRiskPic = configuredLeadRisk && (
+                        (configuredLeadRisk.emp_no || '').toLowerCase() === empno ||
+                        (configuredLeadRisk.name || '').toLowerCase() === name
+                    );
+                    const isRiskPic = isConfiguredRiskPic || dept === 'ENG' || (ecr.assigned_to || '').toLowerCase() === empno || (ecr.assigned_to || '').toLowerCase() === name || name.includes('nathaporn');
+                    if (isRiskPic) return { authorized: true, roleLabel: 'Lead Engineer (Risk Assessment)' };
+                    return { authorized: false, reason: "Only the Assigned Lead Engineer is authorized to perform Risk Assessment." };
+                }
+
                 const configuredDeptMgr = stageAssignees?.dept_mgr_mapping?.[ecr.department];
                 const isConfiguredMgr = configuredDeptMgr && (configuredDeptMgr.emp_no || '').toLowerCase() === empno;
                 const isDeptMgrRole = dept === (ecr.department || '').toUpperCase() && (role === 'MGR' || role === 'MANAGER');
@@ -173,9 +195,14 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
 
             // Block 5: ECN Creation & Return Loop Rework (STAGE_5_R1)
             if (blockNumber === 5) {
+                const configuredLeadEng = stageAssignees?.default_lead_engineer;
+                const isConfiguredLeadEng = configuredLeadEng && (
+                    (configuredLeadEng.emp_no || '').toLowerCase() === empno ||
+                    (configuredLeadEng.name || '').toLowerCase() === name
+                );
                 const isAssignedEng = (ecn.engineer_assigned || '').toLowerCase() === empno || 
                                       (ecn.engineer_assigned || '').toLowerCase() === name || 
-                                      dept === 'ENG';
+                                      dept === 'ENG' || isConfiguredLeadEng;
                 if (isAssignedEng) return { authorized: true, roleLabel: 'Assigned Engineer' };
                 return { authorized: false, reason: `Only the assigned engineer (${ecn.engineer_assigned}) is authorized to formulate or revise this ECN.` };
             }
@@ -197,18 +224,26 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
 
             // Block 7 & 8: QC MSA & FAI Decisions
             if (blockNumber === 7 || blockNumber === 8) {
-                const configuredQcPic = stageAssignees?.default_qc_pic;
-                const isConfiguredQc = configuredQcPic && (configuredQcPic.emp_no || '').toLowerCase() === empno;
+                const configuredQcPic = (blockNumber === 7 ? stageAssignees?.qc_msa_pic : stageAssignees?.qc_fai_pic) || stageAssignees?.default_qc_pic;
+                const isConfiguredQc = configuredQcPic && (
+                    (configuredQcPic.emp_no || '').toLowerCase() === empno ||
+                    (configuredQcPic.name || '').toLowerCase() === name
+                );
                 const isQcRole = dept === 'QC' || role === 'QC';
                 if (isConfiguredQc || isQcRole) return { authorized: true, roleLabel: 'Quality Control (QC) Evaluator' };
-                return { authorized: false, reason: "Only Quality Control (QC) personnel are authorized to submit MSA and FAI decisions." };
+                return { authorized: false, reason: `Only Quality Control (QC) personnel are authorized to submit ${blockNumber === 7 ? 'MSA' : 'FAI'} decisions.` };
             }
 
             // Block 9: Engineer Summary & Concern Setup
             if (blockNumber === 9) {
+                const configuredLeadEng = stageAssignees?.default_lead_engineer;
+                const isConfiguredLeadEng = configuredLeadEng && (
+                    (configuredLeadEng.emp_no || '').toLowerCase() === empno ||
+                    (configuredLeadEng.name || '').toLowerCase() === name
+                );
                 const isAssignedEng = (ecn.engineer_assigned || '').toLowerCase() === empno || 
                                       (ecn.engineer_assigned || '').toLowerCase() === name || 
-                                      dept === 'ENG';
+                                      dept === 'ENG' || isConfiguredLeadEng;
                 if (isAssignedEng) return { authorized: true, roleLabel: 'Assigned Engineer' };
                 return { authorized: false, reason: `Only the assigned engineer (${ecn.engineer_assigned}) is authorized to configure concern department tasks.` };
             }
@@ -265,8 +300,16 @@ const createEcr = async (req, res) => {
         const requestByName = req.user?.name || data.request_by_name || 'Unknown';
         const department = req.user?.department || data.department || 'ENG';
 
-        // Auto generate ecr_no after block 1 finish (per Excel requirement)
-        const ecrNo = await generateEcrNo();
+        // Auto generate or validate ecr_no
+        let ecrNo = data.ecr_no;
+        if (!ecrNo) {
+            ecrNo = await generateEcrNo();
+        } else {
+            const checkRes = await client.query(`SELECT id FROM ecnt2_ecr WHERE ecr_no = $1`, [ecrNo]);
+            if (checkRes.rows.length > 0) {
+                ecrNo = await generateEcrNo();
+            }
+        }
 
         const sql = `
             INSERT INTO ecnt2_ecr (
@@ -343,12 +386,14 @@ const createEcr = async (req, res) => {
                 await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
-                        file_name, file_url, file_type, file_size, uploaded_by
-                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8)
+                        file_name, file_url, file_type, file_size, uploaded_by,
+                        drive_file_id, drive_folder_url
+                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `, [
                     newId, att.block_number || 2, att.field_name || null,
                     att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                    requestByName
+                    requestByName,
+                    att.drive_file_id || null, att.drive_folder_url || null
                 ]);
             }
         }
@@ -461,23 +506,44 @@ const resubmitEcr = async (req, res) => {
             ) VALUES ('ECR', $1, $2, 'REVISION_RESPONSE', $3, $4, $5, 'Requester', $6)
         `, [id, nextStage, actionBy, actionByName, old.department || 'ENG', data.comment || 'Requester resubmitted updated specifications and documentation.']);
 
-        // Insert field attachments if provided
+        // Insert and sync field attachments if provided
         if (data.attachments && Array.isArray(data.attachments)) {
+            const keptIds = data.attachments.filter(a => a.id).map(a => Number(a.id)).filter(id => !isNaN(id));
+            if (keptIds.length > 0) {
+                await client.query(`
+                    DELETE FROM ecnt2_attachment 
+                    WHERE document_type = 'ECR' AND document_id = $1 
+                      AND id NOT IN (${keptIds.join(',')})
+                      AND (field_name IN ('dwg_before_change', 'dwg_after_change', 'reason_of_change', 'prog_before_change', 'prog_condition_before', 'prog_after_change', 'prog_condition_after', 'usage_before_change', 'usage_after_change') OR block_number IN (1, 2))
+                `, [id]);
+            } else {
+                await client.query(`
+                    DELETE FROM ecnt2_attachment 
+                    WHERE document_type = 'ECR' AND document_id = $1 
+                      AND (field_name IN ('dwg_before_change', 'dwg_after_change', 'reason_of_change', 'prog_before_change', 'prog_condition_before', 'prog_after_change', 'prog_condition_after', 'usage_before_change', 'usage_after_change') OR block_number IN (1, 2))
+                `, [id]);
+            }
+
             for (const att of data.attachments) {
                 if (!att.id) {
                     await client.query(`
                         INSERT INTO ecnt2_attachment (
                             document_type, document_id, block_number, field_name,
-                            file_name, file_url, file_type, file_size, uploaded_by
-                        ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8)
+                            file_name, file_url, file_type, file_size, uploaded_by,
+                            drive_file_id, drive_folder_url
+                        ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     `, [
                         id, att.block_number || 2, att.field_name || null,
                         att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                        actionByName
+                        actionByName,
+                        att.drive_file_id || null, att.drive_folder_url || null
                     ]);
                 }
             }
         }
+
+        // Clear last_rmd_comment upon resubmission
+        await client.query(`UPDATE ecnt2_ecr SET last_rmd_comment = NULL WHERE id = $1`, [id]);
 
         await client.query('COMMIT');
         res.json({ message: "ECR Resubmitted Successfully", data: result.rows[0] });
@@ -513,7 +579,14 @@ const getEcrById = async (req, res) => {
         const ecrResult = await engPool.query(`
             SELECT e.*, 
                    (SELECT id FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_id,
-                   (SELECT ecn_no FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_no
+                   (SELECT ecn_no FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_no,
+                   COALESCE(
+                       e.last_rmd_comment,
+                       (SELECT COALESCE(request_to_requester, comment) 
+                        FROM ecnt2_approval_log 
+                        WHERE document_type = 'ECR' AND document_id = e.id AND action = 'REQUEST_MORE_DETAIL' 
+                        ORDER BY id DESC LIMIT 1)
+                   ) as last_rmd_comment
             FROM ecnt2_ecr e 
             WHERE e.id = $1
         `, [id]);
@@ -585,10 +658,15 @@ const actionEcr = async (req, res) => {
                 request_to_requester || comment || 'Clarification / additional details requested.'
             ]);
 
-            // Increment revision counter
-            await client.query(`UPDATE ecnt2_ecr SET revision_count = COALESCE(revision_count, 0) + 1 WHERE id = $1`, [id]);
+            // Increment revision counter and persist last_rmd_comment
+            await client.query(`
+                UPDATE ecnt2_ecr SET 
+                    revision_count = COALESCE(revision_count, 0) + 1,
+                    last_rmd_comment = $1 
+                WHERE id = $2
+            `, [request_to_requester || comment, id]);
 
-        } else if (action === 'APPROVE') {
+        } else if (action === 'APPROVE' || action === 'SUBMIT_RISK' || action === 'RISK_ASSESS') {
             const currentStageKey = block_number === 3 ? 'STAGE_2' : (block_number === 4 ? 'STAGE_3' : null);
             const ecrRes = await client.query('SELECT * FROM ecnt2_ecr WHERE id = $1', [id]);
             const ecrRecord = ecrRes.rows[0];
@@ -625,10 +703,29 @@ const actionEcr = async (req, res) => {
             }
 
             if (block_number === 3) {
-                nextStatus = 'Pending Eng Mgr';
-                currentBlock = 4;
-                nextStageCode = 'STAGE_3';
-                await transitionStage(client, 'ECR', id, nextStageCode, 'APPROVE', userEmpno, userName, comment);
+                if (action === 'SUBMIT_RISK' || action === 'RISK_ASSESS' || ecrRecord?.current_stage_code === 'STAGE_2_RISK' || ecrRecord?.process_status === 'Pending Risk Assessment') {
+                    // Risk assessment submitted by Lead Engineer (พี่โอ) -> route to Eng Dept Manager (พี่แจ็ค)
+                    nextStatus = 'Pending Eng Mgr';
+                    currentBlock = 4;
+                    nextStageCode = 'STAGE_3';
+                    const riskNotes = comment || req.body.details?.risk_notes || 'Risk assessment completed.';
+                    await client.query(`
+                        UPDATE ecnt2_ecr SET 
+                            risk_assessment_notes = $1, 
+                            risk_assessment_by = $2, 
+                            risk_assessment_by_name = $3, 
+                            risk_assessment_date = NOW() 
+                        WHERE id = $4
+                    `, [riskNotes, userEmpno, userName, id]);
+
+                    await transitionStage(client, 'ECR', id, nextStageCode, 'APPROVE', userEmpno, userName, riskNotes);
+                } else {
+                    // Dept Mgr approved -> route to Risk Assessment (พี่โอ)
+                    nextStatus = 'Pending Risk Assessment';
+                    currentBlock = 3;
+                    nextStageCode = 'STAGE_2_RISK';
+                    await transitionStage(client, 'ECR', id, nextStageCode, 'APPROVE', userEmpno, userName, comment || 'Dept Mgr approved; forwarded for Risk Assessment (พี่โอ)');
+                }
             } else if (block_number === 4) {
                 const isIssueEcn = req.body.details?.is_issue_ecn;
                 nextStatus = isIssueEcn ? 'Issued ECN' : 'ECR Only Closed';
@@ -680,12 +777,14 @@ const actionEcr = async (req, res) => {
                 await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
-                        file_name, file_url, file_type, file_size, uploaded_by
-                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8)
+                        file_name, file_url, file_type, file_size, uploaded_by,
+                        drive_file_id, drive_folder_url
+                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `, [
                     id, block_number, att.field_name || 'comment',
                     att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                    userName || userEmpno
+                    userName || userEmpno,
+                    att.drive_file_id || null, att.drive_folder_url || null
                 ]);
             }
         }
@@ -842,12 +941,14 @@ const createEcn = async (req, res) => {
                 await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
-                        file_name, file_url, file_type, file_size, uploaded_by
-                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8)
+                        file_name, file_url, file_type, file_size, uploaded_by,
+                        drive_file_id, drive_folder_url
+                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `, [
                     newEcnId, att.block_number || 5, att.field_name || null,
                     att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                    req.user?.name || engineerAssigned
+                    req.user?.name || engineerAssigned,
+                    att.drive_file_id || null, att.drive_folder_url || null
                 ]);
             }
         }
@@ -893,7 +994,14 @@ const getEcnById = async (req, res) => {
     const { id } = req.params;
     try {
         const ecnResult = await engPool.query(`
-            SELECT e.*, ecr.ecr_no, ecr.customer_name as ecr_customer, ecr.project_code as ecr_project
+            SELECT e.*, ecr.ecr_no, ecr.customer_name as ecr_customer, ecr.project_code as ecr_project,
+                   COALESCE(
+                       e.last_rmd_comment,
+                       (SELECT COALESCE(request_to_requester, comment) 
+                        FROM ecnt2_approval_log 
+                        WHERE document_type = 'ECN' AND document_id = e.id AND action = 'REQUEST_MORE_DETAIL' 
+                        ORDER BY id DESC LIMIT 1)
+                   ) as last_rmd_comment
             FROM ecnt2_ecn e
             LEFT JOIN ecnt2_ecr ecr ON e.ecr_id = ecr.id
             WHERE e.id = $1
@@ -1031,7 +1139,12 @@ const actionEcn = async (req, res) => {
                     request_to_requester || comment || 'ECN Clarification requested by Eng Dept Manager.'
                 ]);
 
-                await client.query(`UPDATE ecnt2_ecn SET revision_count = COALESCE(revision_count, 0) + 1 WHERE id = $1`, [id]);
+                await client.query(`
+                    UPDATE ecnt2_ecn SET 
+                        revision_count = COALESCE(revision_count, 0) + 1,
+                        last_rmd_comment = $1 
+                    WHERE id = $2
+                `, [request_to_requester || comment, id]);
             }
         }
         // Block 7 (QC MSA)
@@ -1068,9 +1181,18 @@ const actionEcn = async (req, res) => {
             
             const summary = req.body.details;
             await client.query(`
-                INSERT INTO ecnt2_fai_summary (ecn_id, fai_approved_confirmed, fai_lot_no, summary_result, stakeholder_comment, confirmed_by, confirmed_by_name, confirmed_date)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-            `, [id, !!summary?.fai_approved_confirmed, summary?.fai_lot_no || '', summary?.summary_result || '', summary?.stakeholder_comment || '', userEmpno, userName]);
+                INSERT INTO ecnt2_fai_summary (ecn_id, fai_approved_confirmed, fai_lot_no, summary_result, stakeholder_comment, google_sheet_url, confirmed_by, confirmed_by_name, confirmed_date)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+            `, [
+                id, 
+                !!summary?.fai_approved_confirmed, 
+                summary?.fai_lot_no || '', 
+                summary?.summary_result || '', 
+                summary?.stakeholder_comment || '', 
+                summary?.google_sheet_url || summary?.fai_google_sheet_url || '', 
+                userEmpno, 
+                userName
+            ]);
             
             // Delete old tasks if re-configuring
             await client.query(`DELETE FROM ecnt2_concern_task WHERE ecn_id = $1`, [id]);
@@ -1176,12 +1298,14 @@ const actionEcn = async (req, res) => {
                 await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
-                        file_name, file_url, file_type, file_size, uploaded_by
-                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8)
+                        file_name, file_url, file_type, file_size, uploaded_by,
+                        drive_file_id, drive_folder_url
+                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `, [
                     id, block_number, att.field_name || 'comment',
                     att.file_name, att.file_url, att.file_type || '', att.file_size || null,
-                    userName || userEmpno
+                    userName || userEmpno,
+                    att.drive_file_id || null, att.drive_folder_url || null
                 ]);
             }
         }
@@ -1379,15 +1503,16 @@ const getMyTasks = async (req, res) => {
 // ==========================================
 
 const saveAttachment = async (req, res) => {
-    const { document_id, document_type, block_number, field_name, file_name, file_url, file_type, file_size } = req.body;
+    const { document_id, document_type, block_number, field_name, file_name, file_url, file_type, file_size, drive_file_id, drive_folder_url } = req.body;
     try {
         const uploadedBy = req.user?.name || req.user?.empno || req.body.uploaded_by || 'System';
 
         const sql = `
             INSERT INTO ecnt2_attachment (
                 document_type, document_id, block_number, field_name,
-                file_name, file_url, file_type, file_size, uploaded_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                file_name, file_url, file_type, file_size, uploaded_by,
+                drive_file_id, drive_folder_url
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
         `;
         const params = [
@@ -1399,7 +1524,9 @@ const saveAttachment = async (req, res) => {
             file_url,
             file_type || '',
             file_size || null,
-            uploadedBy
+            uploadedBy,
+            drive_file_id || null,
+            drive_folder_url || null
         ];
 
         const result = await engPool.query(sql, params);
@@ -1573,16 +1700,21 @@ const updateStageFlow = async (req, res) => {
             } else if (stageKey === 'STAGE_2') {
                 const deptMgr = defaultAssignees?.dept_mgr_mapping?.[doc.department];
                 isStagePic = (deptMgr?.emp_no || '').toLowerCase() === empno || (dept === (doc.department || '').toUpperCase() && (role === 'MGR' || role === 'MANAGER'));
+            } else if (stageKey === 'STAGE_2_RISK') {
+                const leadRisk = defaultAssignees?.lead_engineer_risk;
+                isStagePic = (leadRisk?.emp_no || '').toLowerCase() === empno || dept === 'ENG';
             } else if (stageKey === 'STAGE_3' || stageKey === 'STAGE_5') {
                 const engMgr = defaultAssignees?.eng_mgr;
                 isStagePic = (engMgr?.emp_no || '').toLowerCase() === empno || (dept === 'ENG' && (role === 'MGR' || role === 'MANAGER'));
-            } else if (stageKey === 'STAGE_4') {
-                isStagePic = (doc.assigned_to || '').toLowerCase() === empno || dept === 'ENG';
-            } else if (stageKey === 'STAGE_6' || stageKey === 'STAGE_7') {
-                const qcPic = defaultAssignees?.default_qc_pic;
+            } else if (stageKey === 'STAGE_4' || stageKey === 'STAGE_8') {
+                const leadEng = defaultAssignees?.default_lead_engineer;
+                isStagePic = (doc.assigned_to || doc.engineer_assigned || leadEng?.emp_no || '').toLowerCase() === empno || dept === 'ENG';
+            } else if (stageKey === 'STAGE_6') {
+                const qcPic = defaultAssignees?.qc_msa_pic || defaultAssignees?.default_qc_pic;
                 isStagePic = (qcPic?.emp_no || '').toLowerCase() === empno || dept === 'QC' || role === 'QC';
-            } else if (stageKey === 'STAGE_8') {
-                isStagePic = (doc.engineer_assigned || '').toLowerCase() === empno || dept === 'ENG';
+            } else if (stageKey === 'STAGE_7') {
+                const qcPic = defaultAssignees?.qc_fai_pic || defaultAssignees?.default_qc_pic;
+                isStagePic = (qcPic?.emp_no || '').toLowerCase() === empno || dept === 'QC' || role === 'QC';
             } else if (stageKey === 'STAGE_10') {
                 const engMgr = defaultAssignees?.eng_mgr;
                 isStagePic = (engMgr?.emp_no || '').toLowerCase() === empno || role === 'TOP';
@@ -1642,6 +1774,161 @@ const updateStageFlow = async (req, res) => {
     }
 };
 
+const resubmitEcn = async (req, res) => {
+    const { id } = req.params;
+    const data = req.body;
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Permission check
+        const perm = await checkWorkflowPermission(client, 'ECN', id, 5, req.user);
+        if (!perm.authorized) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: perm.reason });
+        }
+
+        const actionBy = req.user?.empno || data.engineer_assigned || 'Unknown';
+        const actionByName = req.user?.name || data.engineer_assigned || 'Unknown';
+
+        // 1. Fetch old ECN
+        const oldEcnRes = await client.query('SELECT * FROM ecnt2_ecn WHERE id = $1', [id]);
+        if (oldEcnRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "ECN Not Found" });
+        }
+        const oldEcn = oldEcnRes.rows[0];
+
+        // Update ECN main fields
+        await client.query(`
+            UPDATE ecnt2_ecn SET
+                title_of_change = $1,
+                reason_of_change = $2,
+                scope_of_implementation = $3,
+                before_change = $4,
+                after_change = $5,
+                dwg_suspended = $6,
+                related_models = $7,
+                process_status = 'Pending Eng Mgr ECN',
+                current_block = 6,
+                current_stage_code = 'STAGE_5',
+                last_rmd_comment = NULL,
+                updated_at = NOW()
+            WHERE id = $8
+        `, [
+            data.title_of_change || oldEcn.title_of_change,
+            data.reason_of_change || oldEcn.reason_of_change,
+            data.scope_of_implementation || oldEcn.scope_of_implementation,
+            data.before_change || oldEcn.before_change,
+            data.after_change || oldEcn.after_change,
+            data.dwg_suspended !== undefined ? !!data.dwg_suspended : oldEcn.dwg_suspended,
+            data.related_models ? JSON.stringify(data.related_models) : oldEcn.related_models,
+            id
+        ]);
+
+        // 2. Update Impact Assessment
+        if (data.impact) {
+            const imp = data.impact;
+            await client.query(`
+                UPDATE ecnt2_impact_assessment SET
+                    has_customer_impact = $1, customer_name = $2, m4_request_doc_no = $3,
+                    customer_notification_date = $4, customer_change_notice_date = $5, customer_approved_date = $6,
+                    has_kzw_fjsw_impact = $7, operation_type = $8, kzw_notification_date = $9,
+                    kzw_dcn_ecn_doc_no = $10, kzw_doc_received_date = $11,
+                    has_sale_drawing_impact = $12, sale_drawing_revision_no = $13, sale_drawing_finish_date = $14,
+                    has_traceability = $15, traceability_details = $16,
+                    has_wip_stock = $17, wip_stock_details = $18,
+                    has_outsourcing = $19, outsourcing_details = $20,
+                    has_unit_price = $21, unit_price_details = $22,
+                    has_manufacturing = $23, manufacturing_details = $24,
+                    has_product_quality = $25, product_quality_details = $26,
+                    has_safety = $27, safety_details = $28,
+                    has_otd = $29, otd_details = $30,
+                    google_sheet_url = $31,
+                    confirmed_by = $32, confirmed_date = NOW()
+                WHERE ecn_id = $33
+            `, [
+                !!imp.has_customer_impact, imp.customer_name || null, imp.m4_request_doc_no || null,
+                imp.customer_notification_date ? new Date(imp.customer_notification_date) : null,
+                imp.customer_change_notice_date ? new Date(imp.customer_change_notice_date) : null,
+                imp.customer_approved_date ? new Date(imp.customer_approved_date) : null,
+                !!imp.has_kzw_fjsw_impact, imp.operation_type || null,
+                imp.kzw_notification_date ? new Date(imp.kzw_notification_date) : null,
+                imp.kzw_dcn_ecn_doc_no || null,
+                imp.kzw_doc_received_date ? new Date(imp.kzw_doc_received_date) : null,
+                !!imp.has_sale_drawing_impact, imp.sale_drawing_revision_no || null,
+                imp.sale_drawing_finish_date ? new Date(imp.sale_drawing_finish_date) : null,
+                !!imp.has_traceability, imp.traceability_details ? JSON.stringify(imp.traceability_details) : null,
+                !!imp.has_wip_stock, imp.wip_stock_details ? JSON.stringify(imp.wip_stock_details) : null,
+                !!imp.has_outsourcing, imp.outsourcing_details ? JSON.stringify(imp.outsourcing_details) : null,
+                !!imp.has_unit_price, imp.unit_price_details ? JSON.stringify(imp.unit_price_details) : null,
+                !!imp.has_manufacturing, imp.manufacturing_details ? JSON.stringify(imp.manufacturing_details) : null,
+                !!imp.has_product_quality, imp.product_quality_details ? JSON.stringify(imp.product_quality_details) : null,
+                !!imp.has_safety, imp.safety_details ? JSON.stringify(imp.safety_details) : null,
+                !!imp.has_otd, imp.otd_details ? JSON.stringify(imp.otd_details) : null,
+                imp.google_sheet_url || null,
+                actionByName,
+                id
+            ]);
+        }
+
+        // 3. Attachments Sync
+        if (data.attachments && Array.isArray(data.attachments)) {
+            const keptIds = data.attachments.filter(a => a.id).map(a => Number(a.id)).filter(id => !isNaN(id));
+            if (keptIds.length > 0) {
+                await client.query(`
+                    DELETE FROM ecnt2_attachment 
+                    WHERE document_type = 'ECN' AND document_id = $1 
+                      AND id NOT IN (${keptIds.join(',')})
+                      AND (field_name IN ('before_change', 'after_change', 'traceability', 'wip_stock') OR block_number = 5)
+                `, [id]);
+            } else {
+                await client.query(`
+                    DELETE FROM ecnt2_attachment 
+                    WHERE document_type = 'ECN' AND document_id = $1 
+                      AND (field_name IN ('before_change', 'after_change', 'traceability', 'wip_stock') OR block_number = 5)
+                `, [id]);
+            }
+
+            for (const att of data.attachments) {
+                if (!att.id) {
+                    await client.query(`
+                        INSERT INTO ecnt2_attachment (
+                            document_type, document_id, block_number, field_name,
+                            file_name, file_url, file_type, file_size, uploaded_by,
+                            drive_file_id, drive_folder_url
+                        ) VALUES ('ECN', $1, 5, $2, $3, $4, $5, $6, $7, $8, $9)
+                    `, [
+                        id, att.field_name || 'general',
+                        att.file_name, att.file_url, att.file_type || '', att.file_size || null,
+                        actionByName,
+                        att.drive_file_id || null, att.drive_folder_url || null
+                    ]);
+                }
+            }
+        }
+
+        // 4. Transition Stage & Log
+        await transitionStage(client, 'ECN', id, 'STAGE_5', 'RESUBMIT', actionBy, actionByName, data.comment || 'Resubmitted revised ECN details & scope');
+
+        await client.query(`
+            INSERT INTO ecnt2_approval_log (
+                document_type, document_id, block_number, step_label,
+                action, action_by, action_by_name, action_role, comment
+            ) VALUES ('ECN', $1, 5, 'Block 5: Resubmit ECN', 'RESUBMIT', $2, $3, 'Lead Engineer', $4)
+        `, [id, actionBy, actionByName, data.comment || 'Lead Engineer resubmitted revised ECN details']);
+
+        await client.query('COMMIT');
+        res.json({ message: "ECN Resubmitted Successfully to Engineering Department Manager" });
+    } catch(err) {
+        await client.query('ROLLBACK');
+        console.error("resubmitEcn Error:", err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     createEcr,
     resubmitEcr,
@@ -1649,6 +1936,7 @@ module.exports = {
     getEcrById,
     actionEcr,
     createEcn,
+    resubmitEcn,
     getEcnList,
     getEcnById,
     actionEcn,
@@ -1665,6 +1953,7 @@ module.exports = {
     getEcntConfig,
     updateEcntConfig,
     getUserCandidates,
-    updateStageFlow
+    updateStageFlow,
+    getNextEcrNo
 };
 

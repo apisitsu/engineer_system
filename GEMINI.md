@@ -4,10 +4,123 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-10-01
-- **Active Goal:** Tumble Process System: Integrated Inline Sub-Header Filter Row Deployed Across All 3 Tables (Tumble Models, Process Conditions, Condition Parts); Production Build Verified.
+- **Last Update:** 2026-10-08
+- **Active Goal:** ECNT V2 & Kanban: Google Drive Attachment Engine & Full-Fidelity Media Inspection Integration (Zero-Breaking Dual-Engine Architecture).
 
-- **Tumble Process System: Integrated Inline Sub-Header Filter Row Across All 3 Tables (2026-10-01):**
+- **ECNT V2 & Kanban: Google Drive & Local Image Rendering & Full-Fidelity Preview Engine (2026-10-08):**
+  - **1. Root Cause Identification for Broken Image Display:**
+    - **Google Drive Hotlink Deprecation**: In Google Workspace domains (`@minebea.co.th`), standard image hotlinks (`drive.google.com/uc?id=...&export=view` or `lh3.googleusercontent.com/d/...`) block cross-origin requests from `<img>` tags on intranet/localhost origins with HTTP 302 / `Cross-Origin-Resource-Policy` errors.
+    - **ECNT Attachment Property Mapping**: ECNT attachments in PostgreSQL (`ecnt2_attachment`) use `file_url`, whereas Kanban historically used `file_path`. Legacy `getFileUrl()` previously fell back to empty strings when `file_path` was absent.
+    - **Thumbnail Fallback Trigger**: Attempting to load Google Drive `/preview` in an standard HTML `<img>` tag triggered `onError`, falling back to the gray placeholder icon.
+  - **2. Full-Fidelity Dual-Engine Preview Solution (`AttachmentViewManager.jsx`):**
+    - Enhanced `AttachmentPreviewModal` with intelligent Google Drive detection (`isGoogleDrive = Boolean(fileUrl.includes('drive.google.com') || attachment.drive_file_id)`).
+    - When viewing Google Drive files (images, PDFs, documents), renders Google Drive's native interactive high-resolution viewer via embedded `<iframe>` (`/preview`), providing zoom, pan, print, and download with 100% fidelity and zero authentication blocks.
+    - Preserved local image zoom controls (`<Image src={fileUrl} />`) for local server files (`/uploads/...`).
+    - Added direct download handling (`uc?export=download&id=...`) and `Open Original` tab launcher.
+  - **3. Resilient Thumbnail Architecture (`AttachableField.jsx`, `FieldAttachmentDisplay.jsx`):**
+    - Built dedicated **Google Drive Image Card** thumbnail (`📁 DRIVE` badge, `🖼️` image indicator, file extension pill, and `Preview` hover trigger) preventing failed `<img>` network requests and eliminating gray broken placeholder icons.
+    - Preserved direct image thumbnails (`<img src={directImgUrl} />`) for local backend files.
+  - **4. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 errors).
+
+- **ECNT V2 & Kanban: Google Apps Script Web App Callability & Live Browser Verification (2026-10-08):**
+  - **1. URL Callability Verification (`https://script.google.com/a/macros/minebea.co.th/s/.../exec`):**
+    - **100% Proven Active and Authorized**: Verified directly in browser runtime that `GAS_DRIVE_URL` is completely valid, active, and reachable.
+    - **GET Health Check**: Returns `✅ Engineer System Drive Service Active | Kanban & ECNT Google Apps Script is authorized and ready` in 1.2s.
+    - **POST (Upload)**: Successfully uploaded live test file to Google Drive folder `ECNT_General`, returning `fileId: "1kcqWE5385a9LWZLV0merNwCk7lObYWB6"`, `folderId: "1WdosCHKpJ8f2bzUARZs5ZM4UttaZjJtM"`, and `webViewLink` within 4.2s.
+  - **2. Root Cause Analysis of "0 Execution History" in Google Apps Script:**
+    - **Why Iframe Hangs**: On HTTP intranet origins (`http://localhost:3000` / `http://plbmp130:3000`), Chrome enforces **Third-Party Cookie Isolation**. Hidden `<iframe>` POST requests cannot access Google session cookies, triggering an HTTP 302 redirect to `accounts.google.com` (which sets `X-Frame-Options: DENY`). Chrome blocks the frame immediately, so the request **never reaches `doPost(e)`**, leaving Apps Script execution history completely blank (0 entries).
+    - **Why Popup Succeeds**: A top-level Popup (`window.open`) executes in **first-party context**, preserving `@minebea.co.th` Google session cookies, reaching `doPost(e)` instantly, and transmitting the response via `postMessage`.
+  - **3. User-Gesture Fallback & Diagnostic Tool (`uploadFileToDrive.js`, `test_gas_drive.html`):**
+    - Built interactive standalone diagnostic page `apps/ENG-Frontend/public/test_gas_drive.html` allowing one-click verification of GET health check, Ping POST, and live file upload.
+    - Implemented `requestUserGesturePopup(fileName)` in `uploadFileToDrive.js`: when Chrome's popup blocker intercepts an asynchronous upload (such as Ant Design `<Upload>` file picker), instead of silently falling back to a dead iframe, a clean modal overlay immediately presents a direct one-click launcher button, ensuring 100% user activation and immediate upload completion.
+  - **4. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 errors).
+
+- **Google Drive Attachment Trashing & Zero-Orphan Deletion Engine (2026-10-08):**
+  - **1. Root Cause Identification:**
+    - In `cardSlice.js`, `loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail` selected board card objects which only contain metadata counters (`attachment_count`), not the full `attachments` array (which exists only in `activeCardDetail.attachments`). As a result, `driveFileId` was always `null` and `deleteFileFromDrive` was bypassed.
+    - In `uploadFileToDrive.js`, `deleteFileFromDrive` was previously targeting a hidden `<iframe>`. On intranet HTTP origins, modern browsers block third-party cookies in iframes, causing Google Workspace (`@minebea.co.th`) authentication to fail or redirect to `accounts.google.com` (`X-Frame-Options: DENY`), preventing delete requests from reaching Google Apps Script.
+  - **2. Synchronous User-Gesture Popup & Batch Deletion Engine (`uploadFileToDrive.js`, `cardSlice.js`, `CardBody.jsx`):**
+    - Updated `CardBody.jsx` to pass the attachment object `att` directly to `deleteAttachment(att.id, card.id, att)`.
+    - Updated `cardSlice.js` `deleteAttachment` to extract `drive_file_id` (or parse regex from `file_path`) and immediately open `popup = window.open('about:blank', 'gas_delete', ...)` **synchronously within the user's click gesture** before any `await`, preventing popup blocking.
+    - Updated `deleteCard` in `cardSlice.js` to collect all Drive file IDs from card attachments and delete them via batch array in one operation.
+    - Updated `uploadFileToDrive.js` `deleteFileFromDrive(fileIdOrIds, options)` to support single file IDs or arrays of IDs, post to GAS via the helper popup with session cookies, and auto-close upon `postMessage`.
+  - **3. Google Apps Script Universal Delete Handler (`Code.gs`):**
+    - Updated `handleDelete` in `apps/ENG-Backend/api/kanban/gas/Code.gs` to support single `fileId` or batch `fileIds` array, calling `DriveApp.getFileById(id).setTrashed(true)` for each file and returning `{ success: true, trashed: true, deleted: [...] }`.
+  - **4. ECNT V2 Attachment Deletion Sync (`AttachmentManager.jsx`):**
+    - Updated `handleDelete(id, item)` in `AttachmentManager.jsx` to also invoke `deleteFileFromDrive` when removing attachments with Drive file IDs, keeping Google Drive and PostgreSQL in sync.
+  - **5. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully).
+
+- **ECNT V2 & Kanban: Unified Direct-from-Frontend Drive Upload & File Cleanup (2026-10-08):**
+  - **1. Direct Frontend-to-GAS Upload Architecture:**
+    - Verified 100% that all Google Drive uploads execute exclusively from the **Frontend Browser directly to Google Apps Script Web App** (`window.open` auto-closing helper popup).
+    - Enterprise Google Workspace (`@minebea.co.th`) session cookies are securely transmitted with first-party context, preventing 302 login redirects and `X-Frame-Options: DENY` iframe blocks.
+    - Node.js backend handles **zero** Drive file transfers (preventing McAfee corporate proxy timeouts and hanging connections), and solely persists metadata (`drive_file_id`, `drive_folder_path`, `file_name`) into PostgreSQL `kb_attachment` and `ecnt2_attachment`.
+  - **2. Unused Files & Dead Code Purge:**
+    - **Deleted**: `apps/ENG-Frontend/src/components/engineer/process_eng/ecnt_v2/Source/gas_drive_servise` (duplicate non-standard file removed to eliminate confusion).
+    - **Deleted**: `apps/ENG-Frontend/src/utils/test_mail.html` (scratch test file).
+    - **Purged**: Removed dead backend upload functions (`postToGAS`, `HttpsProxyAgent`, `GAS_DRIVE_URL`) from `apps/ENG-Backend/api/kanban/kanban_card.js`.
+    - **Canonical File**: Established `apps/ENG-Backend/api/kanban/gas/Code.gs` as the **single authoritative universal script** for Google Apps Script deployment (handling Kanban, ECNT, URL-decoding, and auto-folder renaming).
+  - **3. In-Page Progress & Synchronized Auto-Closing Popup:**
+    - In-page loading modals (SweetAlert2 for Kanban, Ant Design message for ECNT) display live uploading status.
+    - Lightweight popup transfers files reliably and closes automatically via `window.close()` upon `postMessage` delivery.
+  - **4. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 errors).
+
+- **Frontend API Configuration & Automation Architecture (2026-10-08):**
+  - **1. Root Cause Resolution for `'return' outside of function` SyntaxError:**
+    - Resolved module parse error caused by partial manual commenting of `getDynamicApiUrl()` where function declaration was removed while internal return statements remained at top-level module scope.
+  - **2. Smart Dynamic API URL Engine (`getDynamicApiUrl` in `constance.js`):**
+    - Built universal runtime host detection using `window.location.hostname`:
+      - Localhost / `127.0.0.1` -> `http://localhost:2005/`
+      - Production (`plbmp130`) -> `http://plbmp130.lb.minebea.local:2005/`
+      - Dev 129 (`plbmp129`) -> `http://plbmp129.lb.minebea.local:2005/`
+      - Dev 118 (`plbmp118`) -> `http://plbmp118.lb.minebea.local:2005/`
+      - Intranet Host without domain -> `http://${host}.lb.minebea.local:2005/`
+      - Direct IP / FQDN Host -> `${protocol}//${hostname}:2005/`
+      - Non-browser/Build fallback -> `http://plbmp130.lb.minebea.local:2005/`
+    - Added optional `MANUAL_OVERRIDE_URL` for developers needing to force an API target without duplicate declarations or syntax corruption.
+  - **3. Automation Scripts Resilience (`fix_constance_prod.ps1`, `auto_update_and_run.ps1`, `setup_machine.ps1`, `runner.js`):**
+    - Updated `scripts/fix_constance_prod.ps1` and `auto_update_and_run.ps1` to detect `getDynamicApiUrl()` and preserve it without overwriting, eliminating duplicate `apiUrl` declarations across git pulls.
+    - Updated `scripts/setup_machine.ps1` (Step 6) to recognize dynamic resolution as an active valid configuration.
+    - Updated `apps/ENG-Backend/runner.js` to prevent false positive warning triggers when running in dynamic mode.
+  - **4. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 errors).
+
+- **ECNT V2: Factory Engineering Process & Workflow Enhancement (11 Items Complete) (2026-10-07):**
+  - **1. Block 3 Label Realignment:**
+    - Updated Reviewer detail request label in Block 3 (Dept Mgr Approval) to `Detail request to requester` (replacing verbose legacy text).
+  - **2. Reviewer Detail Request Notes in Rework Alerts (`last_rmd_comment`):**
+    - Added database column `last_rmd_comment` to `ecnt2_ecr` and `ecnt2_ecn`.
+    - Captured and rendered reviewer notes in prominent amber alert boxes for both ECR and ECN rework states, providing clear guidance on why a revision is requested.
+  - **3. ECR Revision Attachment Resilience & Zero-Orphan Sync:**
+    - Fixed attachment disappearance on "Edit & Resubmit ECR" by passing full attachment array and adding defensive fetch fallback in `EcrRequireView.jsx`.
+    - Updated backend `resubmitEcr` to delete removed attachment IDs (`DELETE FROM ecnt2_attachment WHERE id NOT IN (...)`) and insert only new files, preventing duplicate entries.
+  - **4. Workflow Stepper Partitioning & Risk Assessment Stage:**
+    - Aligned stepper stages with factory practice: 5 steps for ECR and 7 steps for ECN.
+    - Added `STAGE_2_RISK` ("Risk Assessment (Lead Engineer)") between Dept Mgr approval and Concern sign-off, assigned to Nathaporn Yammanus (พี่โอ).
+  - **5. Block 5 Impact Assessment Google Sheet & Attachment Fields:**
+    - Added `google_sheet_url` to `ecnt2_impact_assessment`.
+    - Added interactive Google Sheet link inputs with `🔗 Open` launcher buttons and `AttachableField` uploaders for Traceability and WIP/Stock sections in `CreateECNModal.jsx`.
+  - **6. Stepper vs Block Number Synchronization:**
+    - Fixed step index offset across `StageStepper.jsx` and `WorkflowStageFlowPanel.jsx` to map 1:1 with paper engineering blocks.
+  - **7. Dedicated ECN Block 5 Rework Modal & Backend Engine:**
+    - Built comprehensive "Edit & Revise ECN" modal in `CreateECNModal.jsx` supporting edit mode for scope, impact checklists, and links.
+    - Implemented `PUT /api/ecnt/ecn/:id/resubmit` endpoint handling updates, attachment synchronization, and advancing workflow to `STAGE_5` (Pending Eng Mgr ECN).
+  - **8. Redundant RMD Form Field Removal:**
+    - Cleaned up `WorkflowActionCard.jsx`, restricting `request_to_requester` input exclusively to approval blocks that support rework (Blocks 3, 4, 6) and removing it from terminal/sign-off blocks (Blocks 7, 8, 9, 10).
+  - **9. Block-by-Block "View Full Details" (ดูรายละเอียดฉบับเต็ม):**
+    - Integrated `ดูรายละเอียดฉบับเต็ม` button across all 7 workspace block panel headers in `EcntWorkspaceView.jsx`.
+    - Created modal dialog presenting untruncated technical texts, specification tables, Google Sheet links, and high-resolution image previews.
+  - **10. Block 9 FAI Summary Google Sheet Integration:**
+    - Added `google_sheet_url` to `ecnt2_fai_summary`.
+    - Enabled Google Sheet report link and attachment uploads in Block 9 form and rendered them in Section 6 FAI Results.
+  - **11. Effective Stepper Node Done Color:**
+    - Updated `StageStepper.jsx` so that when an ECN reaches `ECN Effective` / `Closed`, the terminal "Effective" node transitions to green (`finish` state).
+  - **12. Production Build Verification:**
+    - `npm run build`: Exit code 0 (Compiled successfully with 0 warnings in ECNT components).
   - **1. Inline 2-Tier Header Filter Row Architecture:**
     - Repositioned search/filter inputs directly between column header titles and table data rows in a dedicated 2-tier table header matching standard ERP/WinForms grid UX.
     - Uniformly implemented across all three engineering configuration tabs:

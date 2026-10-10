@@ -349,7 +349,12 @@ export default function ECNDetailModal({ open, documentId, documentType, onClose
 
                             {/* Panel 4: Attachments */}
                             <Collapse.Panel header={<Text strong style={{ color: '#1890ff' }}>4. File Attachments & Documentation</Text>} key="attachments_section">
-                                <AttachmentManager documentId={docData.id} documentType={documentType} />
+                                <AttachmentManager 
+                                    documentId={docData.id} 
+                                    documentType={documentType} 
+                                    ecrNo={docData.ecr_no} 
+                                    ecnNo={docData.ecn_no} 
+                                />
                             </Collapse.Panel>
 
                             {/* ECN Sections (If documentType === 'ECN') */}

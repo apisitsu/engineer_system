@@ -3,10 +3,11 @@ import { Upload, Button, List, message, Typography, Popconfirm, Spin, Tag, Space
 import { UploadOutlined, DeleteOutlined, PaperClipOutlined, DownloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
+import { deleteFileFromDrive, uploadEcntFileToDrive } from '../../../../../utils/uploadFileToDrive';
 
 const { Text, Link } = Typography;
 
-export default function AttachmentManager({ documentId, documentType, blockNumber = null, fieldName = null }) {
+export default function AttachmentManager({ documentId, documentType, ecrNo = '', ecnNo = '', blockNumber = null, fieldName = null }) {
     const [fileList, setFileList] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -30,44 +31,76 @@ export default function AttachmentManager({ documentId, documentType, blockNumbe
     };
 
     const handleUpload = async ({ file }) => {
+        // Open helper popup synchronously within user click/interaction gesture
+        let popup = null;
         try {
-            message.loading({ content: 'Uploading file...', key: 'uploading' });
+            popup = window.open('about:blank', 'gas_upload', 'width=460,height=420,left=350,top=150');
+        } catch (e) {
+            popup = null;
+        }
+
+        const msgKey = `ecnt_att_${Date.now()}`;
+        try {
+            message.loading({ content: `กำลังอัปโหลด ${file.name} ไปยัง Google Drive...`, key: msgKey, duration: 0 });
             
-            const formData = new FormData();
-            formData.append('file', file);
+            // 100% Direct to Google Drive via GAS (NO Backend Server Storage)
+            const targetEcr = ecrNo || (documentType === 'ECR' ? `ECR_${documentId}` : '') || 'ECNT_General';
+            const targetEcn = ecnNo || (documentType === 'ECN' ? `ECN_${documentId}` : '');
 
-            // Step 1: Upload to local server storage
-            const uploadRes = await axios.post(`${server.URL}/api/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                withCredentials: true
-            });
+            const gasRes = await uploadEcntFileToDrive(file, {
+                ecrNo: targetEcr,
+                ecnNo: targetEcn,
+                blockNumber: blockNumber,
+                fieldName: fieldName || 'attachment'
+            }, { popup });
 
-            if (uploadRes.data && uploadRes.data.success) {
-                // Step 2: Save record in ecnt2_attachment
+            if (gasRes && gasRes.success) {
+                // Step 2: Save metadata record in ecnt2_attachment
                 await axios.post(`${server.URL}/api/ecnt/attachment`, {
                     document_id: documentId,
                     document_type: documentType,
                     block_number: blockNumber,
-                    field_name: fieldName,
-                    file_name: uploadRes.data.file_name,
-                    file_url: uploadRes.data.file_url,
-                    file_type: file.type,
-                    file_size: file.size
+                    field_name: fieldName || 'attachment',
+                    file_name: gasRes.fileName || file.name,
+                    file_url: gasRes.webViewLink,
+                    file_type: gasRes.mimeType || file.type || '',
+                    file_size: gasRes.fileSize || file.size || null,
+                    drive_file_id: gasRes.fileId,
+                    drive_folder_url: gasRes.folderUrl
                 }, { withCredentials: true });
 
-                message.success({ content: 'Upload completed!', key: 'uploading' });
+                message.success({ content: `อัปโหลด ${file.name} ไปยัง Google Drive สำเร็จ!`, key: msgKey, duration: 3 });
                 fetchAttachments();
             } else {
-                throw new Error(uploadRes.data?.error || "Upload failed");
+                throw new Error(gasRes?.error || "Google Drive upload failed");
             }
         } catch (err) {
-            console.error("Upload error:", err);
-            message.error({ content: err.message || 'Upload failed.', key: 'uploading' });
+            console.error("[AttachmentManager] Upload error:", err);
+            message.error({ content: err.message || 'Upload failed.', key: msgKey, duration: 4 });
         }
     };
 
-    const handleDelete = async (id) => {
+    const handleDelete = async (id, item = null) => {
         try {
+            let driveFileId = item?.drive_file_id;
+            if (!driveFileId && item?.file_url) {
+                const match = item.file_url.match(/\/d\/([^/?#]+)/) || item.file_url.match(/[?&]id=([^/&?#]+)/);
+                if (match && match[1]) driveFileId = match[1];
+            }
+            if (driveFileId) {
+                let popup = null;
+                try {
+                    popup = window.open('about:blank', 'gas_delete', 'width=420,height=300,left=350,top=150');
+                } catch (e) {
+                    popup = null;
+                }
+                try {
+                    await deleteFileFromDrive(driveFileId, { popup });
+                } catch (driveErr) {
+                    console.warn('[ECNT AttachmentManager] Drive deletion warning:', driveErr);
+                }
+            }
+
             await axios.delete(`${server.URL}/api/ecnt/attachment/${id}`, { withCredentials: true });
             message.success("Attachment deleted");
             fetchAttachments();
@@ -111,7 +144,7 @@ export default function AttachmentManager({ documentId, documentType, blockNumbe
                                     <Link href={getFileUrl(item)} target="_blank" key="download">
                                         <Button type="text" icon={<DownloadOutlined />} size="small" />
                                     </Link>,
-                                    <Popconfirm title="Delete this file?" onConfirm={() => handleDelete(item.id)} key="del">
+                                    <Popconfirm title="Delete this file?" onConfirm={() => handleDelete(item.id, item)} key="del">
                                         <Button type="text" danger icon={<DeleteOutlined />} size="small" />
                                     </Popconfirm>
                                 ]}

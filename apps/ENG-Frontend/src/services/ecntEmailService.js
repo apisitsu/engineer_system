@@ -101,7 +101,11 @@ export const dispatchStageWorkflowEmail = async ({
 
     const deptMgrMapping = systemConfig?.stage_assignees?.dept_mgr_mapping || {};
     const defaultEngMgr = systemConfig?.stage_assignees?.eng_mgr || {};
+    const leadEngRisk = systemConfig?.stage_assignees?.lead_engineer_risk || {};
+    const defaultLeadEng = systemConfig?.stage_assignees?.default_lead_engineer || {};
     const defaultQcPic = systemConfig?.stage_assignees?.default_qc_pic || {};
+    const qcMsaPic = systemConfig?.stage_assignees?.qc_msa_pic || defaultQcPic;
+    const qcFaiPic = systemConfig?.stage_assignees?.qc_fai_pic || defaultQcPic;
 
     switch (stageCode) {
         case 'STAGE_2': // Dept Mgr Review
@@ -120,7 +124,15 @@ export const dispatchStageWorkflowEmail = async ({
             stageTitle = `${stageCode}: Clarification & Rework`;
             actionRequired = `Reviewer requested revision / additional details. Please update the requested fields and resubmit.`;
             if (!recipients) {
-                recipients = docData.request_by_email || `${docData.request_by_emp_no}@minebea.co.th`;
+                recipients = docData.request_by_email || `${docData.request_by_emp_no || docData.request_by}@minebea.co.th`;
+            }
+            break;
+
+        case 'STAGE_2_RISK': // ECR Risk Assessment
+            stageTitle = '3. ECR Risk Assessment';
+            actionRequired = `Lead Engineer (${leadEngRisk.name || 'Assigned Lead Engineer'}) is requested to review technical changes and conduct Risk Assessment.`;
+            if (!recipients) {
+                recipients = leadEngRisk.email || docData.assigned_to_email || 'nathaporn.y@minebea.co.th';
             }
             break;
 
@@ -128,23 +140,47 @@ export const dispatchStageWorkflowEmail = async ({
             stageTitle = '3. Eng Dept Mgr Assignment';
             actionRequired = 'Engineering Manager is requested to review feasibility and assign an Engineer to formulate the ECN.';
             if (!recipients) {
-                recipients = defaultEngMgr.email || 'eng.mgr@minebea.co.th';
+                recipients = defaultEngMgr.email || 'teerapol.k@minebea.co.th';
             }
             break;
 
         case 'STAGE_4': // Engineer Assigned ECN Formulation
-            stageTitle = '4. ECN Formulation';
-            actionRequired = `Assigned Engineer (${assignedPicName || docData.engineer_assigned_name || 'Engineer'}) has been assigned to create ECN and Impact Assessment.`;
+            stageTitle = '4. ECN Formulation & Impact Assessment';
+            actionRequired = `Assigned Engineer (${assignedPicName || docData.engineer_assigned_name || defaultLeadEng.name || 'Engineer'}) is requested to establish ECN and complete impact assessment.`;
             if (!recipients) {
-                recipients = docData.engineer_assigned_email || `${docData.engineer_assigned}@minebea.co.th`;
+                recipients = docData.engineer_assigned_email || defaultLeadEng.email || 'nathaporn.y@minebea.co.th';
             }
             break;
 
-        case 'STAGE_7': // QC MSA & FAI Evaluation
-            stageTitle = '7. QC MSA & FAI Evaluation';
-            actionRequired = 'QC Team is requested to evaluate Measurement System Analysis (MSA) and First Article Inspection (FAI).';
+        case 'STAGE_5': // Eng Dept Mgr ECN Review
+            stageTitle = '5. Eng Dept Mgr ECN Review';
+            actionRequired = 'Engineering Manager is requested to review ECN scope, impact checklist, and authorize document update.';
             if (!recipients) {
-                recipients = defaultQcPic.email || 'qc.pic@minebea.co.th';
+                recipients = defaultEngMgr.email || 'teerapol.k@minebea.co.th';
+            }
+            break;
+
+        case 'STAGE_6': // QC MSA Decision
+            stageTitle = '6. QC MSA Decision';
+            actionRequired = 'QC Team is requested to evaluate Measurement Systems Analysis (MSA) requirement with justification.';
+            if (!recipients) {
+                recipients = qcMsaPic.email || defaultQcPic.email || 'patcharayada.w@minebea.co.th';
+            }
+            break;
+
+        case 'STAGE_7': // QC FAI Decision
+            stageTitle = '7. QC FAI Decision';
+            actionRequired = 'QC Team is requested to decide Full FAI, Delta FAI, or Not Required (Block 8).';
+            if (!recipients) {
+                recipients = qcFaiPic.email || defaultQcPic.email || 'patcharayada.w@minebea.co.th';
+            }
+            break;
+
+        case 'STAGE_8': // Eng Summary & Concern Dispatch
+            stageTitle = '8. Eng Summary & Concern Dispatch';
+            actionRequired = 'Lead Engineer is requested to record FAI lot/results and define the department sign-off matrix (Block 9).';
+            if (!recipients) {
+                recipients = docData.engineer_assigned_email || defaultLeadEng.email || 'nathaporn.y@minebea.co.th';
             }
             break;
 

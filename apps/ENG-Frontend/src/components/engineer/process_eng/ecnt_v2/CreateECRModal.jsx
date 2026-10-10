@@ -5,6 +5,7 @@ import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import AttachableField from './components/AttachableField';
+import { dispatchStageWorkflowEmail } from '../../../../services/ecntEmailService';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -17,6 +18,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
     
     // Field-specific attachments state
     const [fieldAttachments, setFieldAttachments] = useState({});
+    const [currentEcrNo, setCurrentEcrNo] = useState(initialData?.ecr_no || '');
 
     // Watch for conditional rendering
     const isDrawing = Form.useWatch('is_drawing', form);
@@ -49,10 +51,25 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                 } else {
                     setFieldAttachments({});
                 }
+                setCurrentEcrNo(initialData.ecr_no || '');
             } else {
                 form.resetFields();
                 form.setFieldsValue({ status_type: 'PERMANENT' });
                 setFieldAttachments({});
+
+                // Pre-fetch next ECR number for Drive alignment
+                const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+                const token = localStorage.getItem("token");
+                axios.get(`${baseUrl}/api/ecnt/next-ecr-no`, {
+                    withCredentials: true,
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                }).then(res => {
+                    if (res.data && res.data.nextEcrNo) {
+                        setCurrentEcrNo(res.data.nextEcrNo);
+                    }
+                }).catch(err => {
+                    console.warn("[CreateECRModal] Fetch next ECR No failed:", err);
+                });
             }
         }
     }, [open, initialData, form]);
@@ -74,6 +91,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
 
             const payload = {
                 ...values,
+                ecr_no: currentEcrNo || undefined,
                 attachments: allFieldAttachments,
                 request_by: empNo || localStorage.getItem('u_code') || 'EMP123',
                 request_by_name: userName || localStorage.getItem('u_name') || 'Requester',
@@ -83,9 +101,32 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
             if (isEditMode) {
                 await axios.put(`${server.URL}/api/ecnt/ecr/${initialData.id}/resubmit`, payload, { withCredentials: true });
                 antdMessage.success("ECR Details Resubmitted to Department Manager");
+                try {
+                    dispatchStageWorkflowEmail({
+                        stageCode: 'STAGE_2',
+                        docData: { ...initialData, ...payload },
+                        documentType: 'ECR',
+                        actionTaken: 'RESUBMIT'
+                    });
+                } catch(e) { console.warn("Email dispatch error:", e); }
             } else {
                 const res = await axios.post(`${server.URL}/api/ecnt/ecr`, payload, { withCredentials: true });
                 antdMessage.success(`ECR Created Successfully: ${res.data.ecr_no || 'Assigned'} (Block 1 & 2 completed)`);
+                try {
+                    dispatchStageWorkflowEmail({
+                        stageCode: 'STAGE_2',
+                        docData: {
+                            id: res.data.id,
+                            ecr_no: res.data.ecr_no,
+                            title_of_change: payload.title_of_change,
+                            department: payload.department,
+                            customer_name: payload.customer_name,
+                            request_by_name: payload.request_by_name
+                        },
+                        documentType: 'ECR',
+                        actionTaken: 'SUBMIT'
+                    });
+                } catch(e) { console.warn("Email dispatch error:", e); }
             }
             
             form.resetFields();
@@ -190,6 +231,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                             attachments={fieldAttachments['reason_of_change'] || []}
                             onAttachmentsChange={(atts) => handleAttachmentsChange('reason_of_change', atts)}
                             blockNumber={1}
+                            ecrNo={currentEcrNo}
                         />
                     </Col>
                 </Row>
@@ -220,6 +262,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                     attachments={fieldAttachments['dwg_before_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('dwg_before_change', atts)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                             <Col span={12}>
@@ -231,6 +274,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                     attachments={fieldAttachments['dwg_after_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('dwg_after_change', atts)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                         </Row>
@@ -264,6 +308,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                     attachments={fieldAttachments['prog_before_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('prog_before_change', atts)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                             <Col span={12}>
@@ -275,6 +320,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                     attachments={fieldAttachments['prog_after_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('prog_after_change', atts)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                             <Col span={12}>
@@ -286,6 +332,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                     attachments={fieldAttachments['prog_condition_before'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('prog_condition_before', atts)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                             <Col span={12}>
@@ -297,6 +344,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                     attachments={fieldAttachments['prog_condition_after'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('prog_condition_after', atts)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                         </Row>
@@ -326,6 +374,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                     attachments={fieldAttachments['usage_before_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('usage_before_change', atts)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                             <Col span={12}>
@@ -337,6 +386,7 @@ export default function CreateECRModal({ open, onClose, onSuccess, initialData =
                                     attachments={fieldAttachments['usage_after_change'] || []}
                                     onAttachmentsChange={(atts) => handleAttachmentsChange('usage_after_change', atts)}
                                     blockNumber={2}
+                                    ecrNo={currentEcrNo}
                                 />
                             </Col>
                         </Row>

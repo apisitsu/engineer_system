@@ -3,16 +3,78 @@ export const NETWORK_TIMEOUT_MESSAGE = "A network timeout has occurred, Please t
 export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was unable to upload.";
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
-// // // ----------- PROD -----------
-// export const apiUrl = "http://plbmp130.lb.minebea.local:2005/";
-export const apiUrl = "http://plbmp130:2005/";
+// ============================================================================
+// API URL Configuration
+// - Default: Automatically detects Host (Production, Dev 129/118, Localhost)
+// - Manual Override: Set MANUAL_OVERRIDE_URL if you need to force a specific host
+// ============================================================================
+const MANUAL_OVERRIDE_URL = ""; // e.g. "http://plbmp130.lb.minebea.local:2005/"
 
+const getDynamicApiUrl = () => {
+  let resolvedUrl = "http://plbmp130.lb.minebea.local:2005/";
+  let matchedRule = "Production Fallback";
 
-// // // ----------- DEV -----------
-// export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
-// export const apiUrl = "http://10.121.50.38:2005/";
-// export const apiUrl = "http://plbmp118:2005/";
+  if (process.env.REACT_APP_API_URL) {
+    resolvedUrl = process.env.REACT_APP_API_URL.endsWith('/')
+      ? process.env.REACT_APP_API_URL
+      : `${process.env.REACT_APP_API_URL}/`;
+    matchedRule = "ENV (REACT_APP_API_URL)";
+  } else if (typeof window !== 'undefined' && window.location) {
+    const host = (window.location.hostname || '').toLowerCase();
+
+    // 1. Localhost / Local Development
+    if (host === 'localhost' || host === '127.0.0.1') {
+      resolvedUrl = "http://localhost:2005/";
+      matchedRule = `Localhost (${host})`;
+    }
+    // 2. Production Server (plbmp130)
+    else if (host.includes('plbmp130')) {
+      resolvedUrl = "http://plbmp130.lb.minebea.local:2005/";
+      matchedRule = `Production (${host})`;
+    }
+    // 3. Dev Server 129 (plbmp129)
+    else if (host.includes('plbmp129')) {
+      resolvedUrl = "http://plbmp129.lb.minebea.local:2005/";
+      matchedRule = `Dev 129 (${host})`;
+    }
+    // 4. Dev Server 118 (plbmp118)
+    else if (host.includes('plbmp118')) {
+      resolvedUrl = "http://plbmp118.lb.minebea.local:2005/";
+      matchedRule = `Dev 118 (${host})`;
+    }
+    // 5. Intranet Hostname without domain (append .lb.minebea.local for network-wide accessibility)
+    else if (host && !host.includes('.')) {
+      resolvedUrl = `http://${host}.lb.minebea.local:2005/`;
+      matchedRule = `Intranet Host (${host} -> ${host}.lb.minebea.local)`;
+    }
+    // 6. Direct IP or other FQDN Host (e.g. 10.121.50.38)
+    else if (host) {
+      resolvedUrl = `${window.location.protocol}//${host}:2005/`;
+      matchedRule = `Custom Host / IP (${host})`;
+    }
+  }
+
+  return { resolvedUrl, matchedRule };
+};
+
+const _detectedApi = getDynamicApiUrl();
+export const apiUrl = MANUAL_OVERRIDE_URL || _detectedApi.resolvedUrl;
+
+// Developer diagnostic log in browser console
+if (typeof window !== 'undefined') {
+  const currentHost = window.location.hostname || 'unknown';
+  const activeMode = MANUAL_OVERRIDE_URL ? `MANUAL OVERRIDE (${MANUAL_OVERRIDE_URL})` : _detectedApi.matchedRule;
+  console.log(
+    `%c[API Host Detect]%c Host: %c${currentHost}%c | Target API: %c${apiUrl}%c | Rule: %c${activeMode}`,
+    'color: #ffffff; background: #0284c7; padding: 2px 6px; border-radius: 3px 0 0 3px; font-weight: bold;',
+    'color: #334155; background: #f1f5f9; padding: 2px 4px;',
+    'color: #0369a1; background: #f1f5f9; font-weight: bold; padding: 2px 4px;',
+    'color: #64748b; background: #f1f5f9; padding: 2px 4px;',
+    'color: #15803d; background: #f1f5f9; font-weight: bold; padding: 2px 4px;',
+    'color: #64748b; background: #f1f5f9; padding: 2px 4px;',
+    'color: #7c3aed; background: #f1f5f9; font-weight: bold; padding: 2px 4px; border-radius: 0 3px 3px 0;'
+  );
+}
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -306,8 +368,7 @@ export const mm_safety = {
   TOTAL_STOCK: "TOTAL_STOCK"
 }
 
-// Google Apps Script Web App URL (doGet endpoint for hidden iframe email notifications)
-export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
+
 
 // Google Apps Script Web App URL (doPost endpoint for Kanban Drive file attachments)
 // เน€เธยเธขยเธขย เน€เธยเน€เธยเธขย Paste your deployed GAS URL here after deploying Code.gs
@@ -331,3 +392,5 @@ export const GAS_TI_CSV_URL = 'https://script.google.com/a/macros/minebea.co.th/
 // .env's GAS_EMAIL_WEBAPP (kept as a literal here — CRA cannot read the backend
 // .env — update both if the script is ever re-deployed under a new /exec URL).
 export const GAS_EMAIL_WEBAPP = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyBwUbuPNdv9hGJd5s_SjVynpVxW5hPe4I45CtDB614JMeEzEsJTjPw_-GQv7f41o-TIQ/exec';
+export const GAS_WEBAPP_URL = GAS_EMAIL_WEBAPP;
+

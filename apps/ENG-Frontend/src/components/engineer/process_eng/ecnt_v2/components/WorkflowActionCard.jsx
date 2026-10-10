@@ -8,7 +8,8 @@ import { useAuthStore } from '../../../../../stores/authStore';
 import { 
     CheckCircleOutlined, ClockCircleOutlined, LockOutlined, 
     RollbackOutlined, CloseCircleOutlined, PlusCircleOutlined,
-    ArrowRightOutlined, EditOutlined, ExclamationCircleOutlined
+    ArrowRightOutlined, EditOutlined, ExclamationCircleOutlined,
+    LinkOutlined
 } from '@ant-design/icons';
 import { dispatchStageWorkflowEmail } from '../../../../../services/ecntEmailService';
 import AttachableField from './AttachableField';
@@ -37,6 +38,7 @@ export default function WorkflowActionCard({
     docData = null, 
     onSuccess,
     onOpenCreateEcn,
+    onOpenEditEcn,
     onOpenResubmit,
     onNavigateToEcn
 }) {
@@ -50,6 +52,8 @@ export default function WorkflowActionCard({
     const cleanRole = (userRole || localStorage.getItem('role') || '').toUpperCase();
     const cleanDept = (userDepartment || localStorage.getItem('u_department') || '').toUpperCase();
     const cleanName = (userName || localStorage.getItem('u_name') || '').toLowerCase();
+    const activeEcrNo = docData?.ecr_no || (documentType === 'ECR' ? docData?.doc_no : '') || '';
+    const activeEcnNo = docData?.ecn_no || (documentType === 'ECN' ? docData?.doc_no : '') || '';
 
     // 1. Super Admin / System Admin check
     const systemAdmins = (systemConfig?.system_admins || ['admin', 'eng_mgr']).map(a => String(a).toLowerCase());
@@ -80,18 +84,29 @@ export default function WorkflowActionCard({
 
             isAuthorized = isAdmin || isRequester;
         } else if (currentBlock === 3) {
-            const configuredDeptMgr = systemConfig?.stage_assignees?.dept_mgr_mapping?.[docData?.department];
-            responsibleRoleLabel = `Department Manager (${docData?.department || 'Concerned Dept'})`;
-            responsiblePersonName = configuredDeptMgr?.name || `${docData?.department || ''} Manager`;
+            const isRiskAssessment = processStatus === 'Pending Risk Assessment' || docData?.current_stage_code === 'STAGE_2_RISK';
+            if (isRiskAssessment) {
+                responsibleRoleLabel = 'Assigned Lead Engineer (Risk Assessment)';
+                responsiblePersonName = docData?.assigned_to || 'NATHAPORN YAMMANUS (พี่โอ)';
+                const isRiskPic = cleanDept === 'ENG' || cleanName.includes('nathaporn') || (docData?.assigned_to && (
+                    docData.assigned_to.toLowerCase() === cleanEmpNo ||
+                    docData.assigned_to.toLowerCase() === cleanName
+                ));
+                isAuthorized = isAdmin || isRiskPic;
+            } else {
+                const configuredDeptMgr = systemConfig?.stage_assignees?.dept_mgr_mapping?.[docData?.department];
+                responsibleRoleLabel = `Department Manager (${docData?.department || 'Concerned Dept'})`;
+                responsiblePersonName = configuredDeptMgr?.name || `${docData?.department || ''} Manager`;
 
-            const isConfiguredMgr = configuredDeptMgr && (
-                (configuredDeptMgr.emp_no || '').toLowerCase() === cleanEmpNo ||
-                (configuredDeptMgr.name || '').toLowerCase() === cleanName
-            );
-            const isDeptMgrRole = cleanDept === (docData?.department || '').toUpperCase() && 
-                (cleanRole === 'MGR' || cleanRole === 'MANAGER' || (position && position.toLowerCase().includes('mgr')));
+                const isConfiguredMgr = configuredDeptMgr && (
+                    (configuredDeptMgr.emp_no || '').toLowerCase() === cleanEmpNo ||
+                    (configuredDeptMgr.name || '').toLowerCase() === cleanName
+                );
+                const isDeptMgrRole = cleanDept === (docData?.department || '').toUpperCase() && 
+                    (cleanRole === 'MGR' || cleanRole === 'MANAGER' || (position && position.toLowerCase().includes('mgr')));
 
-            isAuthorized = isAdmin || isConfiguredMgr || isDeptMgrRole;
+                isAuthorized = isAdmin || isConfiguredMgr || isDeptMgrRole;
+            }
         } else if (currentBlock === 4) {
             const configuredEngMgr = systemConfig?.stage_assignees?.eng_mgr;
             responsibleRoleLabel = 'Engineering Department Manager';
@@ -195,6 +210,8 @@ export default function WorkflowActionCard({
     const [engineerCandidates, setEngineerCandidates] = useState([]);
     const [commentAttachments, setCommentAttachments] = useState([]);
     const [rmdAttachments, setRmdAttachments] = useState([]);
+    const [faiSummaryAttachments, setFaiSummaryAttachments] = useState([]);
+    const [riskAttachments, setRiskAttachments] = useState([]);
 
     useEffect(() => {
         setDeptTasks(getActiveDepartments().map(d => ({ ...d, is_needed: true })));
@@ -220,14 +237,17 @@ export default function WorkflowActionCard({
     const isIssueEcn = Form.useWatch(['details', 'is_issue_ecn'], form);
     const faiDecision = Form.useWatch(['details', 'decision'], form);
 
+    const isEcrRiskAssessment = documentType === 'ECR' && currentBlock === 3 && (processStatus === 'Pending Risk Assessment' || docData?.current_stage_code === 'STAGE_2_RISK');
     const isEcrIssuedEcn = documentType === 'ECR' && (processStatus === 'Issued ECN' || currentBlock === 5);
     const isEcrRework = documentType === 'ECR' && (processStatus === 'Require More Detail' || currentBlock === 1);
-    const isCustomActionStage = isEcrIssuedEcn || isEcrRework;
+    const isCustomActionStage = isEcrIssuedEcn || isEcrRework || isEcrRiskAssessment;
 
     useEffect(() => {
         form.resetFields();
         setCommentAttachments([]);
         setRmdAttachments([]);
+        setFaiSummaryAttachments([]);
+        setRiskAttachments([]);
         if (currentBlock === 4 && !isEcrIssuedEcn) {
             const defaultEng = systemConfig?.stage_assignees?.default_assigned_engineer?.name || 'NATHAPORN YAMMANUS';
             form.setFieldsValue({
@@ -273,7 +293,7 @@ export default function WorkflowActionCard({
 
             setLoading(true);
 
-            const allAttachments = [...commentAttachments, ...rmdAttachments];
+            const allAttachments = [...commentAttachments, ...rmdAttachments, ...faiSummaryAttachments, ...riskAttachments];
 
             const payload = {
                 block_number: currentBlock,
@@ -343,6 +363,8 @@ export default function WorkflowActionCard({
             form.resetFields();
             setCommentAttachments([]);
             setRmdAttachments([]);
+            setFaiSummaryAttachments([]);
+            setRiskAttachments([]);
             if (onSuccess) {
                 const openModal = documentType === 'ECR' && currentBlock === 4 && selectedAction === 'APPROVE' && values.details?.is_issue_ecn !== false;
                 onSuccess({ openCreateEcn: openModal });
@@ -509,11 +531,87 @@ export default function WorkflowActionCard({
                 <div style={{ marginBottom: 16 }}>
                     <Alert 
                         message="⚠️ ECN Clarification Requested by Eng Dept Manager (Block 5 Rework)"
-                        description="Please review the clarification notes below, provide explanations or updated attachments, and resubmit to the Engineering Department Manager."
+                        description={
+                            <div style={{ fontSize: 13 }}>
+                                <div>Please review the clarification notes below, provide explanations or updated attachments, and resubmit to the Engineering Department Manager.</div>
+                                {docData?.last_rmd_comment && (
+                                    <div style={{ marginTop: 8, color: '#d46b08', background: '#fff7e6', padding: '8px 12px', borderRadius: 6, border: '1px solid #ffd591' }}>
+                                        <div style={{ fontWeight: 600, marginBottom: 2 }}>⚠️ Eng Mgr Clarification Request:</div>
+                                        <div>{docData.last_rmd_comment}</div>
+                                    </div>
+                                )}
+                            </div>
+                        }
                         type="warning" 
                         showIcon 
                         style={{ marginBottom: 16 }}
                     />
+                    {isAuthorized && onOpenEditEcn && (
+                        <div style={{ marginBottom: 16 }}>
+                            <Button 
+                                type="primary" 
+                                size="large" 
+                                icon={<EditOutlined />} 
+                                onClick={onOpenEditEcn}
+                                style={{ width: '100%', height: 42, background: '#fa8c16', borderColor: '#fa8c16', borderRadius: 8, fontWeight: 600 }}
+                            >
+                                ✏️ Edit & Revise ECN (Block 5)
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ECR Block 3: Risk Assessment (Lead Engineer: พี่โอ - Nathaporn)
+        if (isEcrRiskAssessment) {
+            return (
+                <div style={{ marginBottom: 16 }}>
+                    <Alert 
+                        message={`ECR Risk Assessment (Assigned Lead Engineer: ${docData?.assigned_to || 'NATHAPORN YAMMANUS'})`}
+                        description="Please review the change request, conduct technical risk and feasibility assessment, and submit findings to Engineering Department Manager."
+                        type="info" 
+                        showIcon 
+                        style={{ marginBottom: 16 }}
+                    />
+                    <Row gutter={[16, 12]}>
+                        <Col span={24}>
+                            <AttachableField
+                                name={['details', 'risk_notes']}
+                                fieldName="risk_assessment"
+                                label="Risk Assessment Analysis & Findings"
+                                placeholder="Detail safety, production, and quality risks or mitigation measures (press Ctrl+V to paste screenshot)..."
+                                rows={3}
+                                rules={[{ required: true, message: 'Please provide risk assessment findings' }]}
+                                attachments={riskAttachments}
+                                onAttachmentsChange={setRiskAttachments}
+                                blockNumber={3}
+                                ecrNo={activeEcrNo}
+                                ecnNo={activeEcnNo}
+                            />
+                        </Col>
+                    </Row>
+                    {isAuthorized ? (
+                        <Button 
+                            type="primary" 
+                            size="large" 
+                            icon={<CheckCircleOutlined />} 
+                            onClick={() => handleSubmit('SUBMIT_RISK')}
+                            loading={loading}
+                            style={{ width: '100%', height: 42, background: '#1677ff', borderRadius: 8, fontWeight: 600, marginTop: 8 }}
+                        >
+                            Submit Risk Assessment to Eng Dept Manager
+                        </Button>
+                    ) : (
+                        <div style={{ width: '100%', padding: '12px 14px', background: '#fffbe6', borderRadius: 8, border: '1px dashed #ffe58f', textAlign: 'center', marginTop: 8 }}>
+                            <Space>
+                                <LockOutlined style={{ color: '#fa8c16' }} />
+                                <Text style={{ fontSize: 13 }}>
+                                    Awaiting Assigned Engineer <strong>({docData?.assigned_to || 'NATHAPORN YAMMANUS'})</strong> to conduct Risk Assessment
+                                </Text>
+                            </Space>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -729,9 +827,33 @@ export default function WorkflowActionCard({
                             </Form.Item>
                         </Col>
                         <Col span={24}>
-                            <Form.Item name={['details', 'summary_result']} label="Summary of FAI Result & Summarize">
-                                <TextArea rows={2} placeholder="Summarize FAI inspection and measurement results..." />
+                            <Form.Item name={['details', 'google_sheet_url']} label="Google Sheet / Link (FAI Measurement & Summary Report)">
+                                <Input 
+                                    prefix={<LinkOutlined />} 
+                                    placeholder="https://docs.google.com/spreadsheets/d/..." 
+                                    addonAfter={
+                                        form.getFieldValue(['details', 'google_sheet_url']) ? (
+                                            <a href={form.getFieldValue(['details', 'google_sheet_url'])} target="_blank" rel="noopener noreferrer">
+                                                Open 🔗
+                                            </a>
+                                        ) : null
+                                    }
+                                />
                             </Form.Item>
+                        </Col>
+                        <Col span={24}>
+                            <AttachableField
+                                name={['details', 'summary_result']}
+                                fieldName="fai_summary"
+                                label="Summary of FAI Result & Summarize"
+                                placeholder="Summarize FAI inspection and measurement results (press Ctrl+V to paste screenshot)..."
+                                rows={3}
+                                attachments={faiSummaryAttachments}
+                                onAttachmentsChange={setFaiSummaryAttachments}
+                                blockNumber={9}
+                                ecrNo={activeEcrNo}
+                                ecnNo={activeEcnNo}
+                            />
                         </Col>
                         <Col span={24}>
                             <Form.Item name={['details', 'stakeholder_comment']} label="Stakeholder Comment / Action">
@@ -1005,15 +1127,18 @@ export default function WorkflowActionCard({
                 {/* Common Comment & Deny / RMD details */}
                 {!isCustomActionStage && currentBlock !== 10 && currentBlock !== 11 && (
                     <>
-                        {documentType === 'ECN' && currentBlock === 5 ? null : (
+                        {/* Only show RMD field for Block 3, 4, 6 where clarification is supported */}
+                        {(currentBlock === 3 || currentBlock === 4 || currentBlock === 6) && (
                             <AttachableField
                                 name="request_to_requester"
-                                label="Detail Requested from Requester / Engineer (If requiring more detail)"
+                                label={currentBlock === 3 ? "Detail request to requester" : "Detail Requested from Requester / Engineer (If requiring more detail)"}
                                 placeholder="Explain what additional info is needed (press Ctrl+V to paste screenshot)..."
                                 rows={2}
                                 attachments={rmdAttachments}
                                 onAttachmentsChange={setRmdAttachments}
                                 blockNumber={currentBlock}
+                                ecrNo={activeEcrNo}
+                                ecnNo={activeEcnNo}
                             />
                         )}
                         {currentBlock !== 5 && currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9 && (
@@ -1029,6 +1154,8 @@ export default function WorkflowActionCard({
                             attachments={commentAttachments}
                             onAttachmentsChange={setCommentAttachments}
                             blockNumber={currentBlock}
+                            ecrNo={activeEcrNo}
+                            ecnNo={activeEcnNo}
                         />
                     </>
                 )}

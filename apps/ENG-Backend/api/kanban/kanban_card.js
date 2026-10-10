@@ -6,8 +6,6 @@
 const { engPool } = require('../../instance/eng_db');
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const {
     canAccessProject, canManageProject,
@@ -15,51 +13,6 @@ const {
     hasBoardLevelOverride, canEditBoard, canViewBoard, canEditCard, canManageCard, canViewCard,
 } = require('./kanban_acl');
 const { insertToPositionables } = require('./positionHelper');
-
-// ─── GOOGLE DRIVE (GAS) CONFIG ────────────────────────────────────────
-const GAS_DRIVE_URL = process.env.GAS_DRIVE_URL || '';
-
-/** Corporate proxy agent for HTTPS via McAfee Web Gateway (CONNECT method) */
-function getDriveProxyAgent() {
-    if (process.env.PROXY_HOST) {
-        const proxyUrl = `http://${process.env.PROXY_USER}:${process.env.PROXY_PASS}@${process.env.PROXY_HOST}:${process.env.PROXY_PORT || 8080}`;
-        return new HttpsProxyAgent(proxyUrl);
-    }
-    return undefined;
-}
-
-/** POST to GAS Web App with proxy + redirect handling */
-async function postToGAS(payload) {
-    if (!GAS_DRIVE_URL) throw new Error('GAS_DRIVE_URL is not configured in .env');
-    const agent = getDriveProxyAgent();
-
-    // Axios natively converts POST to GET upon encountering a 302 redirect.
-    // To preserve the POST payload, we must manually handle the redirect.
-    try {
-        const response = await axios.post(GAS_DRIVE_URL, payload, {
-            httpsAgent: agent,
-            proxy: false,
-            maxRedirects: 0, // Prevent auto-follow
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 120000, // 2 min for large files
-            validateStatus: status => status >= 200 && status <= 302
-        });
-
-        if (response.status === 302 && response.headers.location) {
-            const finalRes = await axios.post(response.headers.location, payload, {
-                httpsAgent: agent,
-                proxy: false,
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 120000
-            });
-            return finalRes.data;
-        }
-
-        return response.data;
-    } catch (err) {
-        throw new Error(`GAS Communication failed: ${err.message}`);
-    }
-}
 
 // ─── AUTH HELPER ──────────────────────────────────────────────────
 /**

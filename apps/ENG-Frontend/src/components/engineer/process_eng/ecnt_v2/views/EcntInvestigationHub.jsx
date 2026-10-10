@@ -100,6 +100,8 @@ export default function EcntInvestigationHub({
                                     documentType={documentType} 
                                     documentId={documentId} 
                                     activeStageCode={docData?.current_stage_code} 
+                                    ecrNo={docData?.ecr_no}
+                                    ecnNo={docData?.ecn_no}
                                 />
                             )
                         },

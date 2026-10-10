@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Card, Collapse, Typography, Row, Col, Tag, Space, Button, 
-    Spin, Checkbox, Table, Alert, Select, Tooltip, Dropdown 
+    Spin, Checkbox, Table, Alert, Select, Tooltip, Dropdown,
+    Modal, Descriptions
 } from 'antd';
 import { App } from 'antd';
 import { 
     ArrowLeftOutlined, MessageOutlined, CalendarOutlined, FilePdfOutlined, 
     EditOutlined, PlusCircleOutlined, CheckCircleOutlined, ClockCircleOutlined,
-    CopyOutlined, DiffOutlined, MoreOutlined, ArrowRightOutlined
+    CopyOutlined, DiffOutlined, MoreOutlined, ArrowRightOutlined,
+    EyeOutlined, FolderOpenOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
@@ -26,7 +28,7 @@ const { Title, Text, Paragraph } = Typography;
 export default function EcntWorkspaceView({ 
     documentType, 
     documentId, 
-    systemConfig = {},
+    systemConfig = {}, 
     onBack, 
     onOpenInvestigation, 
     onOpenGantt, 
@@ -47,6 +49,8 @@ export default function EcntWorkspaceView({
     const [tasksData, setTasksData] = useState([]);
 
     const [isCreateEcnOpen, setIsCreateEcnOpen] = useState(false);
+    const [isEditEcnOpen, setIsEditEcnOpen] = useState(false);
+    const [activeDetailSection, setActiveDetailSection] = useState(null);
     const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
     const [viewRevision, setViewRevision] = useState('LATEST'); // 'LATEST' | 'PREVIOUS'
 
@@ -258,7 +262,7 @@ export default function EcntWorkspaceView({
                                     <Button 
                                         type="primary" 
                                         icon={<EditOutlined />} 
-                                        onClick={() => onEditEcr(docData)}
+                                        onClick={() => onEditEcr && onEditEcr({ ...docData, attachments })}
                                         style={{ background: '#fa8c16', borderColor: '#fa8c16', borderRadius: 8, fontWeight: 600 }}
                                     >
                                         Edit & Resubmit ECR
@@ -269,6 +273,19 @@ export default function EcntWorkspaceView({
                                     ⏳ Awaiting requester ({docData?.request_by_name || docData?.request_by || 'Requester'}) to revise and resubmit
                                 </Tag>
                             )
+                        )}
+
+                        {documentType === 'ECN' && isReworkActive && (
+                            <Tooltip title="Edit and Resubmit ECN with revisions (Block 5)">
+                                <Button 
+                                    type="primary" 
+                                    icon={<EditOutlined />} 
+                                    onClick={() => setIsEditEcnOpen(true)}
+                                    style={{ background: '#fa8c16', borderColor: '#fa8c16', borderRadius: 8, fontWeight: 600 }}
+                                >
+                                    Edit & Resubmit ECN (Block 5)
+                                </Button>
+                            </Tooltip>
                         )}
 
                         {documentType === 'ECR' && docData?.linked_ecn_id && (
@@ -302,6 +319,20 @@ export default function EcntWorkspaceView({
                                 </Tag>
                             )
                         )}
+
+                        <Tooltip title="Open Google Drive Attachments Folder">
+                            <Button 
+                                icon={<FolderOpenOutlined />} 
+                                onClick={() => {
+                                    const folderUrl = attachments.find(a => a.drive_folder_url)?.drive_folder_url || 
+                                        'https://drive.google.com/drive/folders/1NKhFV81KnUKrjCLae1sFrwj2xZeVKOD5';
+                                    window.open(folderUrl, '_blank', 'noreferrer');
+                                }}
+                                style={{ borderRadius: 8, borderColor: '#faad14', color: '#d48806' }}
+                            >
+                                Drive 📁
+                            </Button>
+                        </Tooltip>
 
                         {docData?.process_status === 'ECN Effective' && (
                             <Tooltip title="Download Official Notice PDF">
@@ -399,6 +430,17 @@ export default function EcntWorkspaceView({
                                 <Collapse.Panel 
                                     header={<Text strong style={{ color: '#1890ff', fontSize: 13 }}>1. Document Overview & Origins</Text>} 
                                     key="overview_section"
+                                    extra={
+                                        <Button 
+                                            size="small" 
+                                            type="link" 
+                                            icon={<EyeOutlined />} 
+                                            onClick={(e) => { e.stopPropagation(); setActiveDetailSection('overview'); }}
+                                            style={{ fontWeight: 600, fontSize: 12, padding: 0 }}
+                                        >
+                                            ดูรายละเอียดฉบับเต็ม
+                                        </Button>
+                                    }
                                 >
                                     <Row gutter={[16, 10]}>
                                         <Col span={8}><Text type="secondary">Document Type:</Text> <Tag color={documentType === 'ECR' ? 'blue' : 'purple'}>{documentType}</Tag></Col>
@@ -433,6 +475,17 @@ export default function EcntWorkspaceView({
                                 <Collapse.Panel 
                                     header={<Text strong style={{ color: '#1890ff', fontSize: 13 }}>2. ECR Technical Details (Blocks 1-2)</Text>} 
                                     key="tech_section"
+                                    extra={
+                                        <Button 
+                                            size="small" 
+                                            type="link" 
+                                            icon={<EyeOutlined />} 
+                                            onClick={(e) => { e.stopPropagation(); setActiveDetailSection('tech'); }}
+                                            style={{ fontWeight: 600, fontSize: 12, padding: 0 }}
+                                        >
+                                            ดูรายละเอียดฉบับเต็ม
+                                        </Button>
+                                    }
                                 >
                                     <Row gutter={[16, 12]}>
                                         <Col span={12}><Text type="secondary">Status:</Text> <Tag color="purple">{currentDisplayDoc.status_type || 'PERMANENT'}</Tag></Col>
@@ -557,6 +610,17 @@ export default function EcntWorkspaceView({
                                     <Collapse.Panel 
                                         header={<Text strong style={{ color: '#1890ff', fontSize: 13 }}>3. ECN Execution Scope (Block 5)</Text>} 
                                         key="ecn_section"
+                                        extra={
+                                            <Button 
+                                                size="small" 
+                                                type="link" 
+                                                icon={<EyeOutlined />} 
+                                                onClick={(e) => { e.stopPropagation(); setActiveDetailSection('ecn_scope'); }}
+                                                style={{ fontWeight: 600, fontSize: 12, padding: 0 }}
+                                            >
+                                                ดูรายละเอียดฉบับเต็ม
+                                            </Button>
+                                        }
                                     >
                                         <Row gutter={[16, 10]}>
                                             <Col span={12}>
@@ -596,21 +660,77 @@ export default function EcntWorkspaceView({
                                     <Collapse.Panel 
                                         header={<Text strong style={{ color: '#1890ff', fontSize: 13 }}>4. Impact Assessment Matrix (Block 5)</Text>} 
                                         key="impact_section"
+                                        extra={
+                                            <Button 
+                                                size="small" 
+                                                type="link" 
+                                                icon={<EyeOutlined />} 
+                                                onClick={(e) => { e.stopPropagation(); setActiveDetailSection('impact'); }}
+                                                style={{ fontWeight: 600, fontSize: 12, padding: 0 }}
+                                            >
+                                                ดูรายละเอียดฉบับเต็ม
+                                            </Button>
+                                        }
                                     >
                                         {impactData ? (
-                                            <Row gutter={[16, 12]}>
-                                                <Col span={8}><Checkbox checked={impactData.has_customer_impact} disabled>Customer Impact (4M)</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_kzw_fjsw_impact} disabled>KZW/FJSW Impact</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_sale_drawing_impact} disabled>Sale Drawing</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_traceability} disabled>Traceability</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_wip_stock} disabled>WIP / Stock</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_outsourcing} disabled>Outsourcing</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_unit_price} disabled>Unit Price</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_manufacturing} disabled>Manufacturing Process</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_product_quality} disabled>Product Quality</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_safety} disabled>Safety</Checkbox></Col>
-                                                <Col span={8}><Checkbox checked={impactData.has_otd} disabled>On-Time Delivery</Checkbox></Col>
-                                            </Row>
+                                            <div>
+                                                <Row gutter={[16, 12]} style={{ marginBottom: 12 }}>
+                                                    <Col span={8}><Checkbox checked={impactData.has_customer_impact} disabled>Customer Impact (4M)</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_kzw_fjsw_impact} disabled>KZW/FJSW Impact</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_sale_drawing_impact} disabled>Sale Drawing</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_traceability} disabled>Traceability</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_wip_stock} disabled>WIP / Stock</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_outsourcing} disabled>Outsourcing</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_unit_price} disabled>Unit Price</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_manufacturing} disabled>Manufacturing Process</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_product_quality} disabled>Product Quality</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_safety} disabled>Safety</Checkbox></Col>
+                                                    <Col span={8}><Checkbox checked={impactData.has_otd} disabled>On-Time Delivery</Checkbox></Col>
+                                                </Row>
+
+                                                {/* Detailed cards for active items */}
+                                                {impactData.has_traceability && (
+                                                    <div style={{ marginTop: 10, padding: 12, background: '#f5f9ff', borderRadius: 8, border: '1px solid #d6e4ff' }}>
+                                                        <Text strong style={{ color: '#1890ff' }}>📌 1. Traceability Details</Text>
+                                                        <Row gutter={[12, 8]} style={{ marginTop: 6 }}>
+                                                            <Col span={12}><Text type="secondary">Recalled Lot No:</Text> <Text strong>{impactData.traceability_details?.lot_no || 'N/A'}</Text></Col>
+                                                            <Col span={12}><Text type="secondary">Confirm Finish Date:</Text> <Text>{impactData.traceability_details?.finish_date ? moment(impactData.traceability_details.finish_date).format('DD-MMM-YYYY') : 'N/A'}</Text></Col>
+                                                            {impactData.traceability_details?.google_sheet_url && (
+                                                                <Col span={24}>
+                                                                    <Text type="secondary">Google Sheet Link: </Text>
+                                                                    <a href={impactData.traceability_details.google_sheet_url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+                                                                        {impactData.traceability_details.google_sheet_url} 🔗
+                                                                    </a>
+                                                                </Col>
+                                                            )}
+                                                            <Col span={24}>
+                                                                <FieldAttachmentDisplay attachments={attachments} fieldName="traceability" />
+                                                            </Col>
+                                                        </Row>
+                                                    </div>
+                                                )}
+
+                                                {impactData.has_wip_stock && (
+                                                    <div style={{ marginTop: 10, padding: 12, background: '#f6ffed', borderRadius: 8, border: '1px solid #d9f7be' }}>
+                                                        <Text strong style={{ color: '#52c41a' }}>📦 2. WIP, Stock, Backlog Details</Text>
+                                                        <Row gutter={[12, 8]} style={{ marginTop: 6 }}>
+                                                            <Col span={12}><Text type="secondary">Target Models / Disposition:</Text> <Text strong>{impactData.wip_stock_details?.models || 'N/A'}</Text></Col>
+                                                            <Col span={12}><Text type="secondary">Confirm Finish Date:</Text> <Text>{impactData.wip_stock_details?.finish_date ? moment(impactData.wip_stock_details.finish_date).format('DD-MMM-YYYY') : 'N/A'}</Text></Col>
+                                                            {impactData.wip_stock_details?.google_sheet_url && (
+                                                                <Col span={24}>
+                                                                    <Text type="secondary">Google Sheet Link: </Text>
+                                                                    <a href={impactData.wip_stock_details.google_sheet_url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+                                                                        {impactData.wip_stock_details.google_sheet_url} 🔗
+                                                                    </a>
+                                                                </Col>
+                                                            )}
+                                                            <Col span={24}>
+                                                                <FieldAttachmentDisplay attachments={attachments} fieldName="wip_stock" />
+                                                            </Col>
+                                                        </Row>
+                                                    </div>
+                                                )}
+                                            </div>
                                         ) : (
                                             <Text type="secondary">No impact assessment recorded.</Text>
                                         )}
@@ -622,6 +742,17 @@ export default function EcntWorkspaceView({
                                     <Collapse.Panel 
                                         header={<Text strong style={{ color: '#1890ff', fontSize: 13 }}>5. QC Decisions: MSA & FAI (Blocks 7-8)</Text>} 
                                         key="qc_section"
+                                        extra={
+                                            <Button 
+                                                size="small" 
+                                                type="link" 
+                                                icon={<EyeOutlined />} 
+                                                onClick={(e) => { e.stopPropagation(); setActiveDetailSection('qc'); }}
+                                                style={{ fontWeight: 600, fontSize: 12, padding: 0 }}
+                                            >
+                                                ดูรายละเอียดฉบับเต็ม
+                                            </Button>
+                                        }
                                     >
                                         {qcData.length > 0 ? (
                                             <Space direction="vertical" style={{ width: '100%' }}>
@@ -652,6 +783,17 @@ export default function EcntWorkspaceView({
                                     <Collapse.Panel 
                                         header={<Text strong style={{ color: '#1890ff', fontSize: 13 }}>6. FAI Results Summary (Block 9)</Text>} 
                                         key="fai_section"
+                                        extra={
+                                            <Button 
+                                                size="small" 
+                                                type="link" 
+                                                icon={<EyeOutlined />} 
+                                                onClick={(e) => { e.stopPropagation(); setActiveDetailSection('fai'); }}
+                                                style={{ fontWeight: 600, fontSize: 12, padding: 0 }}
+                                            >
+                                                ดูรายละเอียดฉบับเต็ม
+                                            </Button>
+                                        }
                                     >
                                         {faiData ? (
                                             <Row gutter={[16, 10]}>
@@ -660,11 +802,20 @@ export default function EcntWorkspaceView({
                                                     {faiData.fai_approved_confirmed ? <Tag color="success">CONFIRMED</Tag> : <Tag>NOT REQUIRED</Tag>}
                                                 </Col>
                                                 <Col span={12}><Text type="secondary">FAI Lot No:</Text> <Text strong>{faiData.fai_lot_no || 'N/A'}</Text></Col>
+                                                {faiData.google_sheet_url && (
+                                                    <Col span={24}>
+                                                        <Text type="secondary">Google Sheet Link: </Text>
+                                                        <a href={faiData.google_sheet_url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+                                                            {faiData.google_sheet_url} 🔗
+                                                        </a>
+                                                    </Col>
+                                                )}
                                                 <Col span={24}>
                                                     <Text strong>Summary Result:</Text>
                                                     <Paragraph style={{ marginTop: 4, background: '#fafafa', padding: 8, borderRadius: 4 }}>
                                                         {faiData.summary_result || 'N/A'}
                                                     </Paragraph>
+                                                    <FieldAttachmentDisplay attachments={attachments} fieldName="fai_summary" />
                                                 </Col>
                                                 <Col span={24}>
                                                     <Text strong>Stakeholder Comment / Action:</Text>
@@ -684,6 +835,17 @@ export default function EcntWorkspaceView({
                                     <Collapse.Panel 
                                         header={<Text strong style={{ color: '#1890ff', fontSize: 13 }}>7. Multi-Department Concern Approvals (Block 10)</Text>} 
                                         key="concern_section"
+                                        extra={
+                                            <Button 
+                                                size="small" 
+                                                type="link" 
+                                                icon={<EyeOutlined />} 
+                                                onClick={(e) => { e.stopPropagation(); setActiveDetailSection('concern'); }}
+                                                style={{ fontWeight: 600, fontSize: 12, padding: 0 }}
+                                            >
+                                                ดูรายละเอียดฉบับเต็ม
+                                            </Button>
+                                        }
                                     >
                                         {tasksData.length > 0 ? (
                                             <Table 
@@ -736,7 +898,8 @@ export default function EcntWorkspaceView({
                                     }
                                 }}
                                 onOpenCreateEcn={() => setIsCreateEcnOpen(true)}
-                                onOpenResubmit={() => onEditEcr && onEditEcr(docData)}
+                                onOpenEditEcn={() => setIsEditEcnOpen(true)}
+                                onOpenResubmit={() => onEditEcr && onEditEcr({ ...docData, attachments })}
                                 onNavigateToEcn={(ecnId) => onOpenDoc && onOpenDoc({ id: ecnId, doc_type: 'ECN' })}
                             />
                         </Col>
@@ -756,6 +919,20 @@ export default function EcntWorkspaceView({
                 }}
             />
 
+            {/* Sub-modal: Edit & Resubmit ECN (Block 5 Rework) */}
+            <CreateECNModal 
+                open={isEditEcnOpen}
+                linkedEcr={linkedEcr || docData}
+                initialEcnData={{ ...docData, attachments, impact: impactData }}
+                isEditMode={true}
+                systemConfig={systemConfig}
+                onClose={() => setIsEditEcnOpen(false)}
+                onSuccess={() => {
+                    setIsEditEcnOpen(false);
+                    fetchDetail();
+                }}
+            />
+
             {/* Revision Diff Comparison Modal */}
             <RevisionDiffModal
                 open={isDiffModalOpen}
@@ -764,6 +941,345 @@ export default function EcntWorkspaceView({
                 fieldAudits={fieldAudits}
                 stageHistory={stageHistory}
             />
+
+            {/* View Full Details Modal */}
+            <Modal
+                title={
+                    <span style={{ fontSize: 16, fontWeight: 600, color: '#1890ff' }}>
+                        {activeDetailSection === 'overview' && '1. Document Overview & Origins - ดูรายละเอียดฉบับเต็ม'}
+                        {activeDetailSection === 'tech' && '2. ECR Technical Details (Blocks 1-2) - ดูรายละเอียดฉบับเต็ม'}
+                        {activeDetailSection === 'ecn_scope' && '3. ECN Execution Scope (Block 5) - ดูรายละเอียดฉบับเต็ม'}
+                        {activeDetailSection === 'impact' && '4. 8-Dimension Impact Assessment Matrix (Block 5) - ดูรายละเอียดฉบับเต็ม'}
+                        {activeDetailSection === 'qc' && '5. QC Decisions: MSA & FAI (Blocks 7-8) - ดูรายละเอียดฉบับเต็ม'}
+                        {activeDetailSection === 'fai' && '6. FAI Results Summary (Block 9) - ดูรายละเอียดฉบับเต็ม'}
+                        {activeDetailSection === 'concern' && '7. Multi-Department Concern Approvals (Block 10) - ดูรายละเอียดฉบับเต็ม'}
+                    </span>
+                }
+                open={!!activeDetailSection}
+                onCancel={() => setActiveDetailSection(null)}
+                footer={[
+                    <Button key="close" type="primary" onClick={() => setActiveDetailSection(null)}>
+                        ปิด (Close)
+                    </Button>
+                ]}
+                width={920}
+                destroyOnClose
+            >
+                <div style={{ maxHeight: '72vh', overflowY: 'auto', paddingRight: 8, marginTop: 12 }}>
+                    {activeDetailSection === 'overview' && docData && (
+                        <Descriptions bordered size="small" column={{ xs: 1, sm: 2, md: 3 }}>
+                            <Descriptions.Item label="Document Type"><Tag color={documentType === 'ECR' ? 'blue' : 'purple'}>{documentType}</Tag></Descriptions.Item>
+                            <Descriptions.Item label="Doc Number"><Text strong>{documentType === 'ECR' ? (docData.ecr_no || 'Pending') : (docData.ecn_no || 'Pending')}</Text></Descriptions.Item>
+                            <Descriptions.Item label="Status"><StatusBadge status={docData.process_status} /></Descriptions.Item>
+                            <Descriptions.Item label="Requester">{docData.request_by_name || docData.request_by} ({docData.request_by || ''})</Descriptions.Item>
+                            <Descriptions.Item label="Department">{docData.department}</Descriptions.Item>
+                            <Descriptions.Item label="Created At">{moment(docData.created_at).format('DD-MMM-YYYY HH:mm:ss')}</Descriptions.Item>
+                            <Descriptions.Item label="Customer">{docData.customer_name || 'N/A'}</Descriptions.Item>
+                            <Descriptions.Item label="Project / Model">{docData.project_code || 'N/A'}</Descriptions.Item>
+                            <Descriptions.Item label="Ref COC No">{docData.ref_coc_no || 'N/A'}</Descriptions.Item>
+                            {docData.risk_assessment_notes && (
+                                <Descriptions.Item label="Risk Assessment Notes" span={3}>
+                                    <div style={{ background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
+                                        <div>{docData.risk_assessment_notes}</div>
+                                        <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                                            By: {docData.risk_assessment_by_name || docData.risk_assessment_by} on {docData.risk_assessment_date ? moment(docData.risk_assessment_date).format('DD-MMM-YYYY HH:mm') : ''}
+                                        </Text>
+                                    </div>
+                                </Descriptions.Item>
+                            )}
+                        </Descriptions>
+                    )}
+
+                    {activeDetailSection === 'tech' && currentDisplayDoc && (
+                        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                            <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                                <Descriptions.Item label="Status Type"><Tag color="purple">{currentDisplayDoc.status_type || 'PERMANENT'}</Tag></Descriptions.Item>
+                                <Descriptions.Item label="Objective"><Tag color="cyan">{currentDisplayDoc.objective} {currentDisplayDoc.objective_other ? `(${currentDisplayDoc.objective_other})` : ''}</Tag></Descriptions.Item>
+                                <Descriptions.Item label="Change Categories" span={2}>
+                                    <Space size={4}>
+                                        {currentDisplayDoc.is_drawing && <Tag color="blue">Product/Process Drawing</Tag>}
+                                        {currentDisplayDoc.is_tooling && <Tag color="green">Tooling</Tag>}
+                                        {currentDisplayDoc.is_program && <Tag color="orange">Cutting Program</Tag>}
+                                        {currentDisplayDoc.is_usage && <Tag color="magenta">Usage / Setup</Tag>}
+                                    </Space>
+                                </Descriptions.Item>
+                                <Descriptions.Item label="Title of Change" span={2}>
+                                    <Text strong style={{ fontSize: 14 }}>{currentDisplayDoc.title_of_change}</Text>
+                                </Descriptions.Item>
+                                <Descriptions.Item label="Reason of Change" span={2}>
+                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{currentDisplayDoc.reason_of_change}</div>
+                                    <FieldAttachmentDisplay attachments={attachments} fieldName="reason_of_change" />
+                                </Descriptions.Item>
+                            </Descriptions>
+
+                            {currentDisplayDoc.is_drawing && (
+                                <Card size="small" title={<Text strong style={{ color: '#1890ff' }}>📐 Drawing Specifications</Text>}>
+                                    <Descriptions bordered size="small" column={{ xs: 1, sm: 3 }}>
+                                        <Descriptions.Item label="Part No">{currentDisplayDoc.dwg_part_no || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="C/N">{currentDisplayDoc.dwg_cn || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Revision">{currentDisplayDoc.dwg_revision || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Before Change" span={3}>
+                                            <div style={{ whiteSpace: 'pre-wrap', marginBottom: 6 }}>{currentDisplayDoc.dwg_before_change || '-'}</div>
+                                            <FieldAttachmentDisplay attachments={attachments} fieldName="dwg_before_change" />
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="After Change" span={3}>
+                                            <div style={{ whiteSpace: 'pre-wrap', marginBottom: 6 }}>{currentDisplayDoc.dwg_after_change || '-'}</div>
+                                            <FieldAttachmentDisplay attachments={attachments} fieldName="dwg_after_change" />
+                                        </Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+                            )}
+
+                            {currentDisplayDoc.is_tooling && (
+                                <Card size="small" title={<Text strong style={{ color: '#52c41a' }}>🔧 Tooling Specifications</Text>}>
+                                    <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                                        <Descriptions.Item label="Current Tool No">{currentDisplayDoc.tool_current_no || '-'} ({currentDisplayDoc.tool_current_usage} K/pc)</Descriptions.Item>
+                                        <Descriptions.Item label="New Tool No">{currentDisplayDoc.tool_new_no || '-'} ({currentDisplayDoc.tool_new_usage} K/pc)</Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+                            )}
+
+                            {currentDisplayDoc.is_program && (
+                                <Card size="small" title={<Text strong style={{ color: '#fa8c16' }}>💻 Program & Conditions</Text>}>
+                                    <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                                        <Descriptions.Item label="Program Before" span={2}>
+                                            <div>{currentDisplayDoc.prog_before_change || '-'}</div>
+                                            <FieldAttachmentDisplay attachments={attachments} fieldName="prog_before_change" />
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Program After" span={2}>
+                                            <div>{currentDisplayDoc.prog_after_change || '-'}</div>
+                                            <FieldAttachmentDisplay attachments={attachments} fieldName="prog_after_change" />
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Condition Before" span={2}>
+                                            <div>{currentDisplayDoc.prog_condition_before || '-'}</div>
+                                            <FieldAttachmentDisplay attachments={attachments} fieldName="prog_condition_before" />
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Condition After" span={2}>
+                                            <div>{currentDisplayDoc.prog_condition_after || '-'}</div>
+                                            <FieldAttachmentDisplay attachments={attachments} fieldName="prog_condition_after" />
+                                        </Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+                            )}
+
+                            {currentDisplayDoc.is_usage && (
+                                <Card size="small" title={<Text strong style={{ color: '#eb2f96' }}>⚙️ Usage & Setup Sheet</Text>}>
+                                    <Descriptions bordered size="small" column={{ xs: 1, sm: 3 }}>
+                                        <Descriptions.Item label="Setup Sheet No">{currentDisplayDoc.usage_setup_no || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Part No">{currentDisplayDoc.usage_part_no || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="M/C No">{currentDisplayDoc.usage_mc_no || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Process">{currentDisplayDoc.usage_process || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Program No">{currentDisplayDoc.usage_program_no || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Cycle Time">{currentDisplayDoc.usage_cycle_time_before || '-'} → {currentDisplayDoc.usage_cycle_time_after || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Before Setup" span={3}>
+                                            <div>{currentDisplayDoc.usage_before_change || '-'}</div>
+                                            <FieldAttachmentDisplay attachments={attachments} fieldName="usage_before_change" />
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="After Setup" span={3}>
+                                            <div>{currentDisplayDoc.usage_after_change || '-'}</div>
+                                            <FieldAttachmentDisplay attachments={attachments} fieldName="usage_after_change" />
+                                        </Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+                            )}
+                        </Space>
+                    )}
+
+                    {activeDetailSection === 'ecn_scope' && docData && (
+                        <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                            <Descriptions.Item label="DWG Suspended in Innovator">{docData.dwg_suspended ? <Tag color="error">CONFIRMED SUSPENDED</Tag> : <Tag>NO</Tag>}</Descriptions.Item>
+                            <Descriptions.Item label="DWG Enabled in Innovator">{docData.dwg_enabled ? <Tag color="success">CONFIRMED ACTIVE</Tag> : <Tag color="warning">PENDING</Tag>}</Descriptions.Item>
+                            <Descriptions.Item label="Scope of Implementation" span={2}>
+                                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{docData.scope_of_implementation || 'N/A'}</div>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Before Change Description" span={2}>
+                                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, marginBottom: 6 }}>{docData.before_change || 'N/A'}</div>
+                                <FieldAttachmentDisplay attachments={attachments} fieldName="before_change" />
+                            </Descriptions.Item>
+                            <Descriptions.Item label="After Change Description" span={2}>
+                                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, marginBottom: 6 }}>{docData.after_change || 'N/A'}</div>
+                                <FieldAttachmentDisplay attachments={attachments} fieldName="after_change" />
+                            </Descriptions.Item>
+                        </Descriptions>
+                    )}
+
+                    {activeDetailSection === 'impact' && (
+                        impactData ? (
+                            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                                <Card size="small" title="1. Customer, Overseas & Sale Drawing Impact">
+                                    <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                                        <Descriptions.Item label="Customer Impact">{impactData.has_customer_impact ? <Tag color="red">YES</Tag> : <Tag>NO</Tag>}</Descriptions.Item>
+                                        <Descriptions.Item label="Customer Name">{impactData.customer_name || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="4M Request Doc No">{impactData.m4_request_doc_no || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Notification Date">{impactData.customer_notification_date ? moment(impactData.customer_notification_date).format('DD-MMM-YYYY') : '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Change Notice Date">{impactData.customer_change_notice_date ? moment(impactData.customer_change_notice_date).format('DD-MMM-YYYY') : '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Cust Approved Date">{impactData.customer_approved_date ? moment(impactData.customer_approved_date).format('DD-MMM-YYYY') : '-'}</Descriptions.Item>
+                                        
+                                        <Descriptions.Item label="KZW/FJSW Impact">{impactData.has_kzw_fjsw_impact ? <Tag color="volcano">YES</Tag> : <Tag>NO</Tag>}</Descriptions.Item>
+                                        <Descriptions.Item label="Operation Type">{impactData.operation_type || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="KZW DCN/ECN Doc No">{impactData.kzw_dcn_ecn_doc_no || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Confirm Received Date">{impactData.kzw_doc_received_date ? moment(impactData.kzw_doc_received_date).format('DD-MMM-YYYY') : '-'}</Descriptions.Item>
+
+                                        <Descriptions.Item label="Sale Drawing Impact">{impactData.has_sale_drawing_impact ? <Tag color="blue">YES</Tag> : <Tag>NO</Tag>}</Descriptions.Item>
+                                        <Descriptions.Item label="Revision No">{impactData.sale_drawing_revision_no || '-'}</Descriptions.Item>
+                                        <Descriptions.Item label="Confirm Finish Date" span={2}>{impactData.sale_drawing_finish_date ? moment(impactData.sale_drawing_finish_date).format('DD-MMM-YYYY') : '-'}</Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+
+                                <Card size="small" title="2. 8 Affected Areas Checklist">
+                                    <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                                        <Descriptions.Item label="1. Traceability (Lot Recall)" span={2}>
+                                            {impactData.has_traceability ? <Tag color="purple">YES</Tag> : <Tag>NO</Tag>}
+                                            {impactData.has_traceability && (
+                                                <div style={{ marginTop: 6 }}>
+                                                    <div>Recalled Lot No: <Text strong>{impactData.traceability_details?.lot_no || '-'}</Text></div>
+                                                    <div>Confirm Finish Date: <Text>{impactData.traceability_details?.finish_date ? moment(impactData.traceability_details.finish_date).format('DD-MMM-YYYY') : '-'}</Text></div>
+                                                    {impactData.traceability_details?.google_sheet_url && (
+                                                        <div style={{ marginTop: 4 }}>
+                                                            Google Sheet Link: <a href={impactData.traceability_details.google_sheet_url} target="_blank" rel="noopener noreferrer">{impactData.traceability_details.google_sheet_url} 🔗</a>
+                                                        </div>
+                                                    )}
+                                                    <FieldAttachmentDisplay attachments={attachments} fieldName="traceability" />
+                                                </div>
+                                            )}
+                                        </Descriptions.Item>
+
+                                        <Descriptions.Item label="2. WIP, Stock, Backlog" span={2}>
+                                            {impactData.has_wip_stock ? <Tag color="purple">YES</Tag> : <Tag>NO</Tag>}
+                                            {impactData.has_wip_stock && (
+                                                <div style={{ marginTop: 6 }}>
+                                                    <div>Target Models / Disposition: <Text strong>{impactData.wip_stock_details?.models || '-'}</Text></div>
+                                                    <div>Confirm Finish Date: <Text>{impactData.wip_stock_details?.finish_date ? moment(impactData.wip_stock_details.finish_date).format('DD-MMM-YYYY') : '-'}</Text></div>
+                                                    {impactData.wip_stock_details?.google_sheet_url && (
+                                                        <div style={{ marginTop: 4 }}>
+                                                            Google Sheet Link: <a href={impactData.wip_stock_details.google_sheet_url} target="_blank" rel="noopener noreferrer">{impactData.wip_stock_details.google_sheet_url} 🔗</a>
+                                                        </div>
+                                                    )}
+                                                    <FieldAttachmentDisplay attachments={attachments} fieldName="wip_stock" />
+                                                </div>
+                                            )}
+                                        </Descriptions.Item>
+
+                                        <Descriptions.Item label="3. Outsourcing Process" span={2}>
+                                            {impactData.has_outsourcing ? <Tag color="purple">YES</Tag> : <Tag>NO</Tag>}
+                                            {impactData.has_outsourcing && (
+                                                <div style={{ marginTop: 6 }}>
+                                                    <div>Method / Doc No: {impactData.outsourcing_details?.by_method || '-'}</div>
+                                                    <div>Lots in Outsourcing: {impactData.outsourcing_details?.lots || '-'}</div>
+                                                </div>
+                                            )}
+                                        </Descriptions.Item>
+
+                                        <Descriptions.Item label="4. Unit Price" span={2}>
+                                            {impactData.has_unit_price ? <Tag color="purple">YES</Tag> : <Tag>NO</Tag>}
+                                            {impactData.has_unit_price && (
+                                                <div style={{ marginTop: 6 }}>
+                                                    <div>Stakeholder Info: {impactData.unit_price_details?.stakeholder_info || '-'}</div>
+                                                    <div>Cost Factors: {impactData.unit_price_details?.cost_factors || '-'}</div>
+                                                </div>
+                                            )}
+                                        </Descriptions.Item>
+
+                                        <Descriptions.Item label="5. Manufacturing Process" span={2}>
+                                            {impactData.has_manufacturing ? <Tag color="purple">YES</Tag> : <Tag>NO</Tag>}
+                                            {impactData.has_manufacturing && (
+                                                <div style={{ marginTop: 6 }}>
+                                                    <div>WI Doc No: {impactData.manufacturing_details?.production_methods_doc || '-'}</div>
+                                                    <div>Tooling Data Sheet No: {impactData.manufacturing_details?.tooling_doc || '-'}</div>
+                                                    <div>Program Machine No: {impactData.manufacturing_details?.program_doc || '-'}</div>
+                                                </div>
+                                            )}
+                                        </Descriptions.Item>
+
+                                        <Descriptions.Item label="6. Product Quality" span={2}>
+                                            {impactData.has_product_quality ? <Tag color="purple">YES</Tag> : <Tag>NO</Tag>}
+                                            {impactData.has_product_quality && (
+                                                <div style={{ marginTop: 6 }}>
+                                                    <div>Inspection Methods / WI No: {impactData.product_quality_details?.inspection_methods_doc || '-'}</div>
+                                                    <div>Additional Items: {impactData.product_quality_details?.additional_items || '-'}</div>
+                                                </div>
+                                            )}
+                                        </Descriptions.Item>
+
+                                        <Descriptions.Item label="7. Safety" span={2}>
+                                            {impactData.has_safety ? <Tag color="purple">YES</Tag> : <Tag>NO</Tag>}
+                                            {impactData.has_safety && (
+                                                <div style={{ marginTop: 6 }}>
+                                                    <div>Risk Assessment Doc No: {impactData.safety_details?.risk_assessment_doc || '-'}</div>
+                                                </div>
+                                            )}
+                                        </Descriptions.Item>
+
+                                        <Descriptions.Item label="8. On-Time Delivery" span={2}>
+                                            {impactData.has_otd ? <Tag color="purple">YES</Tag> : <Tag>NO</Tag>}
+                                            {impactData.has_otd && (
+                                                <div style={{ marginTop: 6 }}>
+                                                    <div>Increased Approx Time: {impactData.otd_details?.increase_time || '-'}</div>
+                                                    <div>Est Completion Date: {impactData.otd_details?.estimated_completion_date ? moment(impactData.otd_details.estimated_completion_date).format('DD-MMM-YYYY') : '-'}</div>
+                                                </div>
+                                            )}
+                                        </Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+                            </Space>
+                        ) : <Text type="secondary">No impact assessment recorded.</Text>
+                    )}
+
+                    {activeDetailSection === 'qc' && (
+                        <Space direction="vertical" style={{ width: '100%' }}>
+                            {qcData.map(qc => (
+                                <Card key={qc.id} size="small" title={`${qc.decision_type} Decision: ${qc.decision} ${qc.fai_type ? `(${qc.fai_type})` : ''}`}>
+                                    <Descriptions bordered size="small" column={1}>
+                                        <Descriptions.Item label="Decision Reason"><div style={{ whiteSpace: 'pre-wrap' }}>{qc.reason || 'None'}</div></Descriptions.Item>
+                                        <Descriptions.Item label="Evaluator">{qc.confirmed_by_name} ({qc.confirmed_by})</Descriptions.Item>
+                                        <Descriptions.Item label="Confirmed Date">{moment(qc.confirmed_date).format('DD-MMM-YYYY HH:mm:ss')}</Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+                            ))}
+                        </Space>
+                    )}
+
+                    {activeDetailSection === 'fai' && (
+                        faiData ? (
+                            <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                                <Descriptions.Item label="FAI Lot No">{faiData.fai_lot_no || 'N/A'}</Descriptions.Item>
+                                <Descriptions.Item label="FAI Approved Status">{faiData.fai_approved_confirmed ? <Tag color="success">CONFIRMED</Tag> : <Tag>NOT REQUIRED</Tag>}</Descriptions.Item>
+                                {faiData.google_sheet_url && (
+                                    <Descriptions.Item label="Google Sheet Report Link" span={2}>
+                                        <a href={faiData.google_sheet_url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+                                            {faiData.google_sheet_url} 🔗
+                                        </a>
+                                    </Descriptions.Item>
+                                )}
+                                <Descriptions.Item label="Summary Result" span={2}>
+                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, marginBottom: 8 }}>{faiData.summary_result || 'N/A'}</div>
+                                    <FieldAttachmentDisplay attachments={attachments} fieldName="fai_summary" />
+                                </Descriptions.Item>
+                                <Descriptions.Item label="Stakeholder Comment" span={2}>
+                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{faiData.stakeholder_comment || 'N/A'}</div>
+                                </Descriptions.Item>
+                            </Descriptions>
+                        ) : <Text type="secondary">Pending FAI Summary.</Text>
+                    )}
+
+                    {activeDetailSection === 'concern' && (
+                        <Table 
+                            dataSource={tasksData} 
+                            rowKey="id" 
+                            pagination={false} 
+                            size="middle"
+                            columns={[
+                                { title: 'Dept', dataIndex: 'dept_code', width: 90, render: c => <Tag color="blue">{c}</Tag> },
+                                { title: 'Department Name', dataIndex: 'dept_label' },
+                                { title: 'Involvement', dataIndex: 'is_needed', render: v => v ? <Tag color="blue">NEED</Tag> : <Tag>NO NEED</Tag> },
+                                { title: 'Status', dataIndex: 'status', render: st => st === 'ACKNOWLEDGED' ? <Tag color="success" icon={<CheckCircleOutlined />}>ACKNOWLEDGED</Tag> : <Tag color="warning" icon={<ClockCircleOutlined />}>PENDING</Tag> },
+                                { title: 'Sign-off PIC', render: (_, r) => r.approved_by_name ? `${r.approved_by_name} (${r.approved_by || ''})` : '-' },
+                                { title: 'Signed Date', render: (_, r) => r.approved_date ? moment(r.approved_date).format('DD-MMM-YYYY HH:mm') : '-' }
+                            ]}
+                        />
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 }
