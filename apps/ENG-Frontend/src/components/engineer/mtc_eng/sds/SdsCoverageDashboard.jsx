@@ -888,6 +888,88 @@ export default function SdsCoverageDashboard() {
     },
   };
 
+  // ── KZW Complete per Month (net additions, not cumulative) ─────────────────────
+  // `monthlyStatus` carries CUMULATIVE complete_saved — this chart wants the net
+  // change month to month, so each bar is literally "how many were KZW-completed
+  // in this month". Diffing two adjacent cumulative snapshots is also why a carried-
+  // forward month (no new sign that month) nets to 0 automatically — no separate
+  // "no activity" case needed. Index 0 (the previous-FY `isPrevLast` baseline, when
+  // present) is skipped as a bar — there's nothing to report "added" for a snapshot,
+  // only used as the prior value Apr diffs against.
+  //
+  // A month AFTER the current one has no snapshot yet — `monthlyStatus` fills it
+  // with a hard `{complete:0, pending:0}` placeholder (see that useMemo), which is
+  // NOT "zero completed that month", it's "no data exists for this month". Diffing
+  // against it produced a fake cliff: Nov's placeholder (0) minus Oct's real
+  // cumulative total nets to a multi-thousand negative bar. `net` stays `null` for
+  // those months — same "nothing to show" signal `hasBarData`/`spanGaps` use
+  // elsewhere on this dashboard — so Chart.js renders no bar instead of a lie.
+  const kzwMonthlyNet = useMemo(() => {
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const valOf = (r) => r?.complete_saved ?? r?.complete ?? 0;
+    const rows = [];
+    for (let i = 0; i < monthlyStatus.length; i++) {
+      const r = monthlyStatus[i];
+      if (r.isPrevLast) continue;
+      const prev = monthlyStatus[i - 1];
+      const hasData = r.month <= curMonth;
+      rows.push({ month: r.month, net: hasData ? valOf(r) - (prev ? valOf(prev) : 0) : null });
+    }
+    return rows;
+  }, [monthlyStatus]);
+
+  const kzwMonthlyChartData = useMemo(() => {
+    const curMonth = new Date().toISOString().slice(0, 7);
+    return {
+      labels: kzwMonthlyNet.map(r => fmtMonth(r.month)),
+      datasets: [{
+        label: 'KZW Complete',
+        data: kzwMonthlyNet.map(r => r.net),
+        backgroundColor: kzwMonthlyNet.map(r => hexToRgba(r.net < 0 ? C.red : C.green,
+          (filterMonth && r.month !== filterMonth) ? 0.25 : (r.month === curMonth ? 0.4 : 0.75))),
+        borderColor: kzwMonthlyNet.map(r => r.net < 0 ? C.red : C.green),
+        borderWidth: 1,
+      }],
+    };
+  }, [kzwMonthlyNet, filterMonth]);
+
+  const kzwMonthlyChartOpts = {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    onClick: (evt, _els, chart) => {
+      const row = kzwMonthlyNet[columnIndexAt(evt, chart)];
+      if (row?.month && row.net !== null) pickMonth(row.month);
+    },
+    onHover: (evt, _els, chart) => {
+      const row = kzwMonthlyNet[columnIndexAt(evt, chart)];
+      chart.canvas.style.cursor = row?.month && row.net !== null ? 'pointer' : 'default';
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `KZW Complete: ${ctx.parsed.y.toLocaleString()}` } },
+      datalabels: {
+        display: (ctx) => {
+          const net = kzwMonthlyNet[ctx.dataIndex]?.net;
+          return net !== null && net !== undefined && net !== 0;
+        },
+        formatter: (v) => v.toLocaleString(),
+        color: (ctx) => (kzwMonthlyNet[ctx.dataIndex]?.net < 0 ? C.red : C.textPri),
+        anchor: (ctx) => (kzwMonthlyNet[ctx.dataIndex]?.net < 0 ? 'start' : 'end'),
+        align: (ctx) => (kzwMonthlyNet[ctx.dataIndex]?.net < 0 ? 'bottom' : 'top'),
+        offset: 4,
+        font: { size: 10, weight: 700 },
+      },
+    },
+    layout: { padding: { top: 20 } },
+    scales: {
+      x: { ticks: { color: C.textSec, font: { size: 10 }, maxRotation: 45 }, grid: { color: C.gridLine } },
+      y: {
+        ticks: { color: C.textSec, font: { size: 10 } },
+        grid: { color: C.gridLine },
+        title: { display: true, text: 'CNs completed (KZW)', color: C.textSec, font: { size: 10 } },
+      },
+    },
+  };
+
   // ── Needs attention table ─────────────────────────────────────────────────────
   // All three filter dropdowns are derived from the rows actually in the table
   // (data.needsAttention), so each only lists values that exist there — selecting any
@@ -1090,55 +1172,28 @@ export default function SdsCoverageDashboard() {
 
             {/* ── Part Type Cards ─────────────────────────────────────────────── */}
             {byPartType.length > 0 && (
-              <Row gutter={[10, 10]} style={{ marginBottom: 14 }}>
-                {/* Total CNs summary card — same width as "New SDS Reqs per Month" below */}
+              <Row gutter={[10, 10]} align="stretch" style={{ marginBottom: 14 }}>
+                {/* "New SDS Reqs per Month" moved up here (was in the Charts Row below) —
+                    TOTAL now sits stacked above Pending instead, so this slot would
+                    otherwise sit empty. Same span=8 width it already had down there.
+                    `align="stretch"` on the outer Row makes this card match the KPI
+                    block's full height, down through its last row (Ball/Race/Mecha/
+                    Sleeve) — the chart container is flex:1 (not a fixed 240px) so the
+                    canvas actually grows to fill whatever height that stretch gives it. */}
                 <Col span={8}>
-                  <div
-                    role="button" tabIndex={0}
-                    title="Show every pending CN (clears the part-type and month filters)"
-                    onClick={clearSelection}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearSelection(); } }}
-                    style={{
-                      ...cardStyle, borderTop: `3px solid ${C.cyan}`, height: '100%', boxSizing: 'border-box',
-                      cursor: 'pointer', opacity: filterPt ? 0.6 : 1, transition: 'opacity 0.15s',
-                    }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
-                      <Text style={{ color: C.cyan, fontSize: 13, fontWeight: 800 }}>TOTAL</Text>
-                      <Tooltip title="Total SDS requirements = CN × machine × process">
-                        <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1, cursor: 'help' }}>
-                          {(cardKpi?.total ?? 0).toLocaleString()}
-                        </Text>
-                      </Tooltip>
+                  <div style={{ ...cardStyle, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    {sectionTitle(
+                      <Tooltip title="Counts new (CN × machine × process) combinations, not CNs — one CN first produced on two machines counts as 2, possibly in different months. A combo's month is when it was FIRST produced (since the report's since-date), not a monthly recount.">
+                        <span style={{ cursor: 'help' }}>New SDS Reqs per Month</span>
+                      </Tooltip>,
+                      C
+                    )}
+                    <div style={{ flex: 1, minHeight: 0 }}>
+                      {monthlyNewParts.length > 0
+                        ? <Bar data={newPartsChartData} options={newPartsChartOpts} />
+                        : <div style={{ color: C.textSec, textAlign: 'center', paddingTop: 100 }}>No data</div>
+                      }
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
-                      <Tooltip title="Complete / Pending sheets">
-                        <Text style={{ fontSize: 10, cursor: 'help' }}>
-                          <span style={{ color: C.green, fontWeight: 700 }}>{(cardKpi?.complete ?? 0).toLocaleString()}</span>
-                          <span style={{ color: C.textSec }}> comp / </span>
-                          <span style={{ color: C.yellow, fontWeight: 700 }}>{(cardKpi?.pending ?? 0).toLocaleString()}</span>
-                          <span style={{ color: C.textSec }}> pend</span>
-                        </Text>
-                      </Tooltip>
-                    </div>
-                    {(() => {
-                      const pct = cardKpi?.completePct ?? 0;
-                      const pctSaved = cardKpi?.completeSavedPct ?? pct;
-                      const boost = Math.max(0, (cardKpi?.complete ?? 0) - (cardKpi?.completeSaved ?? cardKpi?.complete ?? 0));
-                      return (<>
-                        <Tooltip title={`KZW ${pctSaved}% + THAI ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
-                          <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px', display: 'flex', cursor: 'help' }}>
-                            <div style={{ width: `${Math.min(pctSaved, 100)}%`, height: '100%', background: C.green, transition: 'width 0.8s ease' }} />
-                            <div style={{ width: `${Math.min(Math.max(pct - pctSaved, 0), 100)}%`, height: '100%', background: C.greenSoft, opacity: 0.85, transition: 'width 0.8s ease' }} />
-                          </div>
-                        </Tooltip>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-                          <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>{pctSaved}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>KZW</Text></Text>
-                          {boost > 0 && <Text style={{ color: C.greenSoft, fontSize: 11, fontWeight: 700 }}>+{(pct - pctSaved).toFixed(1)}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>THAI *</Text></Text>}
-                          {boost > 0 && <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 800 }}>→ {pct}%</Text>}
-                        </div>
-                      </>);
-                    })()}
                   </div>
                 </Col>
                 {/* Complete/Pending on top, Ball/Race/Mecha/Sleeve underneath — same
@@ -1151,11 +1206,30 @@ export default function SdsCoverageDashboard() {
                       fill that same combined height instead of leaving empty space below it. */}
                   <Row gutter={[10, 10]} align="stretch" style={{ marginBottom: 10 }}>
                     <Col span={8}>
+                      {/* TOTAL moved here (was Complete's slot), stacked above Pending —
+                          the rich progress-bar version didn't fit this column's width, so
+                          it's the same compact stat-tile shape as Complete/Pending/%Complete;
+                          the KZW/THAI detail it used to carry is already shown in the
+                          Complete and %Complete breakdown cards beside it. */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
+                        <MiniStatCard label="Total" value={cardKpi?.total ?? 0} color={C.cyan} C={C}
+                          onClick={clearSelection}
+                          dimmed={!!(filterPt || filterReason || filterMonth)} />
+                        <div style={{ flex: 1 }}>
+                          <MiniStatCard label="Pending" value={scopedStats.pending} color={C.yellow} C={C}
+                            onClick={() => pickReason('PENDING')} active={filterReason === 'PENDING'}
+                            dimmed={!!filterReason && filterReason !== 'PENDING'} />
+                        </div>
+                      </div>
+                    </Col>
+                    <Col span={8}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
                         <MiniStatCard label="Complete" value={scopedStats.complete} color={C.green} C={C}
                           onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
                           dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
-                        <Row gutter={[8, 8]} style={{ flex: 1 }}>
+                        {/* `align="stretch"` so KZW/THAI match Pending's full stretched
+                            height instead of sitting at their own shorter natural size. */}
+                        <Row gutter={[8, 8]} align="stretch" style={{ flex: 1 }}>
                           <Col span={12}>
                             <SubStatCard label="KZW complete" value={scopedStats.completeSaved} color={C.green} C={C} />
                           </Col>
@@ -1173,17 +1247,12 @@ export default function SdsCoverageDashboard() {
                       </div>
                     </Col>
                     <Col span={8}>
-                      <MiniStatCard label="Pending" value={scopedStats.pending} color={C.yellow} C={C}
-                        onClick={() => pickReason('PENDING')} active={filterReason === 'PENDING'}
-                        dimmed={!!filterReason && filterReason !== 'PENDING'} />
-                    </Col>
-                    <Col span={8}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
                         <MiniStatCard label="% Complete" value={scopedStats.completePct} suffix="%"
                           color={scopedStats.completePct >= 90 ? C.green : C.red} C={C}
                           onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
                           dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
-                        <Row gutter={[8, 8]} style={{ flex: 1 }}>
+                        <Row gutter={[8, 8]} align="stretch" style={{ flex: 1 }}>
                           <Col span={12}>
                             <SubStatCard label="KZW %" value={scopedStats.completeSavedPct} suffix="%"
                               color={scopedStats.completeSavedPct >= 90 ? C.green : C.red} C={C} />
@@ -1242,28 +1311,38 @@ export default function SdsCoverageDashboard() {
               </div>
             )}
 
-            {/* ── Charts Row (New Parts + Cumulative Status) ─────────────────── */}
-            <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
+            {/* ── Charts Row (KZW Complete per Month + Cumulative Status) ─────── */}
+            {/* New SDS Reqs per Month moved up into the KPI row above (TOTAL's old
+                slot). KZW Complete per Month (span=8) and Cumulative Coverage Status
+                (span=16) now share ONE Row with `align="stretch"`, same mechanism as
+                the KPI row above — two independent fixed-height chart boxes could
+                drift apart depending on content (legend wrapping, datalabel padding,
+                etc.); stretch guarantees them byte-equal instead of "equal by
+                coincidence of identical markup". The chart container is flex:1 with
+                a 360px floor (2026-10-10, was 240px) so the canvas grows to fill
+                whatever height the taller sibling's content gives the row, but
+                never shrinks below that floor. */}
+            <Row gutter={[14, 0]} align="stretch" style={{ marginBottom: 14 }}>
               <Col span={8}>
-                <div style={{ ...cardStyle, height: '100%' }}>
+                <div style={{ ...cardStyle, height: '100%', display: 'flex', flexDirection: 'column' }}>
                   {sectionTitle(
-                    <Tooltip title="Counts new (CN × machine × process) combinations, not CNs — one CN first produced on two machines counts as 2, possibly in different months. A combo's month is when it was FIRST produced (since the report's since-date), not a monthly recount.">
-                      <span style={{ cursor: 'help' }}>New SDS Reqs per Month</span>
+                    <Tooltip title="How many sheets were KZW-completed (baseline stamp) IN that month — the net change between adjacent cumulative snapshots, not a running total. A month with no new sign nets to 0; a sheet reverting to pending nets negative.">
+                      <span style={{ cursor: 'help' }}>KZW Complete per Month</span>
                     </Tooltip>,
                     C
                   )}
-                  <div style={{ height: 240 }}>
-                    {monthlyNewParts.length > 0
-                      ? <Bar data={newPartsChartData} options={newPartsChartOpts} />
+                  <div style={{ flex: 1, minHeight: 360 }}>
+                    {kzwMonthlyNet.length > 0
+                      ? <Bar data={kzwMonthlyChartData} options={kzwMonthlyChartOpts} />
                       : <div style={{ color: C.textSec, textAlign: 'center', paddingTop: 100 }}>No data</div>
                     }
                   </div>
                 </div>
               </Col>
               <Col span={16}>
-                <div style={{ ...cardStyle, height: '100%' }}>
+                <div style={{ ...cardStyle, height: '100%', display: 'flex', flexDirection: 'column' }}>
                   {sectionTitle('Cumulative Coverage Status', C)}
-                  <div style={{ height: 240 }}>
+                  <div style={{ flex: 1, minHeight: 360 }}>
                     <Bar data={statusChartData} options={statusChartOpts} />
                   </div>
                 </div>
