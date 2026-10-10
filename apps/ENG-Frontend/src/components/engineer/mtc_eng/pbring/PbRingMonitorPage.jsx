@@ -1889,25 +1889,30 @@ function ConditionTab() {
 
   return (
     <div>
-      <Card size="small" title="Edit — an existing CN's slots" style={{ marginBottom: 16 }}>
-        <Space wrap style={{ marginBottom: 12 }}>
-          <Text type="secondary">Machine</Text>
-          <Select
-            style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
-            onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
-          />
-          <Input placeholder="CN e.g. 294065" style={{ width: 140 }} value={cn} onChange={(e) => setCn(e.target.value)} />
-          <Button icon={<ReloadOutlined />} loading={rowsLoading} onClick={loadRows}>Load</Button>
-          <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim()}>Add Slot</Button>
-          <Button
-            type="primary" icon={showHistoryCard ? <UpOutlined /> : <DownOutlined />}
-            onClick={() => setShowHistoryCard((s) => !s)}
-          >
-            {showHistoryCard ? 'Hide' : '+ New Tool Condition'}
-          </Button>
-        </Space>
-        <Table size="small" rowKey="_k" dataSource={rows} columns={rowsColumns} loading={rowsLoading} pagination={false} scroll={{ x: 1700 }} />
-      </Card>
+      <Space style={{ marginBottom: 16 }}>
+        <Button type={showHistoryCard ? 'default' : 'primary'} onClick={() => setShowHistoryCard(false)}>
+          Edit Existing CN
+        </Button>
+        <Button type={showHistoryCard ? 'primary' : 'default'} icon={<PlusOutlined />} onClick={() => setShowHistoryCard(true)}>
+          + New Tool Condition
+        </Button>
+      </Space>
+
+      {!showHistoryCard && (
+        <Card size="small" title="Edit — an existing CN's slots">
+          <Space wrap style={{ marginBottom: 12 }}>
+            <Text type="secondary">Machine</Text>
+            <Select
+              style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
+              onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
+            />
+            <Input placeholder="CN e.g. 294065" style={{ width: 140 }} value={cn} onChange={(e) => setCn(e.target.value)} />
+            <Button icon={<ReloadOutlined />} loading={rowsLoading} onClick={loadRows}>Load</Button>
+            <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim()}>Add Slot</Button>
+          </Space>
+          <Table size="small" rowKey="_k" dataSource={rows} columns={rowsColumns} loading={rowsLoading} pagination={false} scroll={{ x: 1700 }} />
+        </Card>
+      )}
 
       {showHistoryCard && (
         <Card size="small" title="+ New CN from History — suggest from what this machine has used before">
