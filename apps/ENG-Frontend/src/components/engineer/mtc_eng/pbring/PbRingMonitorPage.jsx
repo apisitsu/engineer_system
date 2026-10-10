@@ -1741,6 +1741,15 @@ const CONDITION_FIELD_COLS = [
 // than asking the admin to type it every time.
 const PBRING_TURNING_PROCESS_CODE = '0081';
 
+// "+ New CN from History" (the condition-data equivalent of +New HW) is
+// built and working (see pbringConditionController.js's /condition/history
+// + /condition/from-history) but hidden from the UI by user decision
+// (2026-10-10) — not ready to surface yet. The "Edit" card's own
+// "+ New Tool Condition" button (a blank row the admin fills by hand) is
+// the entry point for a CN with no rows yet in the meantime. Flip this to
+// re-enable the history card without touching any other code.
+const SHOW_CONDITION_HISTORY_SUGGESTION = false;
+
 function ConditionTab() {
   const { message } = App.useApp();
   const [machines, setMachines] = useState([]);
@@ -1893,28 +1902,30 @@ function ConditionTab() {
           />
           <Input placeholder="CN e.g. 294065" style={{ width: 140 }} value={cn} onChange={(e) => setCn(e.target.value)} />
           <Button icon={<ReloadOutlined />} loading={rowsLoading} onClick={loadRows}>Load</Button>
-          <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim()}>Add Slot</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim()}>+ New Tool Condition</Button>
         </Space>
         <Table size="small" rowKey="_k" dataSource={rows} columns={rowsColumns} loading={rowsLoading} pagination={false} scroll={{ x: 1700 }} />
       </Card>
 
-      <Card size="small" title="+ New CN from History — suggest from what this machine has used before">
-        <Space wrap style={{ marginBottom: 12 }}>
-          <Text type="secondary">Machine</Text>
-          <Select
-            style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
-            onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
+      {SHOW_CONDITION_HISTORY_SUGGESTION && (
+        <Card size="small" title="+ New CN from History — suggest from what this machine has used before">
+          <Space wrap style={{ marginBottom: 12 }}>
+            <Text type="secondary">Machine</Text>
+            <Select
+              style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
+              onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
+            />
+            <Button type="primary" icon={<DownloadOutlined />} loading={histLoading} onClick={loadHistory}>Load from history</Button>
+          </Space>
+          <Table size="small" rowKey="_k" dataSource={histRows} columns={histColumns} loading={histLoading} pagination={false} scroll={{ x: 1800, y: 400 }}
+            locale={{ emptyText: <Empty description='Select a Machine then click "Load from history"' /> }}
           />
-          <Button type="primary" icon={<DownloadOutlined />} loading={histLoading} onClick={loadHistory}>Load from history</Button>
-        </Space>
-        <Table size="small" rowKey="_k" dataSource={histRows} columns={histColumns} loading={histLoading} pagination={false} scroll={{ x: 1800, y: 400 }}
-          locale={{ emptyText: <Empty description='Select a Machine then click "Load from history"' /> }}
-        />
-        <Space style={{ marginTop: 12 }}>
-          <Input placeholder="Target CN e.g. 294099" style={{ width: 160 }} value={targetCn} onChange={(e) => setTargetCn(e.target.value)} />
-          <Button type="primary" loading={committing} onClick={() => commitHistory(false)}>Add to CN</Button>
-        </Space>
-      </Card>
+          <Space style={{ marginTop: 12 }}>
+            <Input placeholder="Target CN e.g. 294099" style={{ width: 160 }} value={targetCn} onChange={(e) => setTargetCn(e.target.value)} />
+            <Button type="primary" loading={committing} onClick={() => commitHistory(false)}>Add to CN</Button>
+          </Space>
+        </Card>
+      )}
     </div>
   );
 }
