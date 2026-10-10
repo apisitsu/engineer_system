@@ -1227,8 +1227,19 @@ async function loadTurningGridLive() {
   return JSON.parse(rows[0].grid_json);
 }
 
+// AH3 (SETUP DATA SHEET REV. value) and AA5 (MAT'L TYPE value) were missed
+// when this dict was first built — confirmed live by dumping grid_json id=9's
+// row 3/5 cells: AD3/M5/Y5 are the static labels ("SETUP DATA SHEET REV. :",
+// "MAT'L SIZE : ", "MAT'L TYPE : ") and AH3/O5/AA5 are their pre-styled
+// (color #ff0000) blank value boxes, same convention as every other field
+// here. O5 (MAT'L SIZE) has no factory source anywhere in this codebase —
+// the real "Turning" template's own equivalent cell carries the identical
+// note ("material_size ... no automatic source, manual sds_parameter entry
+// only" in 20260916_seed_turning_excel_mapping_v2.js) — so it stays a manual
+// override field below rather than inventing a source for it.
 const TURNING_PB_HEADER_ADDR = {
   machine_type_name: 'C3', parts_no: 'O3', dwg_rev: 'U3', ct: 'C4', cn: 'O4',
+  sds_rev: 'AH3', material: 'AA5',
 };
 // process_code_name is a combined field (code + name, like the old
 // template), built from two paramMap keys — not a 1:1 lookup, so it's
@@ -1238,27 +1249,35 @@ const TURNING_PB_PROCESS_ADDR = 'AA3';
 
 // Manual-override fields, same mechanism and storage (pbring_sds_parameter,
 // flat keys) as PBRING_HEADER_OVERRIDE_FIELDS already uses for the Standard
-// template — this layout added Category/Program No/Program Name cells the
-// old "Turning" never had. No auto-source for any of these on turning
-// machines, so they render blank until an admin types a machine-default or
-// CN-override value for them, exactly like Standard's Program No/Name.
+// template — this layout added Category/Program No/Program Name/Mat'l Size
+// cells the old "Turning" never had. No auto-source for any of these on
+// turning machines, so they render blank until an admin types a
+// machine-default or CN-override value for them, exactly like Standard's
+// Program No/Name.
 const TURNING_PB_HEADER_OVERRIDE_FIELDS = [
   { key: 'program_no', label: 'Program No', cell: 'AA4' },
-  { key: 'program_name', label: 'Program Name', cell: 'AH4' },
+  { key: 'program_name', label: 'Program Rev', cell: 'AH4' },
   { key: 'category', label: 'Category', cell: 'C5' },
+  { key: 'material_size', label: "Mat'l Size", cell: 'O5' },
 ];
 
 function applyTurningHeaderToGrid(grid, paramMap) {
   for (const [sdsField, pbKey] of Object.entries({
     machine_type_name: 'Machine', parts_no: 'PN', dwg_rev: 'REV', ct: 'CT', cn: 'CN',
+    sds_rev: 'SdsRev', material: 'Material',
   })) {
     const cellAddr = TURNING_PB_HEADER_ADDR[sdsField];
     const value = paramMap[pbKey];
     if (!cellAddr || value == null || value === '') continue;
-    grid.cells[addrToRC(cellAddr)] = {
+    const key = addrToRC(cellAddr);
+    const existing = grid.cells[key] || {};
+    // Merge onto the template's own designed alignment (AH3 is authored
+    // right-aligned) instead of replacing it — see the Standard template's
+    // applyHeaderToGrid fix for the same bug (AH4 losing its center align).
+    grid.cells[key] = {
       v: String(value),
-      f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' },
-      a: { h: null, v: 'middle', wrap: false },
+      f: { name: 'Calibri', size: 10, bold: false, italic: false, ...(existing.f || {}), color: '#c00000' },
+      a: { h: null, v: 'middle', wrap: false, ...(existing.a || {}) },
     };
   }
   const code = paramMap.Process_Code, name = paramMap.Process;
