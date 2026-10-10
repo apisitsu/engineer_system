@@ -583,7 +583,32 @@ function orderToolNumbers(keys) {
 }
 
 /** Writes each (tool_number -> condition row) into its assigned T01-T20 slot's real cell addresses. */
-function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses) {
+/**
+ * Grinding machines have no UI to type pbring_sds_condition.tool_detail
+ * directly (Tool Condition is turning-only, by user decision 2026-10-10),
+ * so the tool NAME printed in tool_name_T0N comes from
+ * pbring_tooling.tooling_item instead — the same "Item" column the
+ * Tooling PB Ring monitor page's own search table already shows. Join key
+ * is tool_code_base (confirmed live 2026-10-11: '4036-02-0001' -> 'GUIDE
+ * PLATE', '4036-01-0001' -> 'CARRIER' for KVD300/294065 — tool_code_base is
+ * tool_code with its "(Rev.NC)" suffix already stripped, and matches
+ * pbring_sds_condition.tooling_no exactly). Bulk fetch, not per-row
+ * (db-patterns.md); `DISTINCT ON` picks the earliest row when more than
+ * one pbring_tooling entry happens to share a tool_code_base for this CN.
+ */
+async function getToolingItemNames(mcKey, cn, toolCodes) {
+  if (!toolCodes.length) return {};
+  const { rows } = await engPool.query(
+    `SELECT DISTINCT ON (tool_code_base) tool_code_base, tooling_item
+       FROM pbring_tooling
+      WHERE mc_key = $1 AND cn = $2 AND tool_code_base = ANY($3)
+      ORDER BY tool_code_base, id`,
+    [mcKey, cn, toolCodes]
+  );
+  return Object.fromEntries(rows.map((r) => [r.tool_code_base, r.tooling_item]));
+}
+
+function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses, itemNameByToolCode = {}) {
   const ordered = orderToolNumbers(Object.keys(conditionByToolNumber));
   ordered.forEach((toolNumber, i) => {
     const slot = `T${String(i + 1).padStart(2, '0')}`;
@@ -597,11 +622,10 @@ function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses) {
     };
     colorCell(addr.dwgNo, row.tooling_no);
     colorCell(addr.maker, row.maker);
-    // tool_name_T0N (cell address only, confirmed live 2026-10-11 — a real
-    // shared mapping row that was never read before) shows the tool's own
-    // name/description, same role as tool_detail already plays on the
-    // Turning_PB layout.
-    colorCell(addr.name, row.tool_detail);
+    // tool_detail wins if someone ever does type it directly (e.g. a
+    // future turning-style edit path); otherwise fall back to the Tooling
+    // PB Ring list's own Item name for this exact tool_code.
+    colorCell(addr.name, row.tool_detail || (row.tooling_no && itemNameByToolCode[row.tooling_no]));
   });
 }
 
@@ -1065,7 +1089,9 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
   applyHeaderToGrid(grid, headerAddresses, paramMap);
 
   const toolAddresses = await loadToolSlotAddressesLive();
-  applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses);
+  const toolCodes = [...new Set(Object.values(conditionByToolNumber).map((r) => r.tooling_no).filter(Boolean))];
+  const itemNameByToolCode = await getToolingItemNames(machineTypeName, cn, toolCodes);
+  applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses, itemNameByToolCode);
 
   const manualParamMap = await resolveManualParamMap(machineTypeName, cn, processCode);
   applyManualParamsToGrid(grid, manualParamMap);
