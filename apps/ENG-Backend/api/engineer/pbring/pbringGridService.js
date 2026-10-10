@@ -730,32 +730,65 @@ function colLetterToIndex0(letters) {
   return colLetterToNum(letters) - 1;
 }
 
-/** Writes the resolved param map into the grid's A:I condition area and AN:AV GW area, by row/col — same cell styling as the real sheet (red value text, gray header-row fill). */
+/**
+ * Writes the resolved param map into the grid's A:I condition area and
+ * AN:AV GW area, by row/col — same cell styling as the real sheet (red
+ * value text). Header rows get the same treatment the real
+ * `sdsV2HeadlessController.js`'s `addHeaderRow` gives `row_N_is_header`:
+ * a grey-filled band MERGED across the whole section with the row's own
+ * label centered and bold, overriding whatever individual cells that row
+ * would otherwise have carried — a header row reads as one banner, not
+ * nine separate cells one of which happens to be bold. Matters because a
+ * plain per-cell `bold` flag (the first cut of this function) is easy to
+ * mistake for doing nothing: most header rows only ever populate column A,
+ * so nothing else in the row carries content for the bold to be visible
+ * against, and there is no fill at all without this.
+ */
+const PBRING_HDR_BG = '#e0e0e0';
+
 function applyManualParamsToGrid(grid, paramMap) {
-  const writeRegion = (rowRange, colLetters) => {
+  const writeRegion = (rowRange, colLetters, prefix) => {
     for (const r of rowRange) {
-      const isHeader = paramMap[`row_${r}_is_header`] === '1' || paramMap[`gw_row_${r}_is_header`] === '1';
       for (const c of colLetters) {
-        const prefix = colLetters === PBRING_GW_COL_LETTERS ? 'gw_row' : 'row';
         const key = `${prefix}_${r}_${c}`;
         const value = paramMap[key];
         if (value == null || value === '') continue;
         const isValueType = paramMap[`${key}_type`] === 'value';
         grid.cells[`${r - 1},${colLetterToIndex0(c)}`] = {
           v: String(value),
-          f: {
-            name: 'Calibri', size: 9,
-            bold: isHeader,
-            italic: false,
-            color: isValueType ? '#c00000' : '#000000',
-          },
+          f: { name: 'Calibri', size: 9, bold: false, italic: false, color: isValueType ? '#c00000' : '#000000' },
           a: { h: null, v: 'middle', wrap: false },
         };
       }
     }
   };
-  writeRegion(PBRING_ROW_RANGE, PBRING_COL_LETTERS);
-  writeRegion(PBRING_GW_ROW_RANGE, PBRING_GW_COL_LETTERS);
+  writeRegion(PBRING_ROW_RANGE, PBRING_COL_LETTERS, 'row');
+  writeRegion(PBRING_GW_ROW_RANGE, PBRING_GW_COL_LETTERS, 'gw_row');
+
+  const addHeaderRow = (rowNum, c1, c2, label) => {
+    const r = rowNum - 1;
+    const k = `${r},${c1}`;
+    grid.fills = grid.fills || {};
+    grid.fills[k] = PBRING_HDR_BG;
+    grid.cells[k] = {
+      v: label || '',
+      f: { name: 'Calibri', size: 9, bold: true, italic: false, color: '#000000' },
+      a: { h: 'center', v: 'middle', wrap: false },
+    };
+    for (let c = c1 + 1; c <= c2; c++) delete grid.cells[`${r},${c}`];
+    grid.merges = grid.merges || [];
+    if (!grid.merges.some((m) => m.r1 === r && m.c1 === c1)) {
+      grid.merges.push({ r1: r, c1, r2: r, c2 });
+    }
+  };
+  for (const r of PBRING_ROW_RANGE) {
+    if (paramMap[`row_${r}_is_header`] === '1') addHeaderRow(r, 0, 8, paramMap[`row_${r}_A`]);
+  }
+  for (const r of PBRING_GW_ROW_RANGE) {
+    if (paramMap[`gw_row_${r}_is_header`] === '1') {
+      addHeaderRow(r, colLetterToIndex0('AN'), colLetterToIndex0('AV'), paramMap[`gw_row_${r}_AN`]);
+    }
+  }
   return grid;
 }
 
