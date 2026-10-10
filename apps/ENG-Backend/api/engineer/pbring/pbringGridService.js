@@ -1232,16 +1232,22 @@ function turningPbSlotAddresses(slot) {
   };
 }
 
-/** Up to TURNING_PB_MAX_SLOTS (12) tools, ordered by their numeric T-number; extras are silently dropped. */
+/**
+ * Each physical box ("T01".."T12", printed on the template itself) gets the
+ * row whose OWN tool_number is that exact slot — a direct lookup, not a
+ * sorted/compacted array index. The data's tool_number values are not
+ * guaranteed sequential or gap-free (confirmed live: a real CN's rows were
+ * T2, T3, T4, T5, T8, T12 — no T1, T6, T7, T9-T11 at all), so indexing by
+ * sorted position previously squeezed T8/T12 into the boxes printed "T05"/
+ * "T06" — wrong data under a box whose own label said otherwise. A box with
+ * no matching tool_number is left blank, which is the correct "nothing
+ * planned for this slot", not a slot to be filled by whatever came next.
+ */
 function applyTurningToolSlotsToGrid(grid, conditionByToolNumber) {
-  const ordered = Object.keys(conditionByToolNumber)
-    .filter((k) => /^T\d+$/.test(k))
-    .sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10))
-    .slice(0, TURNING_PB_MAX_SLOTS);
-
-  ordered.forEach((toolNumber, i) => {
-    const addr = turningPbSlotAddresses(i + 1);
-    const row = conditionByToolNumber[toolNumber];
+  for (let slot = 1; slot <= TURNING_PB_MAX_SLOTS; slot++) {
+    const row = conditionByToolNumber[`T${slot}`];
+    if (!row) continue;
+    const addr = turningPbSlotAddresses(slot);
     for (const [pbField, addrKey] of Object.entries(TURNING_PB_FIELD_MAP)) {
       const cellAddr = addr[addrKey];
       const value = row[pbField];
@@ -1252,7 +1258,7 @@ function applyTurningToolSlotsToGrid(grid, conditionByToolNumber) {
         a: { h: null, v: 'middle', wrap: false },
       };
     }
-  });
+  }
 }
 
 /** Full Turning_PB render: live layout + header (+ manual overrides) + up to 12 tool slots. No {{}}, no copy, no write to any sds_* table. */
