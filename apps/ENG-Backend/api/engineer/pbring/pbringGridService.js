@@ -19,6 +19,9 @@
  */
 
 const { engPool } = require('../../../instance/eng_db');
+const { maqPool } = require('../../../instance/maq_db');
+const { pool: rodpcPool } = require('../../../instance/instance');
+const sdsV2SearchService = require('../mtc/services/sdsV2SearchService');
 const { classifyParam, importAllTemplates, TEMPLATE_NAMES } = require('../mtc/db_migrations/lib/pbringGridImport');
 
 function escHtml(s) {
@@ -64,22 +67,57 @@ async function buildPbRingValueMap(cn, machineTypeName, processCode) {
     [cn, processCode, machineTypeName]
   );
   const paramRow = paramRows[0];
-  // Header fields (Machine/PN/CN/Process/CT/Revision/...) live as their own
-  // row columns on pbring_sds_param, not inside params JSONB — only the
-  // grinding-condition values (Top_GW_Speed, DressTimeR, ...) are in there.
-  // Verified live: a row with a populated `params` blob had `{{CN}}`/`{{PN}}`
-  // render blank until these were merged in.
-  const paramMap = paramRow ? {
-    ...paramRow.params,
-    CN: paramRow.cn,
-    PN: paramRow.pn,
-    Process_Code: paramRow.process_code,
-    Process: paramRow.process_name,
-    Machine: paramRow.machine,
-    CT: paramRow.ct,
-    REV: paramRow.rev,
-    Revision: paramRow.rev,
-  } : {};
+  // Header fields (Machine/PN/CN/Process/...) live as their own row columns
+  // on pbring_sds_param, not inside params JSONB — only the grinding-condition
+  // values (Top_GW_Speed, DressTimeR, ...) are in there. Verified live: a row
+  // with a populated `params` blob had `{{CN}}`/`{{PN}}` render blank until
+  // these were merged in.
+  const paramMap = paramRow ? { ...paramRow.params } : {};
+  if (paramRow) {
+    paramMap.CN = paramRow.cn;
+    paramMap.Process_Code = paramRow.process_code;
+    paramMap.Process = paramRow.process_name;
+    paramMap.Machine = paramRow.machine;
+  }
+
+  // PART NO / REV / MAT'TYPE / CYCLE TIME (2026-10-11): pulled live from the
+  // same factory tables the real SDS uses — lpb.eng_item, eng_cad_rev_data,
+  // eng_bom+eng_mcode, eng_process_info, via the same searchByCn the live SDS
+  // PDF calls — rather than pbring_sds_param's own pn/ct/rev columns. PB
+  // Ring's CN is a real factory CN (CLAUDE.md "why strict separation
+  // matters"), so the lookup applies unchanged. `rev`/`ct` on
+  // pbring_sds_param were a one-time xlsx import that never carried a value
+  // for any of the 28 PB Ring machines (verified live: 0 of ~2,900 rows) —
+  // `pn` did import and stays as a last-resort fallback for a CN the factory
+  // lookup itself can't find. Fails open: a factory-lookup error must never
+  // block rendering the rest of the sheet.
+  let factory = null;
+  try {
+    factory = await sdsV2SearchService.searchByCn(cn, maqPool, rodpcPool, engPool);
+  } catch (err) {
+    console.warn(`[pbring] factory header lookup failed for cn=${cn}: ${err.message}`);
+  }
+  let factoryCt = null;
+  if (factory && Array.isArray(factory.process_info)) {
+    const fp = processCode
+      ? factory.process_info.find((r) => String(r.process_code) === String(processCode)) || factory.process_info[0]
+      : factory.process_info[0];
+    if (fp) {
+      const forThisMachine = fp.actual_ct_by_machine?.[machineTypeName];
+      factoryCt = forThisMachine ? forThisMachine.ct : (fp.actual_ct ?? fp.ct ?? null);
+    }
+  }
+  paramMap.PN = (factory && factory.parts_no) || paramRow?.pn || '';
+  paramMap.REV = (factory && factory.dwg_rev) || 'NC';
+  paramMap.Revision = paramMap.REV;
+  paramMap.Material = factory ? (factory.sheet_material ?? factory.material?.material ?? '') : '';
+  paramMap.CT = factoryCt != null ? String(factoryCt) : (paramRow?.ct ?? '');
+  // Setup Data Sheet's OWN revision (cell AH4 on the Standard template — distinct
+  // from the part drawing's REV above). pbring_sds_param.rev is the only place PB
+  // Ring ever recorded it; check that old data first, and start at 'NC' when it
+  // was never set (true for every row today, same default the live SDS approval
+  // flow uses for its own sds_rev).
+  paramMap.SdsRev = paramRow?.rev || 'NC';
 
   const { rows: condRows } = await engPool.query(
     `SELECT * FROM pbring_sds_condition WHERE cn = $1 AND process_code = $2 AND mc_key = $3`,
@@ -538,6 +576,7 @@ async function loadToolSlotAddressesLive() {
 const HEADER_FIELD_TO_PARAM_KEY = {
   machine_type_name: 'Machine', parts_no: 'PN', cn: 'CN',
   process_code: 'Process_Code', process_name: 'Process', dwg_rev: 'REV', ct: 'CT',
+  material: 'Material', sds_rev: 'SdsRev',
 };
 async function loadHeaderAddressesLive() {
   const { rows } = await engPool.query(
