@@ -1100,40 +1100,63 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
  * so the cell positions are the same regardless of whose mapping row answers
  * the query. Read-only — same safety argument as the Standard helpers above.
  */
-const SDS_TURNING_TEMPLATE_ID = 8; // sds_grid_template.id, name='Turning', confirmed live 2026-10-08
-const TURNING_REFERENCE_MACHINE = 'X-100'; // real SDS machine confirmed to use grid_template_id=8 — source of the live cell-address read, not of any data
+// Turning_PB (sds_grid_template id=9, name='Turning_PB') — superseded the
+// live SDS "Turning" template (id=8) by user decision (2026-10-10): no real
+// SDS machine is assigned to this one (it was built specifically for PB
+// Ring and lives only in sds_grid_template, still read-only/never-written
+// like everything else in this file), so there is no `sds_excel_mapping`
+// row to borrow addresses from the way X-100's did for the old template.
+// Addresses below are derived from the reference workbook the user built it
+// from (`C:\...\Desktop\Turning_PB.xlsx`, sheet `bfd_qsm150ms` — it still
+// carries its original `{{param}}` placeholders; the sheet matching the
+// live machine names, `bfd_qt200_500u`, had already had them cleared).
+// Verified: extracting all 216 `{{}}` placeholders from that sheet and
+// generating addresses with `turningPbSlotAddresses()` below reproduces
+// every one of them exactly — this is not a guess at the pattern, it's
+// confirmed against the full field list.
+//
+// Structural change from the old "Turning": 12 tool slots (not 8), laid
+// out as 3 column-blocks of 4 slots each (slots 1-4, 5-8, 9-12), each slot
+// spanning 12 rows starting at row 15/27/39/51 within its block. No
+// dedicated "Tool Name"/drawing-number cell exists on this layout (only
+// Tool_Detail) — pbring_sds_condition.tooling_no has nowhere to print here
+// and is intentionally left out, rather than invented a cell for it.
+const SDS_TURNING_PB_TEMPLATE_ID = 9;
 const TURNING_MACHINE_NAMES = ['QTSMART200M', 'QUICKTURN200500U'];
-const TURNING_MAX_SLOTS = 8;
+const TURNING_PB_MAX_SLOTS = 12;
 
 async function loadTurningGridLive() {
-  const { rows } = await engPool.query(`SELECT grid_json FROM sds_grid_template WHERE id = $1`, [SDS_TURNING_TEMPLATE_ID]);
+  const { rows } = await engPool.query(`SELECT grid_json FROM sds_grid_template WHERE id = $1`, [SDS_TURNING_PB_TEMPLATE_ID]);
   if (!rows.length) return null;
   return JSON.parse(rows[0].grid_json);
 }
 
-const TURNING_HEADER_FIELD_TO_PARAM_KEY = {
-  machine_type_name: 'Machine', parts_no: 'PN', cn: 'CN', dwg_rev: 'REV', ct: 'CT',
-  material_size: 'Material_size',
+const TURNING_PB_HEADER_ADDR = {
+  machine_type_name: 'C3', parts_no: 'O3', dwg_rev: 'U3', ct: 'C4', cn: 'O4',
 };
-async function loadTurningHeaderAddressesLive() {
-  // 'process_code_name' isn't in TURNING_HEADER_FIELD_TO_PARAM_KEY (it's a
-  // combined field built from two paramMap keys in applyTurningHeaderToGrid,
-  // not a 1:1 lookup) — fetched explicitly alongside the dict's own keys so
-  // it isn't silently dropped from the filter.
-  const keys = [...Object.keys(TURNING_HEADER_FIELD_TO_PARAM_KEY), 'process_code_name'];
-  const { rows } = await engPool.query(
-    `SELECT cell_address, param_key FROM sds_excel_mapping
-      WHERE machine_type_name = $1 AND param_key = ANY($2)`,
-    [TURNING_REFERENCE_MACHINE, keys]
-  );
-  const addr = {};
-  for (const r of rows) addr[r.param_key] = r.cell_address;
-  return addr;
-}
+// process_code_name is a combined field (code + name, like the old
+// template), built from two paramMap keys — not a 1:1 lookup, so it's
+// applied separately in applyTurningHeaderToGrid rather than living in the
+// dict above.
+const TURNING_PB_PROCESS_ADDR = 'AA3';
 
-function applyTurningHeaderToGrid(grid, headerAddresses, paramMap) {
-  for (const [sdsField, pbKey] of Object.entries(TURNING_HEADER_FIELD_TO_PARAM_KEY)) {
-    const cellAddr = headerAddresses[sdsField];
+// Manual-override fields, same mechanism and storage (pbring_sds_parameter,
+// flat keys) as PBRING_HEADER_OVERRIDE_FIELDS already uses for the Standard
+// template — this layout added Category/Program No/Program Name cells the
+// old "Turning" never had. No auto-source for any of these on turning
+// machines, so they render blank until an admin types a machine-default or
+// CN-override value for them, exactly like Standard's Program No/Name.
+const TURNING_PB_HEADER_OVERRIDE_FIELDS = [
+  { key: 'program_no', label: 'Program No', cell: 'AA4' },
+  { key: 'program_name', label: 'Program Name', cell: 'AH4' },
+  { key: 'category', label: 'Category', cell: 'C5' },
+];
+
+function applyTurningHeaderToGrid(grid, paramMap) {
+  for (const [sdsField, pbKey] of Object.entries({
+    machine_type_name: 'Machine', parts_no: 'PN', dwg_rev: 'REV', ct: 'CT', cn: 'CN',
+  })) {
+    const cellAddr = TURNING_PB_HEADER_ADDR[sdsField];
     const value = paramMap[pbKey];
     if (!cellAddr || value == null || value === '') continue;
     grid.cells[addrToRC(cellAddr)] = {
@@ -1142,12 +1165,9 @@ function applyTurningHeaderToGrid(grid, headerAddresses, paramMap) {
       a: { h: null, v: 'middle', wrap: false },
     };
   }
-  // PROCESS : is one combined field on this template (process_code_name),
-  // unlike Standard's separate process_code/process_name cells.
-  const procAddr = headerAddresses.process_code_name;
   const code = paramMap.Process_Code, name = paramMap.Process;
-  if (procAddr && (code || name)) {
-    grid.cells[addrToRC(procAddr)] = {
+  if (code || name) {
+    grid.cells[addrToRC(TURNING_PB_PROCESS_ADDR)] = {
       v: [code, name].filter(Boolean).join(' '),
       f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' },
       a: { h: null, v: 'middle', wrap: false },
@@ -1155,53 +1175,75 @@ function applyTurningHeaderToGrid(grid, headerAddresses, paramMap) {
   }
 }
 
-// PB Ring pbring_sds_condition column -> real cell-address param_key suffix
-// (each becomes e.g. "VC_{slot}"). `maker` is the insert's maker in PB
-// Ring's own data (seen live alongside insert_info); `holder_maker` is
-// separate, matching the template's own Insert-Maker/Holder-Maker split.
-// `tooling_no` has no dedicated field on this template's cutting-tool block
-// (that's what the separate F01-F08 fixture block is for, which PB Ring's
-// flat tool_number list doesn't distinguish) — mapped to Tool_Name as the
-// best available slot; a provisional choice, not a confirmed design decision.
-const TURNING_FIELD_MAP = {
+function applyTurningHeaderOverridesToGrid(grid, manualParamMap) {
+  for (const f of TURNING_PB_HEADER_OVERRIDE_FIELDS) {
+    const value = manualParamMap[f.key];
+    if (value == null || value === '') continue;
+    grid.cells[addrToRC(f.cell)] = {
+      v: String(value),
+      f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' },
+      a: { h: null, v: 'middle', wrap: false },
+    };
+  }
+}
+
+// PB Ring pbring_sds_condition column -> slot-address field key (see
+// turningPbSlotAddresses). No `tooling_no` entry — see the file-header note
+// above on why this layout has no cell for it.
+const TURNING_PB_FIELD_MAP = {
   vc: 'VC', f: 'F', ap: 'AP', nose_r: 'Nose_R',
   insert_info: 'Insert_Info', maker: 'Insert_Maker',
   holder_info: 'Holder_Info', holder_maker: 'Holder_Maker',
   overhang: 'Overhang', rotation: 'Rotation', hand: 'Hand', h_width: 'H_Width',
-  usaged: 'Usage', tool_detail: 'Tool_Detail', tooling_no: 'Tool_Name',
+  usaged: 'Usage', tool_detail: 'Tool_Detail',
 };
 
-async function loadTurningToolSlotAddressesLive() {
-  const suffixes = Object.values(TURNING_FIELD_MAP);
-  const { rows } = await engPool.query(
-    `SELECT cell_address, param_key FROM sds_excel_mapping
-      WHERE machine_type_name = $1 AND param_key ~ ('^(' || $2 || ')_[0-9]+$')`,
-    [TURNING_REFERENCE_MACHINE, suffixes.join('|')]
-  );
-  const addr = {}; // { 1: { VC: 'B16', F: 'D16', ... }, 2: {...}, ... 8 }
-  for (const r of rows) {
-    const m = /^(.+)_(\d+)$/.exec(r.param_key);
-    if (!m) continue;
-    const slot = parseInt(m[2], 10);
-    addr[slot] = addr[slot] || {};
-    addr[slot][m[1]] = r.cell_address;
-  }
-  return addr;
+// Column letters per 4-slot block — block 0 = slots 1-4, block 1 = slots
+// 5-8, block 2 = slots 9-12. `info` is the shared column for
+// Insert_Info/Insert_Maker/Holder_Info/Holder_Maker/Overhang/H_Width/
+// Rotation/Hand (and doubles as Tool_Detail's column).
+const TURNING_PB_BLOCK_COLS = [
+  { detail: 'C', usage: 'J', vc: 'B', f: 'D', ap: 'F', noseR: 'J', info: 'C' },
+  { detail: 'O', usage: 'V', vc: 'N', f: 'P', ap: 'R', noseR: 'V', info: 'O' },
+  { detail: 'AA', usage: 'AH', vc: 'Z', f: 'AB', ap: 'AD', noseR: 'AH', info: 'AA' },
+];
+
+/** Cell addresses for one slot (1-12) — see the derivation note above the Turning_PB constants. */
+function turningPbSlotAddresses(slot) {
+  const slotInBlock = (slot - 1) % 4;
+  const block = Math.floor((slot - 1) / 4);
+  const rowBase = 15 + 12 * slotInBlock;
+  const cols = TURNING_PB_BLOCK_COLS[block];
+  return {
+    Tool_Detail: `${cols.detail}${rowBase}`,
+    Usage: `${cols.usage}${rowBase}`,
+    VC: `${cols.vc}${rowBase + 1}`,
+    F: `${cols.f}${rowBase + 1}`,
+    AP: `${cols.ap}${rowBase + 1}`,
+    Nose_R: `${cols.noseR}${rowBase + 1}`,
+    Insert_Info: `${cols.info}${rowBase + 3}`,
+    Insert_Maker: `${cols.info}${rowBase + 4}`,
+    Holder_Info: `${cols.info}${rowBase + 5}`,
+    Holder_Maker: `${cols.info}${rowBase + 6}`,
+    Overhang: `${cols.info}${rowBase + 7}`,
+    H_Width: `${cols.info}${rowBase + 8}`,
+    Rotation: `${cols.info}${rowBase + 9}`,
+    Hand: `${cols.info}${rowBase + 10}`,
+  };
 }
 
-/** Up to TURNING_MAX_SLOTS tools, ordered by their numeric T-number; extras are silently dropped. */
-function applyTurningToolSlotsToGrid(grid, conditionByToolNumber, slotAddresses) {
+/** Up to TURNING_PB_MAX_SLOTS (12) tools, ordered by their numeric T-number; extras are silently dropped. */
+function applyTurningToolSlotsToGrid(grid, conditionByToolNumber) {
   const ordered = Object.keys(conditionByToolNumber)
     .filter((k) => /^T\d+$/.test(k))
     .sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10))
-    .slice(0, TURNING_MAX_SLOTS);
+    .slice(0, TURNING_PB_MAX_SLOTS);
 
   ordered.forEach((toolNumber, i) => {
-    const addr = slotAddresses[i + 1];
-    if (!addr) return;
+    const addr = turningPbSlotAddresses(i + 1);
     const row = conditionByToolNumber[toolNumber];
-    for (const [pbField, sdsPrefix] of Object.entries(TURNING_FIELD_MAP)) {
-      const cellAddr = addr[sdsPrefix];
+    for (const [pbField, addrKey] of Object.entries(TURNING_PB_FIELD_MAP)) {
+      const cellAddr = addr[addrKey];
       const value = row[pbField];
       if (!cellAddr || value == null || value === '') continue;
       grid.cells[addrToRC(cellAddr)] = {
@@ -1213,18 +1255,17 @@ function applyTurningToolSlotsToGrid(grid, conditionByToolNumber, slotAddresses)
   });
 }
 
-/** Full Turning render: live layout + header + up to 8 tool slots, all by live cell address — no {{}}, no copy, no write to any sds_* table. */
+/** Full Turning_PB render: live layout + header (+ manual overrides) + up to 12 tool slots. No {{}}, no copy, no write to any sds_* table. */
 async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
   const grid = await loadTurningGridLive();
   if (!grid) return null;
 
   const { paramMap, conditionByToolNumber } = await buildPbRingValueMap(cn, machineTypeName, processCode);
+  applyTurningHeaderToGrid(grid, paramMap);
+  applyTurningToolSlotsToGrid(grid, conditionByToolNumber);
 
-  const headerAddresses = await loadTurningHeaderAddressesLive();
-  applyTurningHeaderToGrid(grid, headerAddresses, paramMap);
-
-  const slotAddresses = await loadTurningToolSlotAddressesLive();
-  applyTurningToolSlotsToGrid(grid, conditionByToolNumber, slotAddresses);
+  const manualParamMap = await resolveManualParamMap(machineTypeName, cn, processCode);
+  applyTurningHeaderOverridesToGrid(grid, manualParamMap);
 
   return grid;
 }
@@ -1237,8 +1278,8 @@ module.exports = {
   loadStandardGridLive, buildStandardGridForMachine,
   loadToolSlotAddressesLive, applyToolSlotsToGrid, loadHeaderAddressesLive, applyHeaderToGrid,
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
-  loadTurningGridLive, loadTurningHeaderAddressesLive, applyTurningHeaderToGrid,
-  loadTurningToolSlotAddressesLive, applyTurningToolSlotsToGrid,
+  loadTurningGridLive, applyTurningHeaderToGrid, applyTurningHeaderOverridesToGrid,
+  applyTurningToolSlotsToGrid, turningPbSlotAddresses, TURNING_PB_HEADER_OVERRIDE_FIELDS,
   PBRING_ROW_RANGE, PBRING_COL_LETTERS, PBRING_GW_ROW_RANGE, PBRING_GW_COL_LETTERS,
   getManualParams, saveManualParams, resolveManualParamMap, applyManualParamsToGrid,
   PBRING_HEADER_OVERRIDE_FIELDS, loadHeaderOverrideAddressesLive, applyHeaderOverridesToGrid,
