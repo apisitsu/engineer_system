@@ -129,8 +129,19 @@ function buildGridPdfHtml(grid) {
   const colW = fit(grid.colW, cols, 30);
   const rowH = fit(grid.rowH, rows, 22);
   const sumW = colW.reduce((a, b) => a + b, 0) || 1;
+  const sumH = rowH.reduce((a, b) => a + b, 0) || 1;
+  // A4 landscape (297x210mm) minus the 5mm @page margin on every side.
   const PAGE_W_MM = 287;
-  const scale = PAGE_W_MM / sumW;
+  const PAGE_H_MM = 200;
+  // Scale to whichever dimension is tighter, not width alone — a template
+  // taller than what the width-derived scale leaves room for (Turning_PB:
+  // 64 rows, vs the ~59-row templates this was tuned against) silently
+  // spilled onto a second page with width-only scaling, since nothing ever
+  // shrank it to fit the page's height. table width below tracks the
+  // actual scaled width so a height-constrained render doesn't get
+  // stretched back out to the full page width.
+  const scale = Math.min(PAGE_W_MM / sumW, PAGE_H_MM / sumH);
+  const tableWMm = sumW * scale;
 
   const covered = new Set();
   const spanAt = {};
@@ -231,7 +242,7 @@ function buildGridPdfHtml(grid) {
     @page { size: A4 landscape; margin: 5mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; }
-    table { width: ${PAGE_W_MM}mm; border-collapse: collapse; table-layout: fixed; }
+    table { width: ${tableWMm.toFixed(3)}mm; border-collapse: collapse; table-layout: fixed; }
     td { padding: 0 0.4mm; line-height: 1.05; }
   </style></head><body>
     <table><colgroup>${colgroup}</colgroup><tbody>${body}</tbody></table>
