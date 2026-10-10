@@ -118,6 +118,12 @@ async function buildPbRingValueMap(cn, machineTypeName, processCode) {
   // was never set (true for every row today, same default the live SDS approval
   // flow uses for its own sds_rev).
   paramMap.SdsRev = paramRow?.rev || 'NC';
+  // Every PB Ring part is this one fixed category, unlike live SDS where
+  // CATEGORY is derived per part class (Ball/Race/Body/... Parts) — it is
+  // not a per-CN factory value to look up. Still overridable like every
+  // other auto-filled field (applyHeaderOverridesToGrid / Turning's manual
+  // field run after this and win on a non-blank admin value).
+  paramMap.Category = 'PB Ring Parts';
 
   const { rows: condRows } = await engPool.query(
     `SELECT * FROM pbring_sds_condition WHERE cn = $1 AND process_code = $2 AND mc_key = $3`,
@@ -576,7 +582,7 @@ async function loadToolSlotAddressesLive() {
 const HEADER_FIELD_TO_PARAM_KEY = {
   machine_type_name: 'Machine', parts_no: 'PN', cn: 'CN',
   process_code: 'Process_Code', process_name: 'Process', dwg_rev: 'REV', ct: 'CT',
-  material: 'Material', sds_rev: 'SdsRev',
+  material: 'Material', sds_rev: 'SdsRev', category: 'Category',
 };
 async function loadHeaderAddressesLive() {
   const { rows } = await engPool.query(
@@ -1232,14 +1238,17 @@ async function loadTurningGridLive() {
 // row 3/5 cells: AD3/M5/Y5 are the static labels ("SETUP DATA SHEET REV. :",
 // "MAT'L SIZE : ", "MAT'L TYPE : ") and AH3/O5/AA5 are their pre-styled
 // (color #ff0000) blank value boxes, same convention as every other field
-// here. O5 (MAT'L SIZE) has no factory source anywhere in this codebase —
-// the real "Turning" template's own equivalent cell carries the identical
-// note ("material_size ... no automatic source, manual sds_parameter entry
-// only" in 20260916_seed_turning_excel_mapping_v2.js) — so it stays a manual
-// override field below rather than inventing a source for it.
+// here. The real "Turning" template's own O5 equivalent has no factory
+// source (its sds_excel_mapping seed says so explicitly) — but PB Ring's
+// own one-time xlsx import DID capture a per-CN value for it: it lives in
+// pbring_sds_param.params as 'Material_size' (verified live, e.g. CN
+// 294065/QTSMART200M/0081 -> "Ø 57.15"), just never wired to a cell before.
+// paramMap already carries it verbatim (buildPbRingValueMap spreads
+// paramRow.params in) — no extra resolution needed, unlike every other
+// factory-sourced field above.
 const TURNING_PB_HEADER_ADDR = {
   machine_type_name: 'C3', parts_no: 'O3', dwg_rev: 'U3', ct: 'C4', cn: 'O4',
-  sds_rev: 'AH3', material: 'AA5',
+  sds_rev: 'AH3', material: 'AA5', material_size: 'O5', category: 'C5',
 };
 // process_code_name is a combined field (code + name, like the old
 // template), built from two paramMap keys — not a 1:1 lookup, so it's
@@ -1250,10 +1259,12 @@ const TURNING_PB_PROCESS_ADDR = 'AA3';
 // Manual-override fields, same mechanism and storage (pbring_sds_parameter,
 // flat keys) as PBRING_HEADER_OVERRIDE_FIELDS already uses for the Standard
 // template — this layout added Category/Program No/Program Name/Mat'l Size
-// cells the old "Turning" never had. No auto-source for any of these on
-// turning machines, so they render blank until an admin types a
-// machine-default or CN-override value for them, exactly like Standard's
-// Program No/Name.
+// cells the old "Turning" never had. Program No/Program Rev have no
+// auto-source and render blank until an admin types a value; Category and
+// Mat'l Size DO auto-fill now (applyTurningHeaderToGrid, run first) — these
+// entries just let an admin override that default per machine or per CN,
+// applied after and winning on any non-blank value, same precedence as
+// Standard's CT override.
 const TURNING_PB_HEADER_OVERRIDE_FIELDS = [
   { key: 'program_no', label: 'Program No', cell: 'AA4' },
   { key: 'program_name', label: 'Program Rev', cell: 'AH4' },
@@ -1264,7 +1275,7 @@ const TURNING_PB_HEADER_OVERRIDE_FIELDS = [
 function applyTurningHeaderToGrid(grid, paramMap) {
   for (const [sdsField, pbKey] of Object.entries({
     machine_type_name: 'Machine', parts_no: 'PN', dwg_rev: 'REV', ct: 'CT', cn: 'CN',
-    sds_rev: 'SdsRev', material: 'Material',
+    sds_rev: 'SdsRev', material: 'Material', material_size: 'Material_size', category: 'Category',
   })) {
     const cellAddr = TURNING_PB_HEADER_ADDR[sdsField];
     const value = paramMap[pbKey];
