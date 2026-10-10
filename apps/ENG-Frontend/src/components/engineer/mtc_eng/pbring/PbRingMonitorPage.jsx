@@ -1741,14 +1741,9 @@ const CONDITION_FIELD_COLS = [
 // than asking the admin to type it every time.
 const PBRING_TURNING_PROCESS_CODE = '0081';
 
-// "+ New CN from History" (the condition-data equivalent of +New HW) is
-// built and working (see pbringConditionController.js's /condition/history
-// + /condition/from-history) but hidden from the UI by user decision
-// (2026-10-10) — not ready to surface yet. The "Edit" card's own
-// "+ New Tool Condition" button (a blank row the admin fills by hand) is
-// the entry point for a CN with no rows yet in the meantime. Flip this to
-// re-enable the history card without touching any other code.
-const SHOW_CONDITION_HISTORY_SUGGESTION = false;
+// "+ New CN from History" (the condition-data equivalent of +New HW) stays
+// collapsed until the admin clicks "+ New Tool Condition" — by user
+// decision (2026-10-10), it shouldn't just sit open on the page.
 
 function ConditionTab() {
   const { message } = App.useApp();
@@ -1761,6 +1756,7 @@ function ConditionTab() {
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsSaving, setRowsSaving] = useState(false);
 
+  const [showHistoryCard, setShowHistoryCard] = useState(false);
   const [histRows, setHistRows] = useState([]);
   const [histLoading, setHistLoading] = useState(false);
   const [targetCn, setTargetCn] = useState('');
@@ -1902,12 +1898,18 @@ function ConditionTab() {
           />
           <Input placeholder="CN e.g. 294065" style={{ width: 140 }} value={cn} onChange={(e) => setCn(e.target.value)} />
           <Button icon={<ReloadOutlined />} loading={rowsLoading} onClick={loadRows}>Load</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim()}>+ New Tool Condition</Button>
+          <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim()}>Add Slot</Button>
+          <Button
+            type="primary" icon={showHistoryCard ? <UpOutlined /> : <DownOutlined />}
+            onClick={() => setShowHistoryCard((s) => !s)}
+          >
+            {showHistoryCard ? 'Hide' : '+ New Tool Condition'}
+          </Button>
         </Space>
         <Table size="small" rowKey="_k" dataSource={rows} columns={rowsColumns} loading={rowsLoading} pagination={false} scroll={{ x: 1700 }} />
       </Card>
 
-      {SHOW_CONDITION_HISTORY_SUGGESTION && (
+      {showHistoryCard && (
         <Card size="small" title="+ New CN from History — suggest from what this machine has used before">
           <Space wrap style={{ marginBottom: 12 }}>
             <Text type="secondary">Machine</Text>
