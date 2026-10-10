@@ -512,17 +512,18 @@ async function loadStandardGridLive() {
 async function loadToolSlotAddressesLive() {
   const { rows } = await engPool.query(
     `SELECT cell_address, param_key FROM sds_excel_mapping
-      WHERE machine_type_name IS NULL AND (param_key LIKE 'tool_dwg_no_T%' OR param_key LIKE 'maker_T%')`
+      WHERE machine_type_name IS NULL AND (param_key LIKE 'tool_dwg_no_T%' OR param_key LIKE 'maker_T%' OR param_key LIKE 'tool_name_T%')`
   );
   const addr = {};
+  const FIELD = { tool_dwg_no: 'dwgNo', maker: 'maker', tool_name: 'name' };
   for (const r of rows) {
-    const m = /^(tool_dwg_no|maker)_T(\d+)$/.exec(r.param_key);
+    const m = /^(tool_dwg_no|maker|tool_name)_T(\d+)$/.exec(r.param_key);
     if (!m) continue;
     const slot = `T${m[2].padStart(2, '0')}`;
     addr[slot] = addr[slot] || {};
-    addr[slot][m[1] === 'tool_dwg_no' ? 'dwgNo' : 'maker'] = r.cell_address;
+    addr[slot][FIELD[m[1]]] = r.cell_address;
   }
-  return addr; // { T01: { dwgNo: 'M24', maker: 'M25' }, ... T20 }
+  return addr; // { T01: { dwgNo: 'M24', maker: 'M25', name: 'L16' }, ... T20 }
 }
 
 /**
@@ -596,6 +597,11 @@ function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses) {
     };
     colorCell(addr.dwgNo, row.tooling_no);
     colorCell(addr.maker, row.maker);
+    // tool_name_T0N (cell address only, confirmed live 2026-10-11 — a real
+    // shared mapping row that was never read before) shows the tool's own
+    // name/description, same role as tool_detail already plays on the
+    // Turning_PB layout.
+    colorCell(addr.name, row.tool_detail);
   });
 }
 
