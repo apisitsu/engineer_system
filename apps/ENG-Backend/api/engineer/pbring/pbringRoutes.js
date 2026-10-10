@@ -33,6 +33,7 @@ const router = express.Router();
 
 const pbringController = require('./pbringController');
 const pbringGridController = require('./pbringGridController');
+const pbringConditionController = require('./pbringConditionController');
 const { isMtcTeam, hasFeature } = require('../../../middleware/mtcAuth');
 const { WRITE_DENYLIST } = require('./pbringConstants');
 
@@ -62,6 +63,18 @@ router.get('/history/process-codes', pbringController.historyProcessCodes);
 router.get('/history/machines', pbringController.historyMachines);
 router.get('/history/template', pbringController.historyTemplate);
 router.post('/tooling/from-history', isPbringAdmin, pbringController.createFromHistory);
+
+// SDS tool-condition data (pbring_sds_condition: T01-T20/T1-T12 VC/F/AP/Insert/
+// etc.) — direct CRUD for an existing CN's rows, plus the same "+New HW"
+// history-suggestion principle applied to this table (group by tool_number +
+// insert_info, suggest what >=50% of this machine+process's CNs used).
+// Reads open; every write is a structural change to what prints on the
+// official sheet, so gated isPbringAdmin like +New HW's own commit step.
+router.get('/condition', pbringConditionController.getRows);
+router.put('/condition', isPbringAdmin, pbringConditionController.putRow);
+router.delete('/condition/:id', isPbringAdmin, pbringConditionController.deleteRow);
+router.get('/condition/history', pbringConditionController.getHistory);
+router.post('/condition/from-history', isPbringAdmin, pbringConditionController.postFromHistory);
 
 // Maqdb cost auto-detect — matches tool_code against lpb.pc_material_purchase
 // (see toolCodeMatch.js / pbringCostDetectService.js). Detect + list are read

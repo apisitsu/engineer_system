@@ -1703,6 +1703,212 @@ function ImagesTab() {
   );
 }
 
+// PB Ring SDS tool-condition data (pbring_sds_condition — T1-T12 VC/F/AP/
+// Insert/Holder/etc for turning, T01-T20 tooling_no/maker for grinding).
+// Two ways to manage it, by explicit user decision (2026-10-10) — both:
+// (1) direct CRUD on an existing CN's rows, and (2) the same "+New HW"
+// history-suggestion principle (group by what this machine+process has
+// used before, suggest what >=50% of its CNs used, review/tick/confirm)
+// applied here instead of to pbring_tooling.
+const CONDITION_FIELD_COLS = [
+  { key: 'tool_number', title: 'Slot', width: 70 },
+  { key: 'tooling_no', title: 'Tooling No', width: 140 },
+  { key: 'tool_detail', title: 'Tool Detail', width: 160 },
+  { key: 'insert_info', title: 'Insert', width: 160 },
+  { key: 'maker', title: 'Insert Maker', width: 110 },
+  { key: 'holder_info', title: 'Holder', width: 140 },
+  { key: 'holder_maker', title: 'Holder Maker', width: 110 },
+  { key: 'overhang', title: 'Overhang', width: 90 },
+  { key: 'vc', title: 'VC', width: 70 },
+  { key: 'f', title: 'F', width: 70 },
+  { key: 'ap', title: 'AP', width: 70 },
+  { key: 'nose_r', title: 'Nose R', width: 70 },
+  { key: 'rotation', title: 'Rotation', width: 90 },
+  { key: 'hand', title: 'Hand', width: 70 },
+  { key: 'usaged', title: 'Usage', width: 90 },
+  { key: 'h_width', title: 'H.Width', width: 90 },
+];
+
+function ConditionTab() {
+  const { message } = App.useApp();
+  const [machines, setMachines] = useState([]);
+  const [selectedMachine, setSelectedMachine] = useState(null);
+  const [processCode, setProcessCode] = useState('');
+
+  const [cn, setCn] = useState('');
+  const [rows, setRows] = useState([]);
+  const [rowsLoading, setRowsLoading] = useState(false);
+  const [rowsSaving, setRowsSaving] = useState(false);
+
+  const [histRows, setHistRows] = useState([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [targetCn, setTargetCn] = useState('');
+  const [committing, setCommitting] = useState(false);
+
+  useEffect(() => {
+    axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES)
+      .then((r) => setMachines(r.data || []))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load machine list')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadRows = () => {
+    if (!selectedMachine || !cn.trim() || !processCode.trim()) {
+      message.warning('Select a machine, CN and Process Code first');
+      return;
+    }
+    setRowsLoading(true);
+    axios.get(server.PBRING_CONDITION, { params: { machine_type_name: selectedMachine, cn: cn.trim(), process_code: processCode.trim() } })
+      .then((r) => setRows((r.data?.rows || []).map((row) => ({ ...row, _k: row.id }))))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load condition rows')))
+      .finally(() => setRowsLoading(false));
+  };
+
+  const updateRow = (k, field, value) => setRows((prev) => prev.map((r) => (r._k === k ? { ...r, [field]: value } : r)));
+  const addRow = () => setRows((prev) => [...prev, { _k: `new-${Date.now()}`, tool_number: '' }]);
+  const removeRow = (k) => setRows((prev) => prev.filter((r) => r._k !== k));
+
+  const saveRow = async (row) => {
+    if (!row.tool_number?.trim()) { message.warning('Slot (tool_number) is required, e.g. T1'); return; }
+    setRowsSaving(true);
+    try {
+      const { data } = await axios.put(server.PBRING_CONDITION, {
+        ...row, id: row.id ?? undefined,
+        cn: cn.trim(), mc_key: selectedMachine, machine: selectedMachine, process_code: processCode.trim(),
+      });
+      message.success(`Saved ${row.tool_number}`);
+      setRows((prev) => prev.map((r) => (r._k === row._k ? { ...data.row, _k: data.row.id } : r)));
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Save failed'));
+    } finally {
+      setRowsSaving(false);
+    }
+  };
+
+  const deleteRow = async (row) => {
+    if (row.id == null) { removeRow(row._k); return; } // never saved — just drop it
+    try {
+      await axios.delete(`${server.PBRING_CONDITION}/${row.id}`);
+      message.success('Deleted');
+      removeRow(row._k);
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Delete failed'));
+    }
+  };
+
+  const loadHistory = () => {
+    if (!selectedMachine || !processCode.trim()) { message.warning('Select a machine and Process Code first'); return; }
+    setHistLoading(true);
+    axios.get(server.PBRING_CONDITION_HISTORY, { params: { machine_type_name: selectedMachine, process_code: processCode.trim() } })
+      .then((r) => setHistRows((r.data?.rows || []).map((row, i) => ({ ...row, _k: `h-${i}` }))))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load history')))
+      .finally(() => setHistLoading(false));
+  };
+  const updateHistRow = (k, field, value) => setHistRows((prev) => prev.map((r) => (r._k === k ? { ...r, [field]: value } : r)));
+
+  const commitHistory = async (force = false) => {
+    if (!selectedMachine || !processCode.trim() || !targetCn.trim()) {
+      message.warning('Select a machine, Process Code and target CN first');
+      return;
+    }
+    const picked = histRows.filter((r) => r.use);
+    if (!picked.length) { message.warning('No slots ticked'); return; }
+    setCommitting(true);
+    try {
+      const { data } = await axios.post(server.PBRING_CONDITION_FROM_HISTORY, {
+        cn: targetCn.trim(), machine_type_name: selectedMachine, process_code: processCode.trim(), rows: picked, force,
+      });
+      if (data.skippedCount > 0 && !force) {
+        message.warning(
+          <span>
+            Added {data.insertedCount} slot(s) — skipped {data.skippedCount} already-present
+            {' '}<a onClick={() => commitHistory(true)}>Add anyway</a>
+          </span>, 8
+        );
+      } else {
+        message.success(`Added ${data.insertedCount} slot(s) to CN ${targetCn.trim()}`);
+      }
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Add failed'));
+    } finally {
+      setCommitting(false);
+    }
+  };
+
+  const buildColumns = (data, onChange, extra) => [
+    ...CONDITION_FIELD_COLS.map((c) => ({
+      title: c.title, key: c.key, width: c.width,
+      render: (_, r) => (
+        <Input
+          size="small"
+          value={r[c.key] ?? ''}
+          disabled={c.key === 'tool_number' && r.id != null}
+          onChange={(e) => onChange(r._k, c.key, e.target.value)}
+        />
+      ),
+    })),
+    ...extra,
+  ];
+
+  const rowsColumns = buildColumns(rows, updateRow, [
+    {
+      title: '', key: 'actions', width: 90, fixed: 'right',
+      render: (_, r) => (
+        <Space size={4}>
+          <Button size="small" type="primary" loading={rowsSaving} onClick={() => saveRow(r)}>Save</Button>
+          <Popconfirm title="Delete this slot?" onConfirm={() => deleteRow(r)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ]);
+
+  const histColumns = [
+    { title: 'Use', key: 'use', width: 50, fixed: 'left', render: (_, r) => <Checkbox checked={r.use} onChange={(e) => updateHistRow(r._k, 'use', e.target.checked)} /> },
+    ...buildColumns(histRows, updateHistRow, []),
+    { title: 'Used in history', dataIndex: 'hist', width: 100 },
+  ];
+
+  return (
+    <div>
+      <Card size="small" title="Edit — an existing CN's slots" style={{ marginBottom: 16 }}>
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Text type="secondary">Machine</Text>
+          <Select
+            style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
+            onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
+          />
+          <Input placeholder="CN e.g. 294065" style={{ width: 140 }} value={cn} onChange={(e) => setCn(e.target.value)} />
+          <Input placeholder="Process Code e.g. 0081" style={{ width: 140 }} value={processCode} onChange={(e) => setProcessCode(e.target.value)} />
+          <Button icon={<ReloadOutlined />} loading={rowsLoading} onClick={loadRows}>Load</Button>
+          <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim() || !processCode.trim()}>Add Slot</Button>
+        </Space>
+        <Table size="small" rowKey="_k" dataSource={rows} columns={rowsColumns} loading={rowsLoading} pagination={false} scroll={{ x: 1700 }} />
+      </Card>
+
+      <Card size="small" title="+ New CN from History — suggest from what this machine + process has used before">
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Text type="secondary">Machine</Text>
+          <Select
+            style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
+            onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
+          />
+          <Input placeholder="Process Code e.g. 0081" style={{ width: 140 }} value={processCode} onChange={(e) => setProcessCode(e.target.value)} />
+          <Button type="primary" icon={<DownloadOutlined />} loading={histLoading} onClick={loadHistory}>Load from history</Button>
+        </Space>
+        <Table size="small" rowKey="_k" dataSource={histRows} columns={histColumns} loading={histLoading} pagination={false} scroll={{ x: 1800, y: 400 }}
+          locale={{ emptyText: <Empty description='Select Machine + Process Code then click "Load from history"' /> }}
+        />
+        <Space style={{ marginTop: 12 }}>
+          <Input placeholder="Target CN e.g. 294099" style={{ width: 160 }} value={targetCn} onChange={(e) => setTargetCn(e.target.value)} />
+          <Button type="primary" loading={committing} onClick={() => commitHistory(false)}>Add to CN</Button>
+        </Space>
+      </Card>
+    </div>
+  );
+}
+
 export default function PbRingMonitorPage() {
   const C = useColors();
   const userRole = useAuthStore((s) => s.userRole);
@@ -1723,6 +1929,7 @@ export default function PbRingMonitorPage() {
     // pbring_grid_template/pbring_machine_type.grid_template_id at render
     // time anymore, so there was nothing left for that tab to configure.
     tabItems.push({ key: 'param-config', label: 'Parameter Config', children: <ParamConfigTab /> });
+    tabItems.push({ key: 'condition', label: 'Tool Condition', children: <ConditionTab /> });
     tabItems.push({ key: 'images', label: 'Images', children: <ImagesTab /> });
   }
 

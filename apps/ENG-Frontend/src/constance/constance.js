@@ -108,6 +108,9 @@ export const server = {
   PBRING_GRID_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/grinding-image`, // ?machine_type_name=&cn=&process_code= (GET binary)
   PBRING_GRID_ADMIN_GRINDING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/grinding-images`, // ?machine_type_name= (GET list)
   PBRING_GRID_ADMIN_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/grinding-image`, // POST (multipart) / DELETE ?machine_type_name=&cn=&process_code=
+  PBRING_CONDITION: `${apiUrl}api/engineer/pbring/condition`, // ?cn=&machine_type_name=&process_code= (GET); PUT row; append /:id (DELETE)
+  PBRING_CONDITION_HISTORY: `${apiUrl}api/engineer/pbring/condition/history`, // ?machine_type_name=&process_code= (GET)
+  PBRING_CONDITION_FROM_HISTORY: `${apiUrl}api/engineer/pbring/condition/from-history`, // POST
 
   // Permissions Config — grant/revoke feature_perms (tooling_admin/sds_admin/
   // general_dwg_admin). Access restricted to AD + an explicit empno allowlist.
