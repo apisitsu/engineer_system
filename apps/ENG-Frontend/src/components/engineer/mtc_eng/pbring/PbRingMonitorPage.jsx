@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Layout, Tabs, Select, Button, Space, Typography, Table, Tag, Empty, Statistic,
-  Row, Col, Card, Input, InputNumber, DatePicker, Checkbox, Popconfirm, App,
+  Row, Col, Card, Input, InputNumber, DatePicker, Checkbox, Popconfirm, App, Spin, Upload,
 } from 'antd';
 import {
   ClearOutlined, ReloadOutlined, EditOutlined, SaveOutlined, CloseOutlined,
   PlusOutlined, DeleteOutlined, DownloadOutlined, CheckOutlined, SyncOutlined,
-  DoubleRightOutlined, DoubleLeftOutlined,
+  DoubleRightOutlined, DoubleLeftOutlined, DownOutlined, UpOutlined, SearchOutlined, UploadOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { useTheme } from '../../../../theme';
+import { useAuthStore } from '../../../../stores/authStore';
 
 // Same status list as the backend's pbringConstants.STATUS — kept in sync by hand,
 // same way the prototype's own STATUS array was a plain shared constant.
@@ -1004,18 +1005,964 @@ function SummaryTab() {
   );
 }
 
+// Phase 6, problem #3 — per-machine GRIND/DRESS CONDITION + Grinding Wheel
+// Config editor. Exact replica of the real SDS "Excel Parameter Config" /
+// "Excel Grinding Wheel Config" admin tabs (MachineConfigTab in
+// SdsV2AdminPage.jsx), by explicit user decision (2026-10-08): every cell is
+// hand-typed, no automatic resolution from pbring_sds_param/condition. Same
+// row numbers (16-58) and column letters (A-I, GW: AN-AV) as the real
+// "Standard" template's own condition area, since PB Ring's grinding
+// machines render through that same live template.
+const PBRING_ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16); // 16-58
+const PBRING_COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+const PBRING_GW_ROW_RANGE = [53, 54, 55, 56, 57, 58];
+const PBRING_GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
+// The 2 turning machines render through a fully field-mapped template with
+// no free-form condition area — nothing here applies to them.
+const PBRING_TURNING_MACHINES = ['QTSMART200M', 'QUICKTURN200500U'];
+
+// Header single-cell override fields — exact replica of the real SDS
+// HEADER_CELL_FIELDS. Flat param_key (no row_/gw_row_ prefix), machine-default
+// or CN-override. 'ct' already auto-fills from pbring_sds_param by default; a
+// value entered here overrides that, same as the real system.
+const PBRING_HEADER_OVERRIDE_FIELDS = [
+  { key: 'program_no', label: 'Program No', cell: 'Z4' },
+  { key: 'program_name', label: 'Program Name', cell: 'Z5' },
+  { key: 'ct', label: 'Cycle Time (CT)', cell: 'B4' },
+  { key: 'category', label: 'Category', cell: 'B5' },
+];
+const PBRING_HEADER_OVERRIDE_KEYS = new Set(PBRING_HEADER_OVERRIDE_FIELDS.map((f) => f.key));
+
+function ParamConfigTab() {
+  const { message } = App.useApp();
+  const [allMachines, setAllMachines] = useState([]);
+  const [search, setSearch] = useState('');
+  const [showMachineList, setShowMachineList] = useState(false); // table starts hidden, same as the real admin
+  const [listLoading, setListLoading] = useState(false);
+  const [selectedMachine, setSelectedMachine] = useState(null);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  // Machine-default state
+  const [cellData, setCellData] = useState({});       // row_{N}_{C} -> value
+  const [cellTypes, setCellTypes] = useState({});      // row_{N}_{C} -> 'value' | ''
+  const [rowHeaders, setRowHeaders] = useState({});    // {N}: bool
+  const [gwCellData, setGwCellData] = useState({});
+  const [gwCellTypes, setGwCellTypes] = useState({});
+  const [gwRowHeaders, setGwRowHeaders] = useState({});
+  const [headerData, setHeaderData] = useState({}); // program_no/program_name/ct/category, machine default
+
+  // CN override state
+  const [cnInput, setCnInput] = useState('');
+  const [selectedCn, setSelectedCn] = useState(null);
+  const [selectedProcess, setSelectedProcess] = useState('');
+  const [cnOverrideData, setCnOverrideData] = useState({});
+  const [cnGwOverrideData, setCnGwOverrideData] = useState({});
+
+  const loadList = useCallback(() => {
+    setListLoading(true);
+    axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES)
+      .then((r) => setAllMachines((r.data || []).filter((m) => !PBRING_TURNING_MACHINES.includes(m.machine_type_name))))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load machine list')))
+      .finally(() => setListLoading(false));
+  }, [message]);
+
+  useEffect(() => { loadList(); }, [loadList]);
+
+  const displayedMachines = search
+    ? allMachines.filter((m) => m.machine_type_name.toLowerCase().includes(search.toLowerCase()))
+    : allMachines;
+
+  const markDirty = () => setDirty(true);
+
+  const loadConfig = useCallback((machineTypeName) => {
+    setSelectedMachine(machineTypeName);
+    setShowMachineList(false); // collapse list after picking a machine
+    setSelectedCn(null); setCnInput(''); setCnOverrideData({}); setCnGwOverrideData({}); setSelectedProcess('');
+    setConfigLoading(true);
+    setDirty(false);
+    setHeaderData({});
+    axios.get(server.PBRING_GRID_ADMIN_PARAMETERS, { params: { machine_type_name: machineTypeName } })
+      .then((r) => {
+        const cd = {}, ct = {}, rh = {}, gcd = {}, gct = {}, grh = {}, hd = {};
+        for (const row of r.data || []) {
+          const k = row.param_key;
+          if (PBRING_HEADER_OVERRIDE_KEYS.has(k)) {
+            hd[k] = row.param_value;
+          } else if (k.startsWith('gw_row_')) {
+            const hm = /^gw_row_(\d+)_is_header$/.exec(k);
+            const tm = /^gw_row_(\d+)_([A-Z]+)_type$/.exec(k);
+            const vm = /^gw_row_(\d+)_([A-Z]+)$/.exec(k);
+            if (hm) grh[hm[1]] = row.param_value === '1';
+            else if (tm) gct[`gw_row_${tm[1]}_${tm[2]}`] = row.param_value;
+            else if (vm) gcd[`gw_row_${vm[1]}_${vm[2]}`] = row.param_value;
+          } else {
+            const hm = /^row_(\d+)_is_header$/.exec(k);
+            const tm = /^row_(\d+)_([A-Z]+)_type$/.exec(k);
+            const vm = /^row_(\d+)_([A-Z]+)$/.exec(k);
+            if (hm) rh[hm[1]] = row.param_value === '1';
+            else if (tm) ct[`row_${tm[1]}_${tm[2]}`] = row.param_value;
+            else if (vm) cd[`row_${vm[1]}_${vm[2]}`] = row.param_value;
+          }
+        }
+        setCellData(cd); setCellTypes(ct); setRowHeaders(rh);
+        setGwCellData(gcd); setGwCellTypes(gct); setGwRowHeaders(grh);
+        setHeaderData(hd);
+      })
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load parameters')))
+      .finally(() => setConfigLoading(false));
+  }, [message]);
+
+  const loadCnConfig = useCallback((cn, processArg) => {
+    if (!selectedMachine) return;
+    const trimmed = cn.trim();
+    const proc = processArg !== undefined ? (processArg || '') : selectedProcess;
+    setSelectedCn(trimmed); setSelectedProcess(proc);
+    setConfigLoading(true);
+    setCnOverrideData({}); setCnGwOverrideData({});
+    setDirty(false);
+    axios.get(server.PBRING_GRID_ADMIN_PARAMETERS, { params: { machine_type_name: selectedMachine, cn: trimmed, process_code: proc || undefined } })
+      .then((r) => {
+        const cod = {}, cgd = {};
+        for (const row of r.data || []) {
+          if (row.param_key.startsWith('gw_row_')) cgd[row.param_key] = row.param_value;
+          else cod[row.param_key] = row.param_value;
+        }
+        setCnOverrideData(cod); setCnGwOverrideData(cgd);
+      })
+      .catch((err) => { message.error(apiErrorMessage(err, 'Load CN failed')); setSelectedCn(null); })
+      .finally(() => setConfigLoading(false));
+  }, [selectedMachine, selectedProcess, message]);
+
+  const exitCnMode = () => {
+    setSelectedCn(null); setCnInput('');
+    setCnOverrideData({}); setCnGwOverrideData({});
+    setSelectedProcess('');
+    setDirty(false);
+  };
+
+  const handleCellChange = (rowNum, c, val, isGw) => {
+    const key = `${isGw ? 'gw_row' : 'row'}_${rowNum}_${c}`;
+    if (selectedCn) {
+      (isGw ? setCnGwOverrideData : setCnOverrideData)((prev) => ({ ...prev, [key]: val }));
+    } else {
+      (isGw ? setGwCellData : setCellData)((prev) => ({ ...prev, [key]: val }));
+    }
+    markDirty();
+  };
+  const handleTypeToggle = (rowNum, c, isGw) => {
+    if (selectedCn) return; // type is machine-level only, matching the real admin
+    const key = `${isGw ? 'gw_row' : 'row'}_${rowNum}_${c}`;
+    (isGw ? setGwCellTypes : setCellTypes)((prev) => ({ ...prev, [key]: prev[key] === 'value' ? '' : 'value' }));
+    markDirty();
+  };
+  const handleHeaderToggle = (rowNum, checked, isGw) => {
+    if (selectedCn) return; // header is machine-level only
+    (isGw ? setGwRowHeaders : setRowHeaders)((prev) => ({ ...prev, [rowNum]: checked }));
+    markDirty();
+  };
+  const handleHeaderFieldChange = (key, val) => {
+    if (selectedCn) setCnOverrideData((prev) => ({ ...prev, [key]: val }));
+    else setHeaderData((prev) => ({ ...prev, [key]: val }));
+    markDirty();
+  };
+
+  const save = async () => {
+    if (!selectedMachine) return;
+    setSaving(true);
+    try {
+      const params = [];
+      if (selectedCn) {
+        for (const r of PBRING_ROW_RANGE) for (const c of PBRING_COL_LETTERS) {
+          const key = `row_${r}_${c}`;
+          params.push({ param_key: key, param_value: cnOverrideData[key] || '' });
+        }
+        for (const r of PBRING_GW_ROW_RANGE) for (const c of PBRING_GW_COL_LETTERS) {
+          const key = `gw_row_${r}_${c}`;
+          params.push({ param_key: key, param_value: cnGwOverrideData[key] || '' });
+        }
+        for (const f of PBRING_HEADER_OVERRIDE_FIELDS) {
+          params.push({ param_key: f.key, param_value: cnOverrideData[f.key] || '' });
+        }
+        await axios.put(server.PBRING_GRID_ADMIN_PARAMETERS_BULK, {
+          machine_type_name: selectedMachine, cn: selectedCn, process_code: selectedProcess || null, params,
+        });
+        message.success(`Saved CN override for ${selectedCn}${selectedProcess ? ` (process ${selectedProcess})` : ''}`);
+        loadCnConfig(selectedCn, selectedProcess);
+      } else {
+        for (const r of PBRING_ROW_RANGE) for (const c of PBRING_COL_LETTERS) {
+          const key = `row_${r}_${c}`;
+          params.push({ param_key: key, param_value: cellData[key] || '' });
+          params.push({ param_key: `${key}_type`, param_value: cellTypes[key] || '' });
+        }
+        for (const r of PBRING_ROW_RANGE) params.push({ param_key: `row_${r}_is_header`, param_value: rowHeaders[r] ? '1' : '' });
+        for (const r of PBRING_GW_ROW_RANGE) for (const c of PBRING_GW_COL_LETTERS) {
+          const key = `gw_row_${r}_${c}`;
+          params.push({ param_key: key, param_value: gwCellData[key] || '' });
+          params.push({ param_key: `${key}_type`, param_value: gwCellTypes[key] || '' });
+        }
+        for (const r of PBRING_GW_ROW_RANGE) params.push({ param_key: `gw_row_${r}_is_header`, param_value: gwRowHeaders[r] ? '1' : '' });
+        for (const f of PBRING_HEADER_OVERRIDE_FIELDS) {
+          params.push({ param_key: f.key, param_value: headerData[f.key] || '' });
+        }
+        const r = await axios.put(server.PBRING_GRID_ADMIN_PARAMETERS_BULK, { machine_type_name: selectedMachine, params });
+        message.success(`Saved ${r.data?.count ?? ''} cell(s)`);
+        loadConfig(selectedMachine);
+      }
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Save failed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Same column shape as the real MachineConfigTab's configGridCols/gwConfigGridCols:
+  // Row | Hdr | <letters>, header-row shading via onCell (not a className trick), and
+  // a blue tint + border on any cell carrying a CN override.
+  const buildGridCols = (headersMap, colLetters, isGw) => [
+    {
+      title: 'Row', dataIndex: 'rowNum', width: 50, fixed: 'left',
+      onCell: (record) => ({ style: { backgroundColor: headersMap[record.rowNum] ? '#d9d9d9' : undefined } }),
+      render: (v) => <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text>,
+    },
+    {
+      title: 'Hdr', key: 'hdr', width: 44, fixed: 'left',
+      onCell: (record) => ({ style: { backgroundColor: headersMap[record.rowNum] ? '#d9d9d9' : undefined } }),
+      render: (_, record) => (
+        <Checkbox
+          checked={!!headersMap[record.rowNum]}
+          disabled={!!selectedCn}
+          onChange={(e) => handleHeaderToggle(record.rowNum, e.target.checked, isGw)}
+        />
+      ),
+    },
+    ...colLetters.map((c) => ({
+      title: c, key: c, width: 130,
+      onCell: (record) => ({ style: { backgroundColor: headersMap[record.rowNum] ? '#d9d9d9' : undefined } }),
+      render: (_, record) => {
+        const prefix = isGw ? 'gw_row' : 'row';
+        const cellKey = `${prefix}_${record.rowNum}_${c}`;
+        const typesMap = isGw ? gwCellTypes : cellTypes;
+        const dataMap = isGw ? gwCellData : cellData;
+        const overrideMap = isGw ? cnGwOverrideData : cnOverrideData;
+        const isValue = typesMap[cellKey] === 'value';
+        const hasOverride = !!selectedCn && overrideMap[cellKey] !== undefined;
+        const displayValue = selectedCn ? (overrideMap[cellKey] ?? dataMap[cellKey] ?? '') : (dataMap[cellKey] || '');
+        return (
+          <Input
+            size="small"
+            value={displayValue}
+            onChange={(e) => handleCellChange(record.rowNum, c, e.target.value, isGw)}
+            style={{
+              fontSize: 11,
+              color: isValue ? '#ff4d4f' : undefined,
+              backgroundColor: hasOverride ? '#e6f4ff' : (headersMap[record.rowNum] ? '#f5f5f5' : undefined),
+              borderColor: hasOverride ? '#1677ff' : undefined,
+            }}
+            suffix={(
+              <span
+                title={selectedCn ? 'Type set at machine level' : 'Toggle: Label / Value'}
+                onClick={() => handleTypeToggle(record.rowNum, c, isGw)}
+                style={{
+                  cursor: selectedCn ? 'default' : 'pointer', fontSize: 10, fontWeight: 'bold',
+                  color: isValue ? '#ff4d4f' : '#bfbfbf', userSelect: 'none', opacity: selectedCn ? 0.4 : 1,
+                }}
+              >V</span>
+            )}
+          />
+        );
+      },
+    })),
+  ];
+
+  const configGridCols = buildGridCols(rowHeaders, PBRING_COL_LETTERS, false);
+  const gwConfigGridCols = buildGridCols(gwRowHeaders, PBRING_GW_COL_LETTERS, true);
+
+  const machineListCols = [
+    { title: 'Machine Type Name', dataIndex: 'machine_type_name' },
+    { title: 'Source Sheet', dataIndex: 'source_sheet_name', render: (v) => v || <Text type="secondary">-</Text> },
+    {
+      title: '', key: 'action', width: 120,
+      render: (_, row) => (
+        <Button
+          size="small"
+          type={selectedMachine === row.machine_type_name ? 'primary' : 'default'}
+          onClick={() => loadConfig(row.machine_type_name)}
+        >
+          {selectedMachine === row.machine_type_name ? 'Loaded' : 'Load Config'}
+        </Button>
+      ),
+    },
+  ];
+
+  const machineListBlock = (
+    <>
+      <Row gutter={8} align="middle" style={{ marginBottom: showMachineList ? 12 : 16 }}>
+        <Col>
+          <Button icon={showMachineList ? <UpOutlined /> : <DownOutlined />} onClick={() => setShowMachineList((s) => !s)}>
+            {showMachineList ? 'Hide Machine List' : 'Show Machine List'}
+          </Button>
+        </Col>
+        {selectedMachine && (
+          <Col><Text type="secondary">Selected: <Text strong>{selectedMachine}</Text></Text></Col>
+        )}
+      </Row>
+      {showMachineList && (
+        <>
+          <Row gutter={8} style={{ marginBottom: 12 }}>
+            <Col>
+              <Input.Search
+                placeholder="Search machine"
+                allowClear
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ width: 280 }}
+                enterButton={<SearchOutlined />}
+              />
+            </Col>
+            <Col><Button icon={<ReloadOutlined />} onClick={loadList}>Refresh</Button></Col>
+          </Row>
+          <Table
+            loading={listLoading}
+            dataSource={displayedMachines.map((r) => ({ ...r, key: r.id ?? r.machine_type_name }))}
+            columns={machineListCols}
+            size="small"
+            pagination={{ pageSize: 15, showSizeChanger: false }}
+            rowClassName={(row) => (row.machine_type_name === selectedMachine ? 'ant-table-row-selected' : '')}
+            style={{ marginBottom: 24 }}
+          />
+        </>
+      )}
+    </>
+  );
+
+  const cnModeBar = selectedMachine && (
+    <Row gutter={8} align="middle" style={{ marginBottom: 12, padding: '8px 12px', background: selectedCn ? '#e6f4ff' : '#fafafa', borderRadius: 6, border: '1px solid #d9d9d9' }}>
+      {selectedCn ? (
+        <>
+          <Col><Tag color="blue" style={{ fontSize: 13, padding: '2px 10px' }}>CN Override: {selectedCn}</Tag></Col>
+          <Col>
+            <Space size={4}>
+              <Text type="secondary" style={{ fontSize: 12 }}>Process:</Text>
+              <Input
+                size="small" style={{ width: 120 }} value={selectedProcess} placeholder="All processes"
+                onChange={(e) => setSelectedProcess(e.target.value)}
+                onPressEnter={() => loadCnConfig(selectedCn, selectedProcess)}
+              />
+              <Button size="small" onClick={() => loadCnConfig(selectedCn, selectedProcess)}>Reload</Button>
+            </Space>
+          </Col>
+          <Col>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {selectedProcess ? `Overrides apply to process ${selectedProcess} only` : 'Edit any cell — blue = override, normal = machine default'}
+            </Text>
+          </Col>
+          <Col flex="auto" />
+          <Col><Button size="small" onClick={exitCnMode}>← Machine Default</Button></Col>
+        </>
+      ) : (
+        <>
+          <Col>
+            <Space.Compact>
+              <Input
+                placeholder="CN Override e.g. C25-0190"
+                value={cnInput}
+                onChange={(e) => setCnInput(e.target.value)}
+                onPressEnter={() => cnInput.trim() && loadCnConfig(cnInput)}
+                style={{ width: 220 }}
+                allowClear
+              />
+              <Button onClick={() => cnInput.trim() && loadCnConfig(cnInput)} disabled={!cnInput.trim()}>Load CN</Button>
+            </Space.Compact>
+          </Col>
+          <Col><Text type="secondary" style={{ fontSize: 12 }}>Leave blank = edit machine default (all CNs)</Text></Col>
+        </>
+      )}
+    </Row>
+  );
+
+  const saveBar = selectedMachine && (
+    <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
+      <Col>
+        <Text strong>{selectedMachine}</Text>
+        {selectedCn && <Tag color="blue" style={{ marginLeft: 8 }}>{selectedCn}</Tag>}
+        {selectedCn && selectedProcess && <Tag color="geekblue">proc {selectedProcess}</Tag>}
+      </Col>
+      <Col flex="auto" />
+      {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}
+      <Col>
+        <Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving} disabled={!dirty}>
+          Save{selectedCn ? ' CN Override' : ''}
+        </Button>
+      </Col>
+    </Row>
+  );
+
+  return (
+    <div>
+      <style>{`.pbring-config-grid .pbring-hdr-row td { background-color: #d9d9d9 !important; }`}</style>
+      {machineListBlock}
+      {selectedMachine && (
+        <Spin spinning={configLoading}>
+          {cnModeBar}
+          {saveBar}
+          <Row gutter={16} style={{ marginBottom: 12 }}>
+            {PBRING_HEADER_OVERRIDE_FIELDS.map((f) => {
+              const hasOverride = !!selectedCn && cnOverrideData[f.key] !== undefined;
+              const displayValue = selectedCn ? (cnOverrideData[f.key] ?? headerData[f.key] ?? '') : (headerData[f.key] || '');
+              return (
+                <Col key={f.key} span={8}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {f.label} <Tag color="default" style={{ marginInlineStart: 4 }}>{f.cell}</Tag>
+                  </Text>
+                  <Input
+                    size="small"
+                    value={displayValue}
+                    placeholder={selectedCn ? 'CN override (blank = machine default)' : `${f.label} (machine default)`}
+                    onChange={(e) => handleHeaderFieldChange(f.key, e.target.value)}
+                    style={{
+                      marginTop: 2,
+                      backgroundColor: hasOverride ? '#e6f4ff' : undefined,
+                      borderColor: hasOverride ? '#1677ff' : undefined,
+                    }}
+                  />
+                </Col>
+              );
+            })}
+          </Row>
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>Excel Parameter Config</Text>
+          <Table
+            className="pbring-config-grid"
+            dataSource={PBRING_ROW_RANGE.map((rowNum) => ({ key: rowNum, rowNum }))}
+            columns={configGridCols}
+            pagination={false}
+            size="small"
+            scroll={{ x: 'max-content', y: 420 }}
+            bordered
+            style={{ fontFamily: 'monospace', marginBottom: 24 }}
+            rowClassName={(record) => (rowHeaders[record.rowNum] ? 'pbring-hdr-row' : '')}
+          />
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>Excel Grinding Wheel Config</Text>
+          <Table
+            className="pbring-config-grid"
+            dataSource={PBRING_GW_ROW_RANGE.map((rowNum) => ({ key: rowNum, rowNum }))}
+            columns={gwConfigGridCols}
+            pagination={false}
+            size="small"
+            scroll={{ x: 'max-content', y: 300 }}
+            bordered
+            style={{ fontFamily: 'monospace' }}
+            rowClassName={(record) => (gwRowHeaders[record.rowNum] ? 'pbring-hdr-row' : '')}
+          />
+        </Spin>
+      )}
+    </div>
+  );
+}
+
+// Tooling + Grinding Area photos — same visual boxes as the real SDS sheet
+// (T01-T20 photo boxes, the "Grinding Area" picture). Own tables. Tooling
+// photos key on the DWG family (first two dash-segments of tooling_no, or
+// the plain name when there's no dash) by explicit user decision
+// (2026-10-08): one upload covers every tooling_no that shares a family,
+// same as the real sds_tooling_image's own evolution. The family dropdown
+// is populated from pbring_sds_condition history for the selected machine
+// (same "look at what's actually been used" principle as +New HW), with a
+// manual-entry fallback for a family that hasn't appeared in history yet.
+// Grinding-area photos stay exact-match on (cn, process_code) — only the
+// grinding machines use this layout; the 2 turning machines render through
+// a different template with no photo boxes PB Ring has built yet.
+function ImagesTab() {
+  const { message } = App.useApp();
+  const [machines, setMachines] = useState([]);
+  const [selectedMachine, setSelectedMachine] = useState(null);
+
+  const [toolingImages, setToolingImages] = useState([]);
+  const [toolingLoading, setToolingLoading] = useState(false);
+  const [familyOptions, setFamilyOptions] = useState([]);
+  const [newToolingNo, setNewToolingNo] = useState('');
+  const [toolingUploading, setToolingUploading] = useState(false);
+
+  const [grindingImages, setGrindingImages] = useState([]);
+  const [grindingLoading, setGrindingLoading] = useState(false);
+  const [newGrindCn, setNewGrindCn] = useState('');
+  const [newGrindProcess, setNewGrindProcess] = useState('');
+  const [grindingUploading, setGrindingUploading] = useState(false);
+
+  // Every machine (grinding + turning) — the Tooling Images section below
+  // hides itself for a turning machine (that per-slot photo box exists on
+  // Turning_PB but isn't wired up yet), while the layout/area-photo section
+  // applies to both: the Standard template's "Grinding Area" box and
+  // Turning_PB's "TURNING CUTTING LAYOUT" box are the same
+  // pbring_grinding_image mechanism, just a different box on a different
+  // template, so a turning machine belongs in this list.
+  useEffect(() => {
+    axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES)
+      .then((r) => setMachines(r.data || []))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load machine list')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isTurningMachine = PBRING_TURNING_MACHINES.includes(selectedMachine);
+
+  const loadToolingImages = useCallback((machine) => {
+    if (!machine) return;
+    setToolingLoading(true);
+    axios.get(server.PBRING_GRID_ADMIN_TOOLING_IMAGES, { params: { machine_type_name: machine } })
+      .then((r) => setToolingImages(r.data || []))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load tooling images')))
+      .finally(() => setToolingLoading(false));
+  }, [message]);
+
+  const loadFamilyOptions = useCallback((machine) => {
+    if (!machine) return;
+    axios.get(server.PBRING_GRID_ADMIN_TOOLING_FAMILIES, { params: { machine_type_name: machine } })
+      .then((r) => setFamilyOptions(r.data || []))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load tooling history')));
+  }, [message]);
+
+  const loadGrindingImages = useCallback((machine) => {
+    if (!machine) return;
+    setGrindingLoading(true);
+    axios.get(server.PBRING_GRID_ADMIN_GRINDING_IMAGES, { params: { machine_type_name: machine } })
+      .then((r) => setGrindingImages(r.data || []))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load grinding area images')))
+      .finally(() => setGrindingLoading(false));
+  }, [message]);
+
+  const selectMachine = (val) => {
+    setSelectedMachine(val);
+    setNewToolingNo(''); setNewGrindCn(''); setNewGrindProcess('');
+    loadToolingImages(val);
+    loadFamilyOptions(val);
+    loadGrindingImages(val);
+  };
+
+  const uploadToolingImage = (file) => {
+    if (!newToolingNo.trim()) { message.error('Pick or type a DWG family first'); return false; }
+    setToolingUploading(true);
+    const fd = new FormData();
+    fd.append('machine_type_name', selectedMachine);
+    fd.append('family', newToolingNo.trim());
+    fd.append('image', file);
+    axios.post(server.PBRING_GRID_ADMIN_TOOLING_IMAGE, fd)
+      .then(() => { message.success(`Saved photo for family ${newToolingNo.trim()}`); setNewToolingNo(''); loadToolingImages(selectedMachine); })
+      .catch((err) => message.error(apiErrorMessage(err, 'Upload failed')))
+      .finally(() => setToolingUploading(false));
+    return false; // prevent antd Upload's own auto-request
+  };
+
+  const deleteToolingImage = (family) => {
+    axios.delete(server.PBRING_GRID_ADMIN_TOOLING_IMAGE, { params: { machine_type_name: selectedMachine, family } })
+      .then(() => { message.success('Deleted'); loadToolingImages(selectedMachine); })
+      .catch((err) => message.error(apiErrorMessage(err, 'Delete failed')));
+  };
+
+  const uploadGrindingImage = (file) => {
+    if (!newGrindCn.trim() || !newGrindProcess.trim()) { message.error('Enter CN and Process Code first'); return false; }
+    setGrindingUploading(true);
+    const fd = new FormData();
+    fd.append('machine_type_name', selectedMachine);
+    fd.append('cn', newGrindCn.trim());
+    fd.append('process_code', newGrindProcess.trim());
+    fd.append('image', file);
+    axios.post(server.PBRING_GRID_ADMIN_GRINDING_IMAGE, fd)
+      .then(() => { message.success(`Saved photo for CN ${newGrindCn.trim()} @ ${newGrindProcess.trim()}`); setNewGrindCn(''); setNewGrindProcess(''); loadGrindingImages(selectedMachine); })
+      .catch((err) => message.error(apiErrorMessage(err, 'Upload failed')))
+      .finally(() => setGrindingUploading(false));
+    return false;
+  };
+
+  const deleteGrindingImage = (cn, processCode) => {
+    axios.delete(server.PBRING_GRID_ADMIN_GRINDING_IMAGE, { params: { machine_type_name: selectedMachine, cn, process_code: processCode } })
+      .then(() => { message.success('Deleted'); loadGrindingImages(selectedMachine); })
+      .catch((err) => message.error(apiErrorMessage(err, 'Delete failed')));
+  };
+
+  const toolingCols = [
+    {
+      title: 'Preview', key: 'preview', width: 90,
+      render: (_, row) => (
+        <img
+          src={`${server.PBRING_GRID_TOOLING_IMAGE}?machine_type_name=${encodeURIComponent(selectedMachine)}&family=${encodeURIComponent(row.family)}&token=${localStorage.getItem('token')}`}
+          alt={row.family}
+          style={{ width: 70, height: 50, objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+        />
+      ),
+    },
+    { title: 'DWG Family', dataIndex: 'family' },
+    { title: 'File', dataIndex: 'file_name' },
+    { title: 'Updated', dataIndex: 'updated_at', render: (v) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-') },
+    {
+      title: '', key: 'actions', width: 80,
+      render: (_, row) => (
+        <Popconfirm title="Delete this photo?" onConfirm={() => deleteToolingImage(row.family)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  const grindingCols = [
+    {
+      title: 'Preview', key: 'preview', width: 90,
+      render: (_, row) => (
+        <img
+          src={`${server.PBRING_GRID_GRINDING_IMAGE}?machine_type_name=${encodeURIComponent(selectedMachine)}&cn=${encodeURIComponent(row.cn)}&process_code=${encodeURIComponent(row.process_code)}&token=${localStorage.getItem('token')}`}
+          alt={row.cn}
+          style={{ width: 70, height: 50, objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+        />
+      ),
+    },
+    { title: 'CN', dataIndex: 'cn' },
+    { title: 'Process Code', dataIndex: 'process_code' },
+    { title: 'File', dataIndex: 'file_name' },
+    { title: 'Updated', dataIndex: 'updated_at', render: (v) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-') },
+    {
+      title: '', key: 'actions', width: 80,
+      render: (_, row) => (
+        <Popconfirm title="Delete this photo?" onConfirm={() => deleteGrindingImage(row.cn, row.process_code)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <Space style={{ marginBottom: 16 }}>
+        <Text type="secondary">Machine</Text>
+        <Select
+          style={{ width: 200 }}
+          placeholder="Select a machine"
+          value={selectedMachine}
+          onChange={selectMachine}
+          options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))}
+          showSearch
+        />
+      </Space>
+      {selectedMachine && (
+        <>
+          {!isTurningMachine && (
+            <>
+              <Text strong style={{ display: 'block', marginBottom: 8 }}>Tooling Images (by DWG Family — one photo covers every tooling_no sharing it)</Text>
+              <Space style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+                <Select
+                  showSearch
+                  style={{ width: 320 }}
+                  placeholder="Pick a DWG family from history"
+                  value={familyOptions.some((o) => o.family === newToolingNo) ? newToolingNo : undefined}
+                  onChange={(v) => setNewToolingNo(v)}
+                  optionFilterProp="label"
+                  options={familyOptions.map((o) => ({
+                    value: o.family,
+                    label: `${o.family} (used ${o.count}×${o.examples.length ? `, e.g. ${o.examples[0]}` : ''})`,
+                  }))}
+                  allowClear
+                />
+                <Text type="secondary">or</Text>
+                <Input placeholder="type a family/name manually" style={{ width: 200 }} value={newToolingNo} onChange={(e) => setNewToolingNo(e.target.value)} />
+                <Upload accept="image/*" showUploadList={false} beforeUpload={uploadToolingImage}>
+                  <Button icon={<UploadOutlined />} loading={toolingUploading} disabled={!newToolingNo.trim()}>Upload Photo</Button>
+                </Upload>
+              </Space>
+              <Table
+                size="small"
+                rowKey="id"
+                dataSource={toolingImages}
+                columns={toolingCols}
+                loading={toolingLoading}
+                pagination={{ pageSize: 10 }}
+                style={{ marginBottom: 24 }}
+              />
+            </>
+          )}
+
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>
+            {isTurningMachine ? 'Turning Cutting Layout Images (by CN + Process Code)' : 'Grinding Area Images (by CN + Process Code)'}
+          </Text>
+          <Space style={{ marginBottom: 8 }}>
+            <Input placeholder="CN e.g. 294065" style={{ width: 160 }} value={newGrindCn} onChange={(e) => setNewGrindCn(e.target.value)} />
+            <Input placeholder="Process Code e.g. 1021" style={{ width: 160 }} value={newGrindProcess} onChange={(e) => setNewGrindProcess(e.target.value)} />
+            <Upload accept="image/*" showUploadList={false} beforeUpload={uploadGrindingImage}>
+              <Button icon={<UploadOutlined />} loading={grindingUploading} disabled={!newGrindCn.trim() || !newGrindProcess.trim()}>Upload Photo</Button>
+            </Upload>
+          </Space>
+          <Table
+            size="small"
+            rowKey="id"
+            dataSource={grindingImages}
+            columns={grindingCols}
+            loading={grindingLoading}
+            pagination={{ pageSize: 10 }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+// PB Ring SDS tool-condition data (pbring_sds_condition — VC/F/AP/Insert/
+// Holder/etc per tool_number). The same table also holds the grinding
+// machines' T01-T20 tooling_no/maker rows, and the backend routes/service
+// don't care which kind of machine they're given, but this tab's own
+// 16-column VC/F/Insert layout is built around turning's shape (grinding
+// rows only ever populate tooling_no+maker, leaving every other column
+// blank) — so the machine picker below is scoped to the 2 turning machines
+// only, by user decision (2026-10-10).
+// Two ways to manage it, by explicit user decision (2026-10-10) — both:
+// (1) direct CRUD on an existing CN's rows, and (2) the same "+New HW"
+// history-suggestion principle (group by what this machine+process has
+// used before, suggest what >=50% of its CNs used, review/tick/confirm)
+// applied here instead of to pbring_tooling.
+const CONDITION_FIELD_COLS = [
+  { key: 'tool_number', title: 'Slot', width: 70 },
+  { key: 'tooling_no', title: 'Tooling No', width: 140 },
+  { key: 'tool_detail', title: 'Tool Detail', width: 160 },
+  { key: 'insert_info', title: 'Insert', width: 160 },
+  { key: 'maker', title: 'Insert Maker', width: 110 },
+  { key: 'holder_info', title: 'Holder', width: 140 },
+  { key: 'holder_maker', title: 'Holder Maker', width: 110 },
+  { key: 'overhang', title: 'Overhang', width: 90 },
+  { key: 'vc', title: 'VC', width: 70 },
+  { key: 'f', title: 'F', width: 70 },
+  { key: 'ap', title: 'AP', width: 70 },
+  { key: 'nose_r', title: 'Nose R', width: 70 },
+  { key: 'rotation', title: 'Rotation', width: 90 },
+  { key: 'hand', title: 'Hand', width: 70 },
+  { key: 'usaged', title: 'Usage', width: 90 },
+  { key: 'h_width', title: 'H.Width', width: 90 },
+];
+
+// Both turning machines only ever run one process (confirmed live,
+// 2026-10-10: every pbring_sds_condition row for QTSMART200M and
+// QUICKTURN200500U is process_code '0081', no exceptions) — fixed rather
+// than asking the admin to type it every time.
+const PBRING_TURNING_PROCESS_CODE = '0081';
+
+// "+ New CN from History" (the condition-data equivalent of +New HW) stays
+// collapsed until the admin clicks "+ New Tool Condition" — by user
+// decision (2026-10-10), it shouldn't just sit open on the page.
+
+function ConditionTab() {
+  const { message } = App.useApp();
+  const [machines, setMachines] = useState([]);
+  const [selectedMachine, setSelectedMachine] = useState(null);
+  const processCode = PBRING_TURNING_PROCESS_CODE;
+
+  const [cn, setCn] = useState('');
+  const [rows, setRows] = useState([]);
+  const [rowsLoading, setRowsLoading] = useState(false);
+  const [rowsSaving, setRowsSaving] = useState(false);
+
+  const [showHistoryCard, setShowHistoryCard] = useState(false);
+  const [histRows, setHistRows] = useState([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [targetCn, setTargetCn] = useState('');
+  const [committing, setCommitting] = useState(false);
+
+  useEffect(() => {
+    axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES)
+      .then((r) => setMachines((r.data || []).filter((m) => PBRING_TURNING_MACHINES.includes(m.machine_type_name))))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load machine list')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadRows = () => {
+    if (!selectedMachine || !cn.trim()) {
+      message.warning('Select a machine and CN first');
+      return;
+    }
+    setRowsLoading(true);
+    axios.get(server.PBRING_CONDITION, { params: { machine_type_name: selectedMachine, cn: cn.trim(), process_code: processCode } })
+      .then((r) => setRows((r.data?.rows || []).map((row) => ({ ...row, _k: row.id }))))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load condition rows')))
+      .finally(() => setRowsLoading(false));
+  };
+
+  const updateRow = (k, field, value) => setRows((prev) => prev.map((r) => (r._k === k ? { ...r, [field]: value } : r)));
+  const addRow = () => setRows((prev) => [...prev, { _k: `new-${Date.now()}`, tool_number: '' }]);
+  const removeRow = (k) => setRows((prev) => prev.filter((r) => r._k !== k));
+
+  const saveRow = async (row) => {
+    if (!row.tool_number?.trim()) { message.warning('Slot (tool_number) is required, e.g. T1'); return; }
+    setRowsSaving(true);
+    try {
+      const { data } = await axios.put(server.PBRING_CONDITION, {
+        ...row, id: row.id ?? undefined,
+        cn: cn.trim(), mc_key: selectedMachine, machine: selectedMachine, process_code: processCode,
+      });
+      message.success(`Saved ${row.tool_number}`);
+      setRows((prev) => prev.map((r) => (r._k === row._k ? { ...data.row, _k: data.row.id } : r)));
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Save failed'));
+    } finally {
+      setRowsSaving(false);
+    }
+  };
+
+  const deleteRow = async (row) => {
+    if (row.id == null) { removeRow(row._k); return; } // never saved — just drop it
+    try {
+      await axios.delete(`${server.PBRING_CONDITION}/${row.id}`);
+      message.success('Deleted');
+      removeRow(row._k);
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Delete failed'));
+    }
+  };
+
+  const loadHistory = () => {
+    if (!selectedMachine) { message.warning('Select a machine first'); return; }
+    setHistLoading(true);
+    axios.get(server.PBRING_CONDITION_HISTORY, { params: { machine_type_name: selectedMachine, process_code: processCode } })
+      .then((r) => setHistRows((r.data?.rows || []).map((row, i) => ({ ...row, _k: `h-${i}` }))))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load history')))
+      .finally(() => setHistLoading(false));
+  };
+  const updateHistRow = (k, field, value) => setHistRows((prev) => prev.map((r) => (r._k === k ? { ...r, [field]: value } : r)));
+
+  const commitHistory = async (force = false) => {
+    if (!selectedMachine || !targetCn.trim()) {
+      message.warning('Select a machine and target CN first');
+      return;
+    }
+    const picked = histRows.filter((r) => r.use);
+    if (!picked.length) { message.warning('No slots ticked'); return; }
+    setCommitting(true);
+    try {
+      const { data } = await axios.post(server.PBRING_CONDITION_FROM_HISTORY, {
+        cn: targetCn.trim(), machine_type_name: selectedMachine, process_code: processCode, rows: picked, force,
+      });
+      if (data.skippedCount > 0 && !force) {
+        message.warning(
+          <span>
+            Added {data.insertedCount} slot(s) — skipped {data.skippedCount} already-present
+            {' '}<a onClick={() => commitHistory(true)}>Add anyway</a>
+          </span>, 8
+        );
+      } else {
+        message.success(`Added ${data.insertedCount} slot(s) to CN ${targetCn.trim()}`);
+      }
+    } catch (err) {
+      message.error(apiErrorMessage(err, 'Add failed'));
+    } finally {
+      setCommitting(false);
+    }
+  };
+
+  const buildColumns = (data, onChange, extra) => [
+    ...CONDITION_FIELD_COLS.map((c) => ({
+      title: c.title, key: c.key, width: c.width,
+      render: (_, r) => (
+        <Input
+          size="small"
+          value={r[c.key] ?? ''}
+          disabled={c.key === 'tool_number' && r.id != null}
+          onChange={(e) => onChange(r._k, c.key, e.target.value)}
+        />
+      ),
+    })),
+    ...extra,
+  ];
+
+  const rowsColumns = buildColumns(rows, updateRow, [
+    {
+      title: '', key: 'actions', width: 90, fixed: 'right',
+      render: (_, r) => (
+        <Space size={4}>
+          <Button size="small" type="primary" loading={rowsSaving} onClick={() => saveRow(r)}>Save</Button>
+          <Popconfirm title="Delete this slot?" onConfirm={() => deleteRow(r)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ]);
+
+  const histColumns = [
+    { title: 'Use', key: 'use', width: 50, fixed: 'left', render: (_, r) => <Checkbox checked={r.use} onChange={(e) => updateHistRow(r._k, 'use', e.target.checked)} /> },
+    ...buildColumns(histRows, updateHistRow, []),
+    { title: 'Used in history', dataIndex: 'hist', width: 100 },
+  ];
+
+  return (
+    <div>
+      <Space style={{ marginBottom: 16 }}>
+        <Button type={showHistoryCard ? 'default' : 'primary'} onClick={() => setShowHistoryCard(false)}>
+          Edit Existing CN
+        </Button>
+        <Button type={showHistoryCard ? 'primary' : 'default'} icon={<PlusOutlined />} onClick={() => setShowHistoryCard(true)}>
+          + New Tool Condition
+        </Button>
+      </Space>
+
+      {!showHistoryCard && (
+        <Card size="small" title="Edit — an existing CN's slots">
+          <Space wrap style={{ marginBottom: 12 }}>
+            <Text type="secondary">Machine</Text>
+            <Select
+              style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
+              onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
+            />
+            <Input placeholder="CN e.g. 294065" style={{ width: 140 }} value={cn} onChange={(e) => setCn(e.target.value)} />
+            <Button icon={<ReloadOutlined />} loading={rowsLoading} onClick={loadRows}>Load</Button>
+            <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim()}>Add Slot</Button>
+          </Space>
+          <Table size="small" rowKey="_k" dataSource={rows} columns={rowsColumns} loading={rowsLoading} pagination={false} scroll={{ x: 1700 }} />
+        </Card>
+      )}
+
+      {showHistoryCard && (
+        <Card size="small" title="+ New CN from History — suggest from what this machine has used before">
+          <Space wrap style={{ marginBottom: 12 }}>
+            <Text type="secondary">Machine</Text>
+            <Select
+              style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
+              onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
+            />
+            <Button type="primary" icon={<DownloadOutlined />} loading={histLoading} onClick={loadHistory}>Load from history</Button>
+          </Space>
+          <Table size="small" rowKey="_k" dataSource={histRows} columns={histColumns} loading={histLoading} pagination={false} scroll={{ x: 1800, y: 400 }}
+            locale={{ emptyText: <Empty description='Select a Machine then click "Load from history"' /> }}
+          />
+          <Space style={{ marginTop: 12 }}>
+            <Input placeholder="Target CN e.g. 294099" style={{ width: 160 }} value={targetCn} onChange={(e) => setTargetCn(e.target.value)} />
+            <Button type="primary" loading={committing} onClick={() => commitHistory(false)}>Add to CN</Button>
+          </Space>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function PbRingMonitorPage() {
   const C = useColors();
+  const userRole = useAuthStore((s) => s.userRole);
+  const userDepartment = useAuthStore((s) => s.userDepartment);
+  const userPerms = useAuthStore((s) => s.userPerms);
+  const isPbringAdmin = userRole === 'AD' || userDepartment === 'AD'
+    || (userPerms || []).includes('pbring_admin') || (userPerms || []).includes('all_mtc');
+
+  const tabItems = [
+    { key: 'search', label: 'Search (HW / Process / Machine)', children: <SearchTab C={C} /> },
+    { key: 'add-hw', label: '+ New HW', children: <AddHwTab /> },
+    { key: 'summary', label: 'Summary', children: <SummaryTab /> },
+  ];
+  if (isPbringAdmin) {
+    // "Grid Templates (PDF)" (machine<->template assignment + re-import,
+    // the Phase 5 admin surface) was removed once Phase 6 gave every PB Ring
+    // machine — grinding AND turning — live-layout coverage: nothing reads
+    // pbring_grid_template/pbring_machine_type.grid_template_id at render
+    // time anymore, so there was nothing left for that tab to configure.
+    tabItems.push({ key: 'param-config', label: 'Parameter Config', children: <ParamConfigTab /> });
+    tabItems.push({ key: 'condition', label: 'Tool Condition', children: <ConditionTab /> });
+    tabItems.push({ key: 'images', label: 'Images', children: <ImagesTab /> });
+  }
 
   const bodyContent = (
-    <Tabs
-      defaultActiveKey="search"
-      items={[
-        { key: 'search', label: 'Search (HW / Process / Machine)', children: <SearchTab C={C} /> },
-        { key: 'add-hw', label: '+ New HW', children: <AddHwTab /> },
-        { key: 'summary', label: 'Summary', children: <SummaryTab /> },
-      ]}
-    />
+    <Tabs defaultActiveKey="search" items={tabItems} />
   );
 
   return (

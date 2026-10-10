@@ -24,6 +24,7 @@ export const MTC_PATHS = {
   SDS_SELECTION_COND: '/eng/mtc_eng/sds-v2/selection-condition',
   LOT_TRACK: '/eng/mtc_eng/lot-track',
   PB_RING: '/eng/mtc_eng/pb-ring',
+  PB_RING_TEMPLATE_CONFIG: '/eng/mtc_eng/pb-ring/template-config',
   PERMISSIONS_CONFIG: '/eng/mtc_eng/permissions-config',
   EMAIL_CONFIG: '/eng/mtc/email-config',
   FORMULA_CONFIG: '/eng/mtc/formulas',

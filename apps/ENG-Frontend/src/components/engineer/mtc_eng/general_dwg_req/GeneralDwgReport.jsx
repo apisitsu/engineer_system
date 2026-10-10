@@ -271,15 +271,36 @@ export default function GeneralDwgReport() {
                     },
                 },
                 {
+                    // Not red: the "Delay" bar is also red, so a red dashed line reads as
+                    // invisible (same hue, no contrast) wherever a tall Delay segment
+                    // crosses its height — a colour-clash, not a z-order problem (see the
+                    // same fix on InspectionResultDashboard's Monthly Trend chart).
                     type: 'line', label: 'Target 95%',
                     data: labels.map(() => 95),
-                    borderColor: hexToRgba(C.red, 0.85), borderWidth: 1.5, borderDash: [6, 4],
+                    borderColor: hexToRgba(C.purple, 0.9), borderWidth: 1.5, borderDash: [6, 4],
                     pointRadius: 0, fill: false, yAxisID: 'yRight', order: 0,
                     datalabels: { display: false },
                 },
             ],
         };
     }, [data, C, month]);
+
+    // Keep the tallest bar at or below the screen height the Target line sits at on the
+    // right axis (95/115 of the chart) — without an explicit max here, Chart.js
+    // auto-scales this axis to the data alone, which can land the tallest bar ABOVE
+    // where "95%" actually sits on the differently-scaled right axis. Same fix as
+    // SdsCoverageDashboard's Cumulative Coverage Status chart.
+    const yLeftMax = useMemo(() => {
+        const [onTime, delay] = monthlyChartData.datasets;
+        const stackTotals = onTime.data.map((v, i) => (v || 0) + (delay.data[i] || 0));
+        const barMax = Math.max(1, ...stackTotals);
+        // Round UP to a "nice" gridline, but the rounding step itself scales with the
+        // data — a fixed step of 10 overshoots badly on small counts (barMax=2 → 2.4
+        // needed, step-10 jumps straight to 10, 4x more empty space than the headroom
+        // called for).
+        const step = barMax < 10 ? 1 : barMax < 50 ? 5 : barMax < 200 ? 10 : barMax < 1000 ? 50 : 500;
+        return Math.ceil((barMax * 115 / 95) / step) * step;
+    }, [monthlyChartData]);
 
     const monthlyChartOpts = useMemo(() => ({
         responsive: true,
@@ -318,14 +339,14 @@ export default function GeneralDwgReport() {
         },
         scales: {
             x: { ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
-            yLeft: { type: 'linear', position: 'left', ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
+            yLeft: { type: 'linear', position: 'left', min: 0, max: yLeftMax, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
             yRight: {
                 type: 'linear', position: 'right', min: 0, max: 115,
                 ticks: { color: C.yellow, font: { size: 10 }, stepSize: 20, callback: (v) => (v > 100 ? '' : `${v}%`) },
                 grid: { drawOnChartArea: false },
             },
         },
-    }), [C]);
+    }), [C, yLeftMax]);
 
     // ── Chart 2: average calendar days spent in each of the 6 stages, per month
     // the request finished. Grouped (not stacked) — the six bars are independent
@@ -452,6 +473,11 @@ export default function GeneralDwgReport() {
                                 <Text style={{ color: C.textSec, fontSize: 12 }}>FYE</Text>
                                 <Select value={fye} onChange={v => { setFye(v); clearSelection(); }} style={{ width: 100 }} popupClassName="dark-select" loading={fyeOptions.length === 0}>
                                     {fyeOptions.map(f => <Option key={f} value={f}>FYE{f}</Option>)}
+                                </Select>
+                                <Text style={{ color: C.textSec, fontSize: 12 }}>Month</Text>
+                                <Select value={month} onChange={v => setMonth(v)} style={{ width: 130 }} popupClassName="dark-select">
+                                    <Option value={0}>All Months</Option>
+                                    {FYE_MONTH_NUMS.map((num, i) => <Option key={num} value={num}>{FYE_MONTH_LABELS[i]}</Option>)}
                                 </Select>
                             </div>
                         </div>
