@@ -1490,12 +1490,21 @@ function ImagesTab() {
   const [newGrindProcess, setNewGrindProcess] = useState('');
   const [grindingUploading, setGrindingUploading] = useState(false);
 
+  // Every machine (grinding + turning) — the Tooling Images section below
+  // hides itself for a turning machine (that per-slot photo box exists on
+  // Turning_PB but isn't wired up yet), while the layout/area-photo section
+  // applies to both: the Standard template's "Grinding Area" box and
+  // Turning_PB's "TURNING CUTTING LAYOUT" box are the same
+  // pbring_grinding_image mechanism, just a different box on a different
+  // template, so a turning machine belongs in this list.
   useEffect(() => {
     axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES)
-      .then((r) => setMachines((r.data || []).filter((m) => !PBRING_TURNING_MACHINES.includes(m.machine_type_name))))
+      .then((r) => setMachines(r.data || []))
       .catch((err) => message.error(apiErrorMessage(err, 'Failed to load machine list')));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const isTurningMachine = PBRING_TURNING_MACHINES.includes(selectedMachine);
 
   const loadToolingImages = useCallback((machine) => {
     if (!machine) return;
@@ -1626,7 +1635,7 @@ function ImagesTab() {
         <Text type="secondary">Machine</Text>
         <Select
           style={{ width: 200 }}
-          placeholder="Select a grinding machine"
+          placeholder="Select a machine"
           value={selectedMachine}
           onChange={selectMachine}
           options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))}
@@ -1635,38 +1644,44 @@ function ImagesTab() {
       </Space>
       {selectedMachine && (
         <>
-          <Text strong style={{ display: 'block', marginBottom: 8 }}>Tooling Images (by DWG Family — one photo covers every tooling_no sharing it)</Text>
-          <Space style={{ marginBottom: 8, flexWrap: 'wrap' }}>
-            <Select
-              showSearch
-              style={{ width: 320 }}
-              placeholder="Pick a DWG family from history"
-              value={familyOptions.some((o) => o.family === newToolingNo) ? newToolingNo : undefined}
-              onChange={(v) => setNewToolingNo(v)}
-              optionFilterProp="label"
-              options={familyOptions.map((o) => ({
-                value: o.family,
-                label: `${o.family} (used ${o.count}×${o.examples.length ? `, e.g. ${o.examples[0]}` : ''})`,
-              }))}
-              allowClear
-            />
-            <Text type="secondary">or</Text>
-            <Input placeholder="type a family/name manually" style={{ width: 200 }} value={newToolingNo} onChange={(e) => setNewToolingNo(e.target.value)} />
-            <Upload accept="image/*" showUploadList={false} beforeUpload={uploadToolingImage}>
-              <Button icon={<UploadOutlined />} loading={toolingUploading} disabled={!newToolingNo.trim()}>Upload Photo</Button>
-            </Upload>
-          </Space>
-          <Table
-            size="small"
-            rowKey="id"
-            dataSource={toolingImages}
-            columns={toolingCols}
-            loading={toolingLoading}
-            pagination={{ pageSize: 10 }}
-            style={{ marginBottom: 24 }}
-          />
+          {!isTurningMachine && (
+            <>
+              <Text strong style={{ display: 'block', marginBottom: 8 }}>Tooling Images (by DWG Family — one photo covers every tooling_no sharing it)</Text>
+              <Space style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+                <Select
+                  showSearch
+                  style={{ width: 320 }}
+                  placeholder="Pick a DWG family from history"
+                  value={familyOptions.some((o) => o.family === newToolingNo) ? newToolingNo : undefined}
+                  onChange={(v) => setNewToolingNo(v)}
+                  optionFilterProp="label"
+                  options={familyOptions.map((o) => ({
+                    value: o.family,
+                    label: `${o.family} (used ${o.count}×${o.examples.length ? `, e.g. ${o.examples[0]}` : ''})`,
+                  }))}
+                  allowClear
+                />
+                <Text type="secondary">or</Text>
+                <Input placeholder="type a family/name manually" style={{ width: 200 }} value={newToolingNo} onChange={(e) => setNewToolingNo(e.target.value)} />
+                <Upload accept="image/*" showUploadList={false} beforeUpload={uploadToolingImage}>
+                  <Button icon={<UploadOutlined />} loading={toolingUploading} disabled={!newToolingNo.trim()}>Upload Photo</Button>
+                </Upload>
+              </Space>
+              <Table
+                size="small"
+                rowKey="id"
+                dataSource={toolingImages}
+                columns={toolingCols}
+                loading={toolingLoading}
+                pagination={{ pageSize: 10 }}
+                style={{ marginBottom: 24 }}
+              />
+            </>
+          )}
 
-          <Text strong style={{ display: 'block', marginBottom: 8 }}>Grinding Area Images (by CN + Process Code)</Text>
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>
+            {isTurningMachine ? 'Turning Cutting Layout Images (by CN + Process Code)' : 'Grinding Area Images (by CN + Process Code)'}
+          </Text>
           <Space style={{ marginBottom: 8 }}>
             <Input placeholder="CN e.g. 294065" style={{ width: 160 }} value={newGrindCn} onChange={(e) => setNewGrindCn(e.target.value)} />
             <Input placeholder="Process Code e.g. 1021" style={{ width: 160 }} value={newGrindProcess} onChange={(e) => setNewGrindProcess(e.target.value)} />

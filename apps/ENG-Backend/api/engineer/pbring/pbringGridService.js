@@ -886,6 +886,13 @@ const PBRING_IMAGE_EXTENTS = {
   tool_image_T17: { tl: 'Q48', br: 'V53' }, tool_image_T18: { tl: 'W48', br: 'AB53' },
   tool_image_T19: { tl: 'AC48', br: 'AH53' }, tool_image_T20: { tl: 'AI48', br: 'AN53' },
   grinding_layout_image: { tl: 'AO26', br: 'AU45' },
+  // Turning_PB's "TURNING CUTTING LAYOUT" box (title at AK14). Reuses the
+  // exact same pbring_grinding_image table/upload mechanism as the Standard
+  // template's Grinding Area — same role (one layout photo per machine+cn+
+  // process_code), same admin UI, just a different box on a different
+  // template. No separate table needed: machine_type_name already keeps a
+  // turning machine's photos distinct from any grinding machine's.
+  turning_layout_image: { tl: 'AL27', br: 'AR50' },
 };
 
 const toDataUri = (row) => (row ? `data:${row.mime_type || 'image/jpeg'};base64,${row.image_data.toString('base64')}` : null);
@@ -1283,6 +1290,9 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
 
   const manualParamMap = await resolveManualParamMap(machineTypeName, cn, processCode);
   applyTurningHeaderOverridesToGrid(grid, manualParamMap);
+
+  const layoutImg = await getGrindingImageBinary(machineTypeName, cn, processCode);
+  placeImageAtExtent(grid, 'turning_layout_image', toDataUri(layoutImg));
 
   return grid;
 }
