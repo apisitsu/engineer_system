@@ -1735,11 +1735,17 @@ const CONDITION_FIELD_COLS = [
   { key: 'h_width', title: 'H.Width', width: 90 },
 ];
 
+// Both turning machines only ever run one process (confirmed live,
+// 2026-10-10: every pbring_sds_condition row for QTSMART200M and
+// QUICKTURN200500U is process_code '0081', no exceptions) — fixed rather
+// than asking the admin to type it every time.
+const PBRING_TURNING_PROCESS_CODE = '0081';
+
 function ConditionTab() {
   const { message } = App.useApp();
   const [machines, setMachines] = useState([]);
   const [selectedMachine, setSelectedMachine] = useState(null);
-  const [processCode, setProcessCode] = useState('');
+  const processCode = PBRING_TURNING_PROCESS_CODE;
 
   const [cn, setCn] = useState('');
   const [rows, setRows] = useState([]);
@@ -1759,12 +1765,12 @@ function ConditionTab() {
   }, []);
 
   const loadRows = () => {
-    if (!selectedMachine || !cn.trim() || !processCode.trim()) {
-      message.warning('Select a machine, CN and Process Code first');
+    if (!selectedMachine || !cn.trim()) {
+      message.warning('Select a machine and CN first');
       return;
     }
     setRowsLoading(true);
-    axios.get(server.PBRING_CONDITION, { params: { machine_type_name: selectedMachine, cn: cn.trim(), process_code: processCode.trim() } })
+    axios.get(server.PBRING_CONDITION, { params: { machine_type_name: selectedMachine, cn: cn.trim(), process_code: processCode } })
       .then((r) => setRows((r.data?.rows || []).map((row) => ({ ...row, _k: row.id }))))
       .catch((err) => message.error(apiErrorMessage(err, 'Failed to load condition rows')))
       .finally(() => setRowsLoading(false));
@@ -1780,7 +1786,7 @@ function ConditionTab() {
     try {
       const { data } = await axios.put(server.PBRING_CONDITION, {
         ...row, id: row.id ?? undefined,
-        cn: cn.trim(), mc_key: selectedMachine, machine: selectedMachine, process_code: processCode.trim(),
+        cn: cn.trim(), mc_key: selectedMachine, machine: selectedMachine, process_code: processCode,
       });
       message.success(`Saved ${row.tool_number}`);
       setRows((prev) => prev.map((r) => (r._k === row._k ? { ...data.row, _k: data.row.id } : r)));
@@ -1803,9 +1809,9 @@ function ConditionTab() {
   };
 
   const loadHistory = () => {
-    if (!selectedMachine || !processCode.trim()) { message.warning('Select a machine and Process Code first'); return; }
+    if (!selectedMachine) { message.warning('Select a machine first'); return; }
     setHistLoading(true);
-    axios.get(server.PBRING_CONDITION_HISTORY, { params: { machine_type_name: selectedMachine, process_code: processCode.trim() } })
+    axios.get(server.PBRING_CONDITION_HISTORY, { params: { machine_type_name: selectedMachine, process_code: processCode } })
       .then((r) => setHistRows((r.data?.rows || []).map((row, i) => ({ ...row, _k: `h-${i}` }))))
       .catch((err) => message.error(apiErrorMessage(err, 'Failed to load history')))
       .finally(() => setHistLoading(false));
@@ -1813,8 +1819,8 @@ function ConditionTab() {
   const updateHistRow = (k, field, value) => setHistRows((prev) => prev.map((r) => (r._k === k ? { ...r, [field]: value } : r)));
 
   const commitHistory = async (force = false) => {
-    if (!selectedMachine || !processCode.trim() || !targetCn.trim()) {
-      message.warning('Select a machine, Process Code and target CN first');
+    if (!selectedMachine || !targetCn.trim()) {
+      message.warning('Select a machine and target CN first');
       return;
     }
     const picked = histRows.filter((r) => r.use);
@@ -1822,7 +1828,7 @@ function ConditionTab() {
     setCommitting(true);
     try {
       const { data } = await axios.post(server.PBRING_CONDITION_FROM_HISTORY, {
-        cn: targetCn.trim(), machine_type_name: selectedMachine, process_code: processCode.trim(), rows: picked, force,
+        cn: targetCn.trim(), machine_type_name: selectedMachine, process_code: processCode, rows: picked, force,
       });
       if (data.skippedCount > 0 && !force) {
         message.warning(
@@ -1886,25 +1892,23 @@ function ConditionTab() {
             onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
           />
           <Input placeholder="CN e.g. 294065" style={{ width: 140 }} value={cn} onChange={(e) => setCn(e.target.value)} />
-          <Input placeholder="Process Code e.g. 0081" style={{ width: 140 }} value={processCode} onChange={(e) => setProcessCode(e.target.value)} />
           <Button icon={<ReloadOutlined />} loading={rowsLoading} onClick={loadRows}>Load</Button>
-          <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim() || !processCode.trim()}>Add Slot</Button>
+          <Button icon={<PlusOutlined />} onClick={addRow} disabled={!selectedMachine || !cn.trim()}>Add Slot</Button>
         </Space>
         <Table size="small" rowKey="_k" dataSource={rows} columns={rowsColumns} loading={rowsLoading} pagination={false} scroll={{ x: 1700 }} />
       </Card>
 
-      <Card size="small" title="+ New CN from History — suggest from what this machine + process has used before">
+      <Card size="small" title="+ New CN from History — suggest from what this machine has used before">
         <Space wrap style={{ marginBottom: 12 }}>
           <Text type="secondary">Machine</Text>
           <Select
             style={{ width: 200 }} placeholder="Select a machine" value={selectedMachine}
             onChange={setSelectedMachine} options={machines.map((m) => ({ value: m.machine_type_name, label: m.machine_type_name }))} showSearch
           />
-          <Input placeholder="Process Code e.g. 0081" style={{ width: 140 }} value={processCode} onChange={(e) => setProcessCode(e.target.value)} />
           <Button type="primary" icon={<DownloadOutlined />} loading={histLoading} onClick={loadHistory}>Load from history</Button>
         </Space>
         <Table size="small" rowKey="_k" dataSource={histRows} columns={histColumns} loading={histLoading} pagination={false} scroll={{ x: 1800, y: 400 }}
-          locale={{ emptyText: <Empty description='Select Machine + Process Code then click "Load from history"' /> }}
+          locale={{ emptyText: <Empty description='Select a Machine then click "Load from history"' /> }}
         />
         <Space style={{ marginTop: 12 }}>
           <Input placeholder="Target CN e.g. 294099" style={{ width: 160 }} value={targetCn} onChange={(e) => setTargetCn(e.target.value)} />
