@@ -594,10 +594,17 @@ function applyHeaderToGrid(grid, headerAddresses, paramMap) {
     const cellAddr = headerAddresses[sdsField];
     const value = paramMap[pbKey];
     if (!cellAddr || value == null || value === '') continue;
-    grid.cells[addrToRC(cellAddr)] = {
+    const key = addrToRC(cellAddr);
+    const existing = grid.cells[key] || {};
+    // Merge onto the Standard template's own designed alignment instead of
+    // replacing it outright — AH4 (Setup Data Sheet Rev) is authored centered
+    // (`a:{h:'center'}`) in the live grid_json, same as the real SDS renderer's
+    // own setCell (sdsV2HeadlessController.js) preserves `ex.a`. Overwriting
+    // unconditionally printed "NC" left-aligned under a centered header.
+    grid.cells[key] = {
       v: String(value),
-      f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' },
-      a: { h: null, v: 'middle', wrap: false },
+      f: { name: 'Calibri', size: 10, bold: false, italic: false, ...(existing.f || {}), color: '#c00000' },
+      a: { h: null, v: 'middle', wrap: false, ...(existing.a || {}) },
     };
   }
 }
