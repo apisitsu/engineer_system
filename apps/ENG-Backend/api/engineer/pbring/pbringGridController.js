@@ -18,10 +18,29 @@ const {
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
+const cnFormat = require('../mtc/utils/cnFormat');
+
+// PB Ring's own tables (pbring_sds_param, pbring_sds_condition,
+// pbring_sds_parameter, pbring_tooling_image, pbring_grinding_image) all
+// store CN as the plain 6-digit item number ("294065"), but callers hand
+// this route whatever format they have on hand — the real SDS search
+// resolves CN to its own canonical "C29-04065" control-no form and
+// `data.cn` (what SdsV2Page.jsx's "PB Ring PDF" button sends) is THAT
+// form, not the plain one. Confirmed live (2026-10-10): the button sent
+// `cn=C29-04065`, every PB Ring query against that string matched nothing,
+// and the sheet rendered with blank header fields and no photos even
+// though the exact same CN (294065) had full data — a silent format
+// mismatch, not a caching or data bug. Normalize once at every entry point
+// so the service layer always sees the one format PB Ring's tables use.
+// `toItemNo` falls back to null on a shape it doesn't recognize, so `|| cn`
+// keeps the raw input rather than losing it — same fail-open pattern
+// `cnForms()` (sdsPrintLog.js) already uses.
+const normalizeCn = (cn) => (cn ? (cnFormat.toItemNo(cn) || cn) : cn);
 
 async function getPdf(req, res) {
   try {
-    const { cn, machine_type_name: machineTypeName, process_code: processCode } = req.query;
+    const { machine_type_name: machineTypeName, process_code: processCode } = req.query;
+    const cn = normalizeCn(req.query.cn);
     if (!cn || !machineTypeName || !processCode) {
       return res.status(400).json({ success: false, error: 'cn, machine_type_name and process_code are required' });
     }
@@ -63,7 +82,7 @@ async function getPdf(req, res) {
 
 async function getHasData(req, res) {
   try {
-    const { cn } = req.query;
+    const cn = normalizeCn(req.query.cn);
     if (!cn) return res.status(400).json({ success: false, error: 'cn is required' });
     const result = await hasDataForCn(cn);
     res.json(result);
@@ -227,7 +246,7 @@ async function getManualParamsRoute(req, res) {
   try {
     const { machine_type_name: machineTypeName, cn, process_code: processCode } = req.query;
     if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
-    const cnVal = cn && cn !== 'null' ? cn : null;
+    const cnVal = cn && cn !== 'null' ? normalizeCn(cn) : null;
     res.json(await getManualParams(machineTypeName, cnVal, processCode && processCode !== 'null' ? processCode : null));
   } catch (err) {
     console.error('[pbring:grid:admin:parameters:get]', err);
@@ -243,7 +262,7 @@ async function putManualParamsRoute(req, res) {
   try {
     const { machine_type_name: machineTypeName, cn, process_code: processCode, params } = req.body || {};
     if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
-    const saved = await saveManualParams(machineTypeName, cn || null, processCode || null, params, req.user?.empno);
+    const saved = await saveManualParams(machineTypeName, cn ? normalizeCn(cn) : null, processCode || null, params, req.user?.empno);
     res.json({ success: true, saved, count: saved.length });
   } catch (err) {
     console.error('[pbring:grid:admin:parameters:put]', err);
@@ -331,7 +350,8 @@ async function deleteToolingImageRoute(req, res) {
 /** GET /grid/grinding-image?machine_type_name=&cn=&process_code= — serve image binary */
 async function getGrindingImageRoute(req, res) {
   try {
-    const { machine_type_name: machineTypeName, cn, process_code: processCode } = req.query;
+    const { machine_type_name: machineTypeName, process_code: processCode } = req.query;
+    const cn = normalizeCn(req.query.cn);
     if (!machineTypeName || !cn || !processCode) {
       return res.status(400).json({ error: 'machine_type_name, cn and process_code are required' });
     }
@@ -367,7 +387,7 @@ async function postGrindingImageRoute(req, res) {
     }
     const file = getUploadedImage(req);
     if (!file) return res.status(400).json({ error: 'image file is required (field: image)' });
-    const row = await upsertGrindingImage(machineTypeName.trim(), cn.trim(), processCode.trim(), file, description, req.user?.empno);
+    const row = await upsertGrindingImage(machineTypeName.trim(), normalizeCn(cn.trim()), processCode.trim(), file, description, req.user?.empno);
     res.json(row);
   } catch (err) {
     console.error('[pbring:grid:admin:grinding-image:post]', err);
@@ -378,7 +398,8 @@ async function postGrindingImageRoute(req, res) {
 /** DELETE /grid/admin/grinding-image?machine_type_name=&cn=&process_code= */
 async function deleteGrindingImageRoute(req, res) {
   try {
-    const { machine_type_name: machineTypeName, cn, process_code: processCode } = req.query;
+    const { machine_type_name: machineTypeName, process_code: processCode } = req.query;
+    const cn = normalizeCn(req.query.cn);
     if (!machineTypeName || !cn || !processCode) {
       return res.status(400).json({ error: 'machine_type_name, cn and process_code are required' });
     }
