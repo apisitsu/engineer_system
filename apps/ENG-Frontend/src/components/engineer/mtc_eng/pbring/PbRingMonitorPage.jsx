@@ -1703,8 +1703,14 @@ function ImagesTab() {
   );
 }
 
-// PB Ring SDS tool-condition data (pbring_sds_condition — T1-T12 VC/F/AP/
-// Insert/Holder/etc for turning, T01-T20 tooling_no/maker for grinding).
+// PB Ring SDS tool-condition data (pbring_sds_condition — VC/F/AP/Insert/
+// Holder/etc per tool_number). The same table also holds the grinding
+// machines' T01-T20 tooling_no/maker rows, and the backend routes/service
+// don't care which kind of machine they're given, but this tab's own
+// 16-column VC/F/Insert layout is built around turning's shape (grinding
+// rows only ever populate tooling_no+maker, leaving every other column
+// blank) — so the machine picker below is scoped to the 2 turning machines
+// only, by user decision (2026-10-10).
 // Two ways to manage it, by explicit user decision (2026-10-10) — both:
 // (1) direct CRUD on an existing CN's rows, and (2) the same "+New HW"
 // history-suggestion principle (group by what this machine+process has
@@ -1747,7 +1753,7 @@ function ConditionTab() {
 
   useEffect(() => {
     axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES)
-      .then((r) => setMachines(r.data || []))
+      .then((r) => setMachines((r.data || []).filter((m) => PBRING_TURNING_MACHINES.includes(m.machine_type_name))))
       .catch((err) => message.error(apiErrorMessage(err, 'Failed to load machine list')));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
