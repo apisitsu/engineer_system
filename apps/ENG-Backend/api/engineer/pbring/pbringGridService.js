@@ -1453,11 +1453,19 @@ function pbRingRoleRec(row, role) {
 // interpolated column names are a fixed whitelist (no user input in SQL) —
 // same pattern as sdsApprovalController.js's roleCols.
 function pbRingRoleCols(role) {
-  return { em_id: `${role}_em_id`, name: `${role}_name`, at: `${role}_at` };
+  return { em_id: `${role}_em_id`, name: `${role}_name`, at: `${role}_at`, source: `${role}_source` };
 }
 
-/** Live sign: identity from the caller, now(), previous role must already be signed. */
-async function signPbRingApproval(cn, machineTypeName, processCode, role, empno, signerName) {
+/**
+ * Sign one role. `source` distinguishes 'live' (someone pressed Sign) from
+ * 'auto' (pbringAutoStamp.js, the configured responsible person) — same
+ * governance reason the real system's sds_approval keeps it: the seal
+ * carries a real person's name even when they did not press Sign.
+ * Previous role must already be signed (sequential, same for both sources
+ * — auto-stamp's own caller already walks the roles in order and stops at
+ * the first unconfigured one, but this check is what actually enforces it).
+ */
+async function signPbRingApproval(cn, machineTypeName, processCode, role, empno, signerName, source = 'live') {
   if (!PBRING_APPROVAL_ROLE_ORDER.includes(role)) {
     throw new Error(`role must be one of ${PBRING_APPROVAL_ROLE_ORDER.join(', ')}`);
   }
@@ -1473,12 +1481,12 @@ async function signPbRingApproval(cn, machineTypeName, processCode, role, empno,
   }
   const c = pbRingRoleCols(role);
   const { rows } = await engPool.query(
-    `INSERT INTO pbring_sds_approval (cn, machine_type_name, process_code, ${c.em_id}, ${c.name}, ${c.at})
-     VALUES ($1,$2,$3,$4,$5, now())
+    `INSERT INTO pbring_sds_approval (cn, machine_type_name, process_code, ${c.em_id}, ${c.name}, ${c.at}, ${c.source})
+     VALUES ($1,$2,$3,$4,$5, now(), $6)
      ON CONFLICT (cn, machine_type_name, process_code)
-     DO UPDATE SET ${c.em_id} = EXCLUDED.${c.em_id}, ${c.name} = EXCLUDED.${c.name}, ${c.at} = now(), updated_at = now()
+     DO UPDATE SET ${c.em_id} = EXCLUDED.${c.em_id}, ${c.name} = EXCLUDED.${c.name}, ${c.at} = now(), ${c.source} = EXCLUDED.${c.source}, updated_at = now()
      RETURNING *`,
-    [cn, machineTypeName, processCode, empno, signerName]
+    [cn, machineTypeName, processCode, empno, signerName, source]
   );
   return rows[0];
 }
@@ -1490,7 +1498,7 @@ async function revokePbRingApproval(cn, machineTypeName, processCode, role) {
   }
   const c = pbRingRoleCols(role);
   const { rows } = await engPool.query(
-    `UPDATE pbring_sds_approval SET ${c.em_id} = NULL, ${c.name} = NULL, ${c.at} = NULL, updated_at = now()
+    `UPDATE pbring_sds_approval SET ${c.em_id} = NULL, ${c.name} = NULL, ${c.at} = NULL, ${c.source} = NULL, updated_at = now()
       WHERE cn = $1 AND machine_type_name = $2 AND process_code = $3
       RETURNING *`,
     [cn, machineTypeName, processCode]
@@ -1501,6 +1509,77 @@ async function revokePbRingApproval(cn, machineTypeName, processCode, role) {
     await engPool.query(`DELETE FROM pbring_sds_approval WHERE id = $1`, [row.id]);
   }
   return row;
+}
+
+// ── Auto Stamp config (single row, id=1) — read by pbringAutoStamp.js ───────
+// No role-config fallback (unlike the real sds_auto_stamp_config, which
+// falls back to sds_approval_role_config) — PB Ring has no equivalent
+// configurable permission matrix. The explicit em_id per role IS the only
+// source, consistent with isPbringAdmin being the one gate everywhere else
+// in this domain.
+async function getPbRingAutoStampConfig() {
+  const { rows } = await engPool.query(`SELECT * FROM pbring_auto_stamp_config WHERE id = 1`);
+  const r = rows[0] || {};
+  return {
+    enabled: !!r.enabled,
+    max_per_run: Number(r.max_per_run) > 0 ? Math.floor(Number(r.max_per_run)) : 200,
+    prepared: r.prepared_em_id ? { em_id: r.prepared_em_id, name: r.prepared_name || r.prepared_em_id } : null,
+    checked: r.checked_em_id ? { em_id: r.checked_em_id, name: r.checked_name || r.checked_em_id } : null,
+    approved: r.approved_em_id ? { em_id: r.approved_em_id, name: r.approved_name || r.approved_em_id } : null,
+    updated_by: r.updated_by || null,
+    updated_at: r.updated_at || null,
+  };
+}
+
+// Partial update — every field COALESCEs onto the existing row, so a PUT
+// that only sends e.g. {max_per_run} leaves the configured signers alone.
+// (Omitted → JS undefined → the pg driver sends SQL NULL → COALESCE keeps
+// the existing value. To actually CLEAR a signer, send an empty string —
+// COALESCE('', existing) = '', which getPbRingAutoStampConfig then reads
+// back as "no signer configured" the same as NULL.)
+async function savePbRingAutoStampConfig(patch, updatedBy) {
+  const { enabled, max_per_run, prepared_em_id, prepared_name, checked_em_id, checked_name, approved_em_id, approved_name } = patch;
+  const { rows } = await engPool.query(
+    `UPDATE pbring_auto_stamp_config SET
+       enabled = COALESCE($1, enabled),
+       max_per_run = COALESCE($2, max_per_run),
+       prepared_em_id = COALESCE($3, prepared_em_id), prepared_name = COALESCE($4, prepared_name),
+       checked_em_id = COALESCE($5, checked_em_id), checked_name = COALESCE($6, checked_name),
+       approved_em_id = COALESCE($7, approved_em_id), approved_name = COALESCE($8, approved_name),
+       updated_by = $9, updated_at = now()
+     WHERE id = 1
+     RETURNING *`,
+    [enabled, max_per_run, prepared_em_id, prepared_name, checked_em_id, checked_name, approved_em_id, approved_name, updatedBy || null]
+  );
+  return rows[0];
+}
+
+// Moves/creates the shared Kanban card for a PB Ring sheet's approval —
+// reuses kanbanIntake.syncCard, the SAME generic mechanism the real
+// sds_approval uses, but under its OWN sourceType ('pbring_sds_approval')
+// so cards never mix with real production approval cards and, per
+// kanbanIntake's own design, silently no-ops until an admin configures a
+// board/list for this sourceType (mtc_board_config — no new admin UI
+// needed, the existing generic board-config endpoint already handles any
+// sourceType). Fail-open — a board-sync failure must never break a sign.
+async function syncPbRingApprovalBoardCard({ io, cn, machineTypeName, processCode, role, signerName }) {
+  try {
+    const kanbanIntake = require('../mtc/services/kanbanIntake');
+    await kanbanIntake.syncCard({
+      io,
+      sourceType: 'pbring_sds_approval',
+      sourceRef: `${cn}||${machineTypeName}||${processCode}`,
+      stageKey: role,
+      name: `PB Ring SDS ${cn} · ${machineTypeName} · ${processCode}`,
+      description: `Signed ${role} by ${signerName}`,
+      link: {
+        url: `/eng/mtc_eng/sds-v2?cn=${encodeURIComponent(cn)}&machine=${encodeURIComponent(machineTypeName)}&process=${encodeURIComponent(processCode)}`,
+        name: `Open SDS ${cn} — sign`,
+      },
+    });
+  } catch (e) {
+    console.warn('[pbring] board card sync failed:', e.message);
+  }
 }
 
 module.exports = {
@@ -1520,4 +1599,5 @@ module.exports = {
   getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
   PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
+  getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
 };

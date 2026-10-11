@@ -115,6 +115,16 @@ async function buildPbRingCoverageRows(classifyCoverage) {
       first_month: null,
       _pbring: true,
       _pbRingKey: r.mc_key,
+      // Every pbring_* table (including pbring_sds_approval) keys on the
+      // plain item-no form — `cn` above is converted to control-no ONLY to
+      // match the real report's own dedup key. Using `cn` for a write here
+      // was the exact "C29-04065 vs 294065" format mismatch this codebase
+      // has already been bitten by once (see pbringGridController.js's own
+      // normalizeCn note) — confirmed live: pbringAutoStamp signed 491 rows
+      // keyed by control-no, and the approval CTE above (joined on the
+      // combos CTE's item-no cn) never matched them, so stamped_full stayed
+      // false for all of them despite the rows existing.
+      _pbRingCn: r.cn,
     };
     const classified = classifyCoverage(base);
     return { ...base, ...classified, coverage_level_saved: classified.coverage_level };

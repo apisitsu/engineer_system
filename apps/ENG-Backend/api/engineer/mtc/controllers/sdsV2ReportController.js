@@ -13,6 +13,7 @@ const selectionConditionConformance = require('../services/selectionConditionCon
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 const cache = require('../services/agents/CacheAgent');
 const { buildPbRingCoverageRows } = require('../../pbring/pbringCoverageService');
+const pbringAutoStamp = require('../../pbring/pbringAutoStamp');
 // The "Scope" button on the SDS Coverage Report page (backlog-to-board,
 // auto-stamp config, bulk parameter import, report config). Separate key from
 // Setup Data Sheet's own 'sds_setting_admin' (sdsV2AdminController.js /
@@ -1352,6 +1353,12 @@ function kickCoverageBuild() {
     } else {
       console.warn('[SDS Report] coverage build returned total=0 — not caching');
     }
+    // PB Ring's own Auto Stamp, same cadence as the real one above but
+    // entirely independent of it — PB Ring's own data availability has
+    // nothing to do with whether the real build above was healthy, so this
+    // runs unconditionally (own fail-open try/catch inside, never throws).
+    pbringAutoStamp.runAutoStamp(classifyCoverage, { io: _io })
+      .catch(e => console.warn('[SDS Report] PB Ring auto-stamp failed:', e.message));
     return payload;
   });
   _coverageBuilding = p;
