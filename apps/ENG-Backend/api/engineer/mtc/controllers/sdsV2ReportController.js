@@ -1200,20 +1200,34 @@ const publicCoverage = ({ cohortRows, ...rest }) => rest;
  * REAL coverage payload at SERVE time only — never into `_coverageCache`,
  * the DB-persisted copy, or what Auto Stamp / the Kanban backlog intake
  * read (kickCoverageBuild passes `payload` — the real-only build — to both
- * of those directly, before this function ever runs). User decision
- * (2026-10-11): one unified report, "PB Ring wins" on an exact (cn,
- * machine, process) collision with a real row — several PB Ring machine
- * codes share their real display name with an already-registered SDS
- * machine (e.g. KVD-300CRII), and the one that actually renders when
- * someone clicks PDF is the PB Ring sheet (SdsV2Page.jsx's picker), so the
- * worklist should show that same answer rather than the real row's own
- * (possibly stale/unrelated) status.
+ * of those directly, before this function ever runs).
  *
- * Dedup uses `cohortRows` (every real evaluated sheet, Complete AND
- * Pending) rather than just `needsAttention` (Pending only) — a real row
- * that already reads COMPLETE for the exact colliding combo still needs to
- * be replaced, not left to double-count `total`/`complete` alongside the
- * PB Ring version of the same sheet.
+ * Superseded design (2026-10-11, same day): the first version merged EVERY
+ * PB Ring row in, "PB Ring wins" on a (cn, machine, process) collision
+ * regardless of either side's status. Measured live against the real data:
+ * of 1,709 colliding rows, 1,682 were already COMPLETE on the real side —
+ * sheets genuinely configured and fully signed — and got overwritten by
+ * PB Ring's own (brand-new, nobody-signed-yet) PENDING version, crashing
+ * the headline %Complete from 98.2% to 36.3% for a reason that had nothing
+ * to do with real work regressing. Separately, nearly the ENTIRE real
+ * pending backlog (67 rows) turned out to already be on PB Ring's own
+ * machine roster (KVD-300CRII, KS-R80D, KS-B22 family, OC-16A/18BR-150/
+ * 20BR-200, …) — confirming that backlog is PB Ring's own concern, tracked
+ * on its own Tooling PB Ring page, not something this shared report needs
+ * to also carry 3,416 fresh entries for.
+ *
+ * Current rule (user decision): this report reverts to exactly its
+ * real-only baseline, and PB Ring can only ever ADD completions to it —
+ * never add to Pending, never downgrade a real COMPLETE row. A PB Ring
+ * combo that is not yet COMPLETE (tool+template+fully signed, same
+ * classifyCoverage() as the real rows) contributes NOTHING here; today
+ * PB Ring has 0 complete rows, so this function is a no-op and the report
+ * is byte-for-byte what buildCoverage() alone produced. As PB Ring sheets
+ * get signed off, each one that is COMPLETE either fills a gap the real
+ * system had for that exact (cn, machine, process) — converting a real
+ * Pending row (or a combo missing from the real scan entirely) to
+ * Complete — or, if the real side already shows Complete for that combo,
+ * changes nothing (no double count).
  *
  * Deliberately narrow: only `total`/`uniqueCnCount`/`complete`/`completePct`/
  * `pdfReady`/`pdfReadyPct`/`pending`/`pendingPct`/`pendingByReason` and the
@@ -1233,17 +1247,19 @@ async function mergeInPbRingCoverage(payload) {
     console.warn('[SDS Report] PB Ring coverage merge failed:', e.message);
     return payload; // fail-open — a PB Ring query error must never break the real report
   }
-  if (!pbRows.length) return payload;
+  const pbComplete = pbRows.filter((r) => r.coverage_level === 'COMPLETE');
+  if (!pbComplete.length) return payload; // nothing signed off yet — report unchanged
 
   const key = (r) => `${r.cn}||${r.machine_type_name}||${r.process_code}`;
-  const pbKeys = new Set(pbRows.map(key));
+  const realCohortByKey = new Map((payload.cohortRows || []).map((r) => [key(r), r]));
 
-  const realCohort = (payload.cohortRows || []).filter((r) => !pbKeys.has(key(r)));
-  const realNeedsAttention = (payload.needsAttention || []).filter((r) => !pbKeys.has(key(r)));
+  // Only the PB Ring completions that actually change something: skip a
+  // combo the real side already reports COMPLETE for (no-op, not a
+  // duplicate add).
+  const promoted = pbComplete.filter((r) => realCohortByKey.get(key(r))?.coverage_level !== 'COMPLETE');
+  if (!promoted.length) return payload;
 
-  // Slim PB Ring rows to the same shape cohortRows already uses, so the
-  // frontend table (which reads cohortRows/needsAttention interchangeably
-  // for CN/part_type/machine/process/status) needs no PB-Ring-specific case.
+  const promotedKeys = new Set(promoted.map(key));
   const slim = (r) => ({
     cn: r.cn, part_type: r.part_type, machine_type_name: r.machine_type_name,
     machine_code: r.machine_code, process_code: r.process_code,
@@ -1254,11 +1270,15 @@ async function mergeInPbRingCoverage(payload) {
     limit_excluded: false, limit_reason: null,
     first_prod_date: null, last_prod_date: null, first_month: null,
   });
-  const pbSlim = pbRows.map(slim);
-  const pbPending = pbSlim.filter((r) => r.coverage_level === 'PENDING');
 
-  const cohortRows = [...realCohort, ...pbSlim];
-  const needsAttention = [...realNeedsAttention, ...pbPending].sort((a, b) => a.cn.localeCompare(b.cn));
+  // A promoted combo's real row (if any — it was Pending, since Complete was
+  // excluded above) is replaced by the PB Ring Complete row; everything else
+  // is untouched byte-for-byte.
+  const cohortRows = [
+    ...(payload.cohortRows || []).filter((r) => !promotedKeys.has(key(r))),
+    ...promoted.map(slim),
+  ];
+  const needsAttention = (payload.needsAttention || []).filter((r) => !promotedKeys.has(key(r)));
 
   const total = cohortRows.length;
   const complete = cohortRows.filter((r) => r.coverage_level === 'COMPLETE').length;
@@ -1292,16 +1312,15 @@ async function mergeInPbRingCoverage(payload) {
       { level: 'COMPLETE', count: complete, label: 'Complete (PDF Ready)' },
       { level: 'PENDING', count: pending, label: 'Pending (needs config)' },
     ],
-    // Exposed so the dashboard can show a "PB Ring: N sheets, M pending" note
+    // Exposed so the dashboard can show a "PB Ring: N sheets completed" note
     // without having to re-derive it from cohortRows itself.
     pbring: {
       total: pbRows.length,
-      complete: pbRows.filter((r) => r.coverage_level === 'COMPLETE').length,
-      pending: pbPending.length,
-      // Real rows dropped in favor of the PB Ring version of the same sheet
-      // (same (cn, machine, process) key) — i.e. how many collisions "PB
-      // Ring wins" actually resolved this build.
-      overlapsWithReal: (payload.cohortRows || []).length - realCohort.length,
+      complete: pbComplete.length,
+      pending: pbRows.length - pbComplete.length,
+      // Of the PB Ring Complete sheets, how many actually changed this
+      // report (vs. the real side already agreeing it's Complete).
+      promotedToComplete: promoted.length,
     },
   };
 }
