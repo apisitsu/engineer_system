@@ -294,24 +294,38 @@ function buildGridPdfHtml(grid) {
 }
 
 /**
- * Lightweight existence check for the SdsV2Page.jsx auto-detect button. Returns
- * one entry per (machine, process_code) combo so the frontend has everything
- * `grid/pdf` needs without a second round trip — not just which machines have
- * data, since a machine alone is not enough to render (the route also requires
+ * Lightweight existence check for SdsV2Page.jsx's merged process-row flow
+ * (2026-10-11 redesign — folded into the normal process list/PDF picker
+ * instead of a separate "PB Ring PDF" button). Returns one entry per
+ * (machine, process_code) combo, carrying `machine` (the real display name,
+ * e.g. "KVD-300CRII") and `process_name` so the frontend can render a PB
+ * Ring combo indistinguishably from a real process_info/machine-picker row
+ * without a second round trip — not just which machines have data, since a
+ * machine alone is not enough to render (the route also requires
  * process_code).
  */
 async function hasDataForCn(cn) {
   const { rows: paramRows } = await engPool.query(
-    `SELECT DISTINCT mc_key, process_code FROM pbring_sds_param WHERE cn = $1`,
+    `SELECT DISTINCT mc_key, process_code, machine, process_name FROM pbring_sds_param WHERE cn = $1`,
     [cn]
   );
   const { rows: condRows } = await engPool.query(
-    `SELECT DISTINCT mc_key, process_code FROM pbring_sds_condition WHERE cn = $1`,
+    `SELECT DISTINCT mc_key, process_code, machine FROM pbring_sds_condition WHERE cn = $1`,
     [cn]
   );
   const comboByKey = new Map();
   for (const r of [...paramRows, ...condRows]) {
-    comboByKey.set(`${r.mc_key}||${r.process_code}`, { machine_type_name: r.mc_key, process_code: r.process_code });
+    const key = `${r.mc_key}||${r.process_code}`;
+    const existing = comboByKey.get(key) || {};
+    // pbring_sds_condition has no process_name column, so a combo seen only
+    // there keeps whatever the param-row pass already set (or null) rather
+    // than being overwritten blank.
+    comboByKey.set(key, {
+      machine_type_name: r.mc_key,
+      process_code: r.process_code,
+      machine: r.machine || existing.machine || null,
+      process_name: existing.process_name || r.process_name || null,
+    });
   }
   const combos = [...comboByKey.values()];
   if (!combos.length) return { exists: false, machines: [] };
@@ -329,6 +343,8 @@ async function hasDataForCn(cn) {
     .map((c) => ({
       machine_type_name: c.machine_type_name,
       process_code: c.process_code,
+      machine: c.machine,
+      process_name: c.process_name,
       has_template: templateByName.get(c.machine_type_name),
     }));
 
