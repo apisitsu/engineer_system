@@ -12,6 +12,7 @@ const templateBConformance = require('../services/templateBConformance');
 const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 const cache = require('../services/agents/CacheAgent');
+const { buildPbRingCoverageRows } = require('../../pbring/pbringCoverageService');
 // The "Scope" button on the SDS Coverage Report page (backlog-to-board,
 // auto-stamp config, bulk parameter import, report config). Separate key from
 // Setup Data Sheet's own 'sds_setting_admin' (sdsV2AdminController.js /
@@ -1194,6 +1195,117 @@ async function buildCoverage() {
 // The cached payload minus the bulk cohort list — what `GET /coverage` serves.
 const publicCoverage = ({ cohortRows, ...rest }) => rest;
 
+/**
+ * Folds PB Ring's own coverage rows (pbringCoverageService.js) into the
+ * REAL coverage payload at SERVE time only — never into `_coverageCache`,
+ * the DB-persisted copy, or what Auto Stamp / the Kanban backlog intake
+ * read (kickCoverageBuild passes `payload` — the real-only build — to both
+ * of those directly, before this function ever runs). User decision
+ * (2026-10-11): one unified report, "PB Ring wins" on an exact (cn,
+ * machine, process) collision with a real row — several PB Ring machine
+ * codes share their real display name with an already-registered SDS
+ * machine (e.g. KVD-300CRII), and the one that actually renders when
+ * someone clicks PDF is the PB Ring sheet (SdsV2Page.jsx's picker), so the
+ * worklist should show that same answer rather than the real row's own
+ * (possibly stale/unrelated) status.
+ *
+ * Dedup uses `cohortRows` (every real evaluated sheet, Complete AND
+ * Pending) rather than just `needsAttention` (Pending only) — a real row
+ * that already reads COMPLETE for the exact colliding combo still needs to
+ * be replaced, not left to double-count `total`/`complete` alongside the
+ * PB Ring version of the same sheet.
+ *
+ * Deliberately narrow: only `total`/`uniqueCnCount`/`complete`/`completePct`/
+ * `pdfReady`/`pdfReadyPct`/`pending`/`pendingPct`/`pendingByReason` and the
+ * `needsAttention`/`cohortRows`/`coverageLevelSummary` arrays are
+ * recomputed. `byPartType`, `gaps`, `monthlyTrend`, `monthlyNewParts` and
+ * `monthlyStatus` stay real-only — those are tied to the report's
+ * admin-configured scope (date cutoff, work centers, excluded CNs) and
+ * fiscal-year windowing, none of which PB Ring has a matching concept for;
+ * merging into them would need a design decision of its own, not a
+ * drop-in.
+ */
+async function mergeInPbRingCoverage(payload) {
+  let pbRows;
+  try {
+    pbRows = await buildPbRingCoverageRows(classifyCoverage);
+  } catch (e) {
+    console.warn('[SDS Report] PB Ring coverage merge failed:', e.message);
+    return payload; // fail-open — a PB Ring query error must never break the real report
+  }
+  if (!pbRows.length) return payload;
+
+  const key = (r) => `${r.cn}||${r.machine_type_name}||${r.process_code}`;
+  const pbKeys = new Set(pbRows.map(key));
+
+  const realCohort = (payload.cohortRows || []).filter((r) => !pbKeys.has(key(r)));
+  const realNeedsAttention = (payload.needsAttention || []).filter((r) => !pbKeys.has(key(r)));
+
+  // Slim PB Ring rows to the same shape cohortRows already uses, so the
+  // frontend table (which reads cohortRows/needsAttention interchangeably
+  // for CN/part_type/machine/process/status) needs no PB-Ring-specific case.
+  const slim = (r) => ({
+    cn: r.cn, part_type: r.part_type, machine_type_name: r.machine_type_name,
+    machine_code: r.machine_code, process_code: r.process_code,
+    coverage_level: r.coverage_level, coverage_level_saved: r.coverage_level_saved,
+    pending_reason: r.pending_reason,
+    has_tooling_match: r.has_tooling_match, has_machine_template: r.has_machine_template,
+    tooling_source: r.tooling_source, tooling_not_required: r.tooling_not_required,
+    limit_excluded: false, limit_reason: null,
+    first_prod_date: null, last_prod_date: null, first_month: null,
+  });
+  const pbSlim = pbRows.map(slim);
+  const pbPending = pbSlim.filter((r) => r.coverage_level === 'PENDING');
+
+  const cohortRows = [...realCohort, ...pbSlim];
+  const needsAttention = [...realNeedsAttention, ...pbPending].sort((a, b) => a.cn.localeCompare(b.cn));
+
+  const total = cohortRows.length;
+  const complete = cohortRows.filter((r) => r.coverage_level === 'COMPLETE').length;
+  const pdfReadyRows = cohortRows.filter((r) => (r.has_tooling_match || r.tooling_not_required) && r.has_machine_template);
+  const pending = needsAttention.length;
+  const pct = (n, d) => (d > 0 ? parseFloat(((n / d) * 100).toFixed(1)) : 0);
+
+  return {
+    ...payload,
+    cohortRows,
+    needsAttention,
+    kpi: {
+      ...payload.kpi,
+      total,
+      uniqueCnCount: new Set(cohortRows.map((r) => r.cn)).size,
+      complete,
+      completePct: pct(complete, total),
+      pdfReady: pdfReadyRows.length,
+      pdfReadyPct: pct(pdfReadyRows.length, total),
+      pending,
+      pendingPct: pct(pending, total),
+      pendingByReason: {
+        ...payload.kpi.pendingByReason,
+        noExcel:       needsAttention.filter((r) => r.pending_reason === 'NO_EXCEL').length,
+        noTool:        needsAttention.filter((r) => r.pending_reason === 'NO_TOOL').length,
+        noToolNoExcel: needsAttention.filter((r) => r.pending_reason === 'NO_TOOL_NO_EXCEL').length,
+        noStamp:       needsAttention.filter((r) => r.pending_reason === 'NO_STAMP').length,
+      },
+    },
+    coverageLevelSummary: [
+      { level: 'COMPLETE', count: complete, label: 'Complete (PDF Ready)' },
+      { level: 'PENDING', count: pending, label: 'Pending (needs config)' },
+    ],
+    // Exposed so the dashboard can show a "PB Ring: N sheets, M pending" note
+    // without having to re-derive it from cohortRows itself.
+    pbring: {
+      total: pbRows.length,
+      complete: pbRows.filter((r) => r.coverage_level === 'COMPLETE').length,
+      pending: pbPending.length,
+      // Real rows dropped in favor of the PB Ring version of the same sheet
+      // (same (cn, machine, process) key) — i.e. how many collisions "PB
+      // Ring wins" actually resolved this build.
+      overlapsWithReal: (payload.cohortRows || []).length - realCohort.length,
+    },
+  };
+}
+
 // Start a background build (idempotent — reuses the in-flight build if any),
 // storing the payload in the cache on success.
 function kickCoverageBuild() {
@@ -1246,7 +1358,8 @@ router.get('/coverage', async (req, res) => {
 
     // Fresh cache → serve immediately
     if (!req.query.refresh && fresh) {
-      return res.json({ ...publicCoverage(_coverageCache.data), cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
+      const merged = await mergeInPbRingCoverage(_coverageCache.data);
+      return res.json({ ...publicCoverage(merged), cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // Stale cache → serve stale now, rebuild in background (stale-while-revalidate).
@@ -1256,7 +1369,8 @@ router.get('/coverage', async (req, res) => {
     // "enabled Spherical, still not shown" look like a data bug).
     if (!req.query.refresh && _coverageCache) {
       kickCoverageBuild();
-      return res.json({ ...publicCoverage(_coverageCache.data), cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
+      const merged = await mergeInPbRingCoverage(_coverageCache.data);
+      return res.json({ ...publicCoverage(merged), cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // No cache (or ?refresh=1) → ensure a build is running. ?wait=1 awaits it
@@ -1264,7 +1378,8 @@ router.get('/coverage', async (req, res) => {
     const buildPromise = kickCoverageBuild();
     if (req.query.wait) {
       const data = await buildPromise;
-      return res.json({ ...publicCoverage(data), cached: false });
+      const merged = await mergeInPbRingCoverage(data);
+      return res.json({ ...publicCoverage(merged), cached: false });
     }
     return res.status(202).json({ building: true });
   } catch (err) {
