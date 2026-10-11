@@ -1427,7 +1427,7 @@ module.exports = {
   getTemplateById, createTemplate, updateTemplate, deleteTemplate,
   parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
   loadStandardGridLive, buildStandardGridForMachine,
-  loadToolSlotAddressesLive, applyToolSlotsToGrid, loadHeaderAddressesLive, applyHeaderToGrid,
+  loadToolSlotAddressesLive, applyToolSlotsToGrid, getToolingItemNames, loadHeaderAddressesLive, applyHeaderToGrid,
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
   loadTurningGridLive, applyTurningHeaderToGrid, applyTurningHeaderOverridesToGrid,
   applyTurningToolSlotsToGrid, turningPbSlotAddresses, TURNING_PB_HEADER_OVERRIDE_FIELDS,

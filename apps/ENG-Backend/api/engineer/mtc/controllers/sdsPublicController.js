@@ -219,8 +219,19 @@ router.get('/sds/pdf', async (req, res) => {
         const { conditionByToolNumber } = await pbring
           .buildPbRingValueMap(cnItemNo, mcKey, process_code)
           .catch(() => ({ conditionByToolNumber: {} }));
+        // Grinding machines have no UI to type tool_detail (Tool Condition is
+        // turning-only) — same fallback the rendered grid itself uses
+        // (applyToolSlotsToGrid): pbring_tooling.tooling_item by tool_code_base.
+        const toolCodes = [...new Set(
+          Object.values(conditionByToolNumber || {}).map((r) => r.tooling_no).filter(Boolean)
+        )];
+        const itemNameByToolCode = await pbring
+          .getToolingItemNames(mcKey, cnItemNo, toolCodes)
+          .catch(() => ({}));
         const tooling = Object.entries(conditionByToolNumber || {}).map(([slot, row]) => ({
-          slot, name: row.tool_detail || '', dwg: row.tooling_no || '',
+          slot,
+          name: row.tool_detail || (row.tooling_no && itemNameByToolCode[row.tooling_no]) || '',
+          dwg: row.tooling_no || '',
         }));
         sdsPrintLog.record({
           cn, machineTypeName: pbRingCombo.machine || mcKey,
