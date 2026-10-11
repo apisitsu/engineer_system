@@ -93,6 +93,7 @@ export const server = {
   PBRING_TOOLING_FROM_HISTORY: `${apiUrl}api/engineer/pbring/tooling/from-history`,
   PBRING_GRID_HAS_DATA: `${apiUrl}api/engineer/pbring/grid/has-data`, // ?cn=
   PBRING_GRID_PDF: `${apiUrl}api/engineer/pbring/grid/pdf`, // ?cn=&machine_type_name=&process_code=
+  PBRING_GRID_APPROVAL: `${apiUrl}api/engineer/pbring/grid/approval`, // GET ?cn=&machine_type_name=&process_code= · POST {cn,machine_type_name,process_code,role} · DELETE ?...&role=
   PBRING_GRID_ADMIN_TEMPLATES: `${apiUrl}api/engineer/pbring/grid/admin/templates`, // GET list/POST create; append /:id for GET/PUT/DELETE, /:id/default for PUT, /:id/pdf-blank for GET
   PBRING_GRID_ADMIN_MACHINE_TYPES: `${apiUrl}api/engineer/pbring/grid/admin/machine-types`, // append /:id (PUT)
   PBRING_GRID_ADMIN_TEMPLATE_DEFAULT: `${apiUrl}api/engineer/pbring/grid/admin/templates`, // append /:id/default (PUT)

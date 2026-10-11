@@ -12,6 +12,8 @@ const templateBConformance = require('../services/templateBConformance');
 const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 const cache = require('../services/agents/CacheAgent');
+const { buildPbRingCoverageRows, getPbRingMonitorCns } = require('../../pbring/pbringCoverageService');
+const pbringAutoStamp = require('../../pbring/pbringAutoStamp');
 // The "Scope" button on the SDS Coverage Report page (backlog-to-board,
 // auto-stamp config, bulk parameter import, report config). Separate key from
 // Setup Data Sheet's own 'sds_setting_admin' (sdsV2AdminController.js /
@@ -1194,6 +1196,201 @@ async function buildCoverage() {
 // The cached payload minus the bulk cohort list — what `GET /coverage` serves.
 const publicCoverage = ({ cohortRows, ...rest }) => rest;
 
+/**
+ * Folds PB Ring's own coverage rows (pbringCoverageService.js) into the
+ * REAL coverage payload at SERVE time only — never into `_coverageCache`,
+ * the DB-persisted copy, or what Auto Stamp / the Kanban backlog intake
+ * read (kickCoverageBuild passes `payload` — the real-only build — to both
+ * of those directly, before this function ever runs).
+ *
+ * Superseded design (2026-10-11, same day): the first version merged EVERY
+ * PB Ring row in, "PB Ring wins" on a (cn, machine, process) collision
+ * regardless of either side's status. Measured live against the real data:
+ * of 1,709 colliding rows, 1,682 were already COMPLETE on the real side —
+ * sheets genuinely configured and fully signed — and got overwritten by
+ * PB Ring's own (brand-new, nobody-signed-yet) PENDING version, crashing
+ * the headline %Complete from 98.2% to 36.3% for a reason that had nothing
+ * to do with real work regressing. Separately, nearly the ENTIRE real
+ * pending backlog (67 rows) turned out to already be on PB Ring's own
+ * machine roster (KVD-300CRII, KS-R80D, KS-B22 family, OC-16A/18BR-150/
+ * 20BR-200, …) — confirming that backlog is PB Ring's own concern, tracked
+ * on its own Tooling PB Ring page, not something this shared report needs
+ * to also carry 3,416 fresh entries for.
+ *
+ * Current rule (user decision, revised again same day): this report
+ * reverts to exactly its real-only baseline and changes in only two ways:
+ *
+ *   1. CN-level SUBSTITUTION (not deletion) for PB Ring's own MONITOR list
+ *      (pbring_tooling — the "Tooling PB Ring" page's own HW/cost-tracking
+ *      list, ~36 CNs — deliberately NOT the much larger pbring_sds_param/
+ *      condition universe every other PB Ring feature reads, ~870 CNs). A
+ *      monitor-listed CN is, in the user's own words, a PB Ring part for
+ *      EVERY process. First cut of this rule just dropped the real rows —
+ *      user correction: "detection" for that CN doesn't disappear, it
+ *      MOVES from the general/real system to PB Ring, so every real row
+ *      for the CN is replaced by PB Ring's OWN rows for it — Pending ones
+ *      included, not just Complete ones (unlike rule 2 below). Dropping
+ *      without substituting had made Total shrink by however many sheets
+ *      PB Ring hadn't signed off yet, which reads as "work disappeared"
+ *      rather than "tracking moved". A monitor CN that PB Ring has no row
+ *      for at all (genuinely nothing started) has nothing to substitute —
+ *      its real row(s) are still removed, since the whole point is the
+ *      real system no longer tracks that CN, but no PB Ring row exists to
+ *      replace them with (contributes 0, not a 1:1 swap, for that CN).
+ *   2. Completion promotion, scoped to the OTHER ~834 CNs (pbring_sds_param
+ *      minus the monitor list) — a PB Ring combo that is COMPLETE
+ *      (tool+template+fully signed) and not already matched by a real
+ *      COMPLETE row for the exact same (cn, machine, process) is ADDED.
+ *      Never adds to Pending for this wider, less-confirmed universe —
+ *      that was the whole reason this two-tier rule exists (see the
+ *      superseded-design note above: surfacing all of PB Ring's Pending
+ *      rows here crashed %Complete for reasons that had nothing to do with
+ *      real work). Rule 1's monitor CNs are EXCLUDED from this step (they
+ *      are fully handled by rule 1, Pending rows included) so a monitor
+ *      CN's combo is never evaluated twice.
+ *
+ * Today PB Ring has 0 complete rows and the monitor list may be empty on a
+ * fresh install, so in the common case this function changes nothing and
+ * the report is byte-for-byte what buildCoverage() alone produced.
+ *
+ * Deliberately narrow: only `total`/`uniqueCnCount`/`complete`/`completePct`/
+ * `pdfReady`/`pdfReadyPct`/`pending`/`pendingPct`/`pendingByReason` and the
+ * `needsAttention`/`cohortRows`/`coverageLevelSummary` arrays are
+ * recomputed. `byPartType`, `gaps`, `monthlyTrend`, `monthlyNewParts` and
+ * `monthlyStatus` stay real-only — those are tied to the report's
+ * admin-configured scope (date cutoff, work centers, excluded CNs) and
+ * fiscal-year windowing, none of which PB Ring has a matching concept for;
+ * merging into them would need a design decision of its own, not a
+ * drop-in.
+ */
+async function mergeInPbRingCoverage(payload) {
+  let pbRows, monitorCns;
+  try {
+    [pbRows, monitorCns] = await Promise.all([
+      buildPbRingCoverageRows(classifyCoverage),
+      getPbRingMonitorCns(),
+    ]);
+  } catch (e) {
+    console.warn('[SDS Report] PB Ring coverage merge failed:', e.message);
+    return payload; // fail-open — a PB Ring query error must never break the real report
+  }
+
+  const key = (r) => `${r.cn}||${r.machine_type_name}||${r.process_code}`;
+  const slim = (r) => ({
+    cn: r.cn, part_type: r.part_type, machine_type_name: r.machine_type_name,
+    machine_code: r.machine_code, process_code: r.process_code,
+    coverage_level: r.coverage_level, coverage_level_saved: r.coverage_level_saved,
+    pending_reason: r.pending_reason,
+    has_tooling_match: r.has_tooling_match, has_machine_template: r.has_machine_template,
+    tooling_source: r.tooling_source, tooling_not_required: r.tooling_not_required,
+    limit_excluded: false, limit_reason: null,
+    // Real dates now (2026-10-11) — buildPbRingCoverageRows only ever returns
+    // combos that passed its own production-history check, and carries the
+    // MIN/MAX comp_date for exactly this reason. Hardcoding null here made
+    // every PB Ring row look unproduced in any UI column reading these
+    // fields, even though the filter had already confirmed the opposite.
+    first_prod_date: r.first_prod_date, last_prod_date: r.last_prod_date, first_month: r.first_month,
+  });
+
+  // Step 1 — monitor-listed CNs: real rows removed, PB Ring's OWN rows for
+  // that CN substituted in (any status — this is a detection-source swap,
+  // not a deletion).
+  const isMonitored = (r) => monitorCns.has(r.cn);
+  const realCohortKept = (payload.cohortRows || []).filter((r) => !isMonitored(r));
+  const realNeedsAttentionKept = (payload.needsAttention || []).filter((r) => !isMonitored(r));
+  const removedForMonitor = (payload.cohortRows || []).length - realCohortKept.length;
+
+  const pbMonitorRows = pbRows.filter((r) => monitorCns.has(r.cn));
+  const pbMonitorComplete = pbMonitorRows.filter((r) => r.coverage_level === 'COMPLETE');
+  const pbMonitorPending = pbMonitorRows.filter((r) => r.coverage_level !== 'COMPLETE');
+
+  // Step 2 — completion promotion for every OTHER PB Ring combo (not on the
+  // monitor list — those are fully handled by step 1 already). Evaluated
+  // against realCohortKept so a combo step 1 already removed can't also be
+  // promoted here.
+  const cohortByKey = new Map(realCohortKept.map((r) => [key(r), r]));
+  const pbOtherComplete = pbRows.filter((r) => r.coverage_level === 'COMPLETE' && !monitorCns.has(r.cn));
+  const promoted = pbOtherComplete.filter((r) => cohortByKey.get(key(r))?.coverage_level !== 'COMPLETE');
+
+  if (!removedForMonitor && !pbMonitorRows.length && !promoted.length) return payload; // nothing changed
+
+  // A promoted combo's OLD real row (Pending, since Complete was excluded
+  // above) must be dropped here — it is the same physical sheet as the
+  // promoted row being added, not a second one. Missing this filter would
+  // double-count it: stale Pending in needsAttention AND fresh Complete in
+  // cohortRows for the identical (cn, machine, process) key.
+  const promotedKeys = new Set(promoted.map(key));
+  const cohortRows = [
+    ...realCohortKept.filter((r) => !promotedKeys.has(key(r))),
+    ...pbMonitorRows.map(slim),
+    ...promoted.map(slim),
+  ];
+  // pbMonitorPending is included here (unlike `promoted`, which is always
+  // Complete) — that is the substitution: a monitor CN's unsigned PB Ring
+  // backlog is now what this report's worklist shows for it, in place of
+  // whatever the real system used to say.
+  const needsAttention = [
+    ...realNeedsAttentionKept.filter((r) => !promotedKeys.has(key(r))),
+    ...pbMonitorPending.map(slim),
+  ];
+
+  const total = cohortRows.length;
+  const complete = cohortRows.filter((r) => r.coverage_level === 'COMPLETE').length;
+  const pdfReadyRows = cohortRows.filter((r) => (r.has_tooling_match || r.tooling_not_required) && r.has_machine_template);
+  const pending = needsAttention.length;
+  const pct = (n, d) => (d > 0 ? parseFloat(((n / d) * 100).toFixed(1)) : 0);
+
+  return {
+    ...payload,
+    cohortRows,
+    needsAttention,
+    kpi: {
+      ...payload.kpi,
+      total,
+      uniqueCnCount: new Set(cohortRows.map((r) => r.cn)).size,
+      complete,
+      completePct: pct(complete, total),
+      pdfReady: pdfReadyRows.length,
+      pdfReadyPct: pct(pdfReadyRows.length, total),
+      pending,
+      pendingPct: pct(pending, total),
+      pendingByReason: {
+        ...payload.kpi.pendingByReason,
+        noExcel:       needsAttention.filter((r) => r.pending_reason === 'NO_EXCEL').length,
+        noTool:        needsAttention.filter((r) => r.pending_reason === 'NO_TOOL').length,
+        noToolNoExcel: needsAttention.filter((r) => r.pending_reason === 'NO_TOOL_NO_EXCEL').length,
+        noStamp:       needsAttention.filter((r) => r.pending_reason === 'NO_STAMP').length,
+      },
+    },
+    coverageLevelSummary: [
+      { level: 'COMPLETE', count: complete, label: 'Complete (PDF Ready)' },
+      { level: 'PENDING', count: pending, label: 'Pending (needs config)' },
+    ],
+    // Exposed so the dashboard can show a "PB Ring: N sheets tracked" note
+    // without re-deriving it from cohortRows.
+    pbring: {
+      total: pbRows.length,
+      // All of PB Ring's own Complete rows, monitor-listed or not — this is
+      // PB Ring's own count, independent of how many of them actually
+      // changed THIS report (see promotedToComplete below for that).
+      complete: pbMonitorComplete.length + pbOtherComplete.length,
+      pending: pbRows.length - pbMonitorComplete.length - pbOtherComplete.length,
+      monitorCns: monitorCns.size,
+      // Real rows removed from the monitor CNs (step 1) — the ones PB Ring
+      // had nothing to substitute are a net loss from Total; the rest were
+      // replaced 1:1 (or more) by pbMonitorRows below.
+      removedForMonitor,
+      // PB Ring's own rows (Complete + Pending) substituted in for the
+      // monitor CNs — what actually replaces `removedForMonitor`.
+      monitorRowsAdded: pbMonitorRows.length,
+      // Of PB Ring's Complete sheets OUTSIDE the monitor list, how many
+      // actually changed this report (vs. a real COMPLETE row already
+      // present for that exact combo).
+      promotedToComplete: promoted.length,
+    },
+  };
+}
+
 // Start a background build (idempotent — reuses the in-flight build if any),
 // storing the payload in the cache on success.
 function kickCoverageBuild() {
@@ -1221,6 +1418,12 @@ function kickCoverageBuild() {
     } else {
       console.warn('[SDS Report] coverage build returned total=0 — not caching');
     }
+    // PB Ring's own Auto Stamp, same cadence as the real one above but
+    // entirely independent of it — PB Ring's own data availability has
+    // nothing to do with whether the real build above was healthy, so this
+    // runs unconditionally (own fail-open try/catch inside, never throws).
+    pbringAutoStamp.runAutoStamp(classifyCoverage, { io: _io })
+      .catch(e => console.warn('[SDS Report] PB Ring auto-stamp failed:', e.message));
     return payload;
   });
   _coverageBuilding = p;
@@ -1246,7 +1449,8 @@ router.get('/coverage', async (req, res) => {
 
     // Fresh cache → serve immediately
     if (!req.query.refresh && fresh) {
-      return res.json({ ...publicCoverage(_coverageCache.data), cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
+      const merged = await mergeInPbRingCoverage(_coverageCache.data);
+      return res.json({ ...publicCoverage(merged), cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // Stale cache → serve stale now, rebuild in background (stale-while-revalidate).
@@ -1256,7 +1460,8 @@ router.get('/coverage', async (req, res) => {
     // "enabled Spherical, still not shown" look like a data bug).
     if (!req.query.refresh && _coverageCache) {
       kickCoverageBuild();
-      return res.json({ ...publicCoverage(_coverageCache.data), cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
+      const merged = await mergeInPbRingCoverage(_coverageCache.data);
+      return res.json({ ...publicCoverage(merged), cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // No cache (or ?refresh=1) → ensure a build is running. ?wait=1 awaits it
@@ -1264,7 +1469,8 @@ router.get('/coverage', async (req, res) => {
     const buildPromise = kickCoverageBuild();
     if (req.query.wait) {
       const data = await buildPromise;
-      return res.json({ ...publicCoverage(data), cached: false });
+      const merged = await mergeInPbRingCoverage(data);
+      return res.json({ ...publicCoverage(merged), cached: false });
     }
     return res.status(202).json({ building: true });
   } catch (err) {

@@ -101,6 +101,11 @@ const SdsV2Page = () => {
   const userPerms = useAuthStore(state => state.userPerms);
   const empNo = useAuthStore(state => state.empNo);
   const isAdmin = userRole === 'AD' || userDepartment === 'AD' || (userPerms || []).includes('sds_admin');
+  // Mirrors the backend's isPbringAdmin = hasFeature('pbring_admin') gate
+  // (middleware/mtcAuth.js) — client-side only, so the Sign/Revoke buttons on
+  // a PB Ring sheet aren't shown to someone the server will 403 anyway.
+  const isPbringAdminUser = userRole === 'AD' || userDepartment === 'AD'
+    || (userPerms || []).includes('pbring_admin') || (userPerms || []).includes('all_mtc');
   const [cn, setCn] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -113,9 +118,11 @@ const SdsV2Page = () => {
 
   // PB Ring auto-detect — fully independent pbring_* pipeline, see
   // pbringGridService.hasDataForCn. Fired in parallel with the real SDS search,
-  // never gates it, and swallows its own failures (see runSearch).
-  const [pbRingCombos, setPbRingCombos] = useState([]); // [{machine_type_name, process_code, has_template}]
-  const [pbRingPicker, setPbRingPicker] = useState(false);
+  // never gates it, and swallows its own failures (see runSearch). Folded
+  // into the normal Process Info table / PDF machine picker (2026-10-11,
+  // user request: no separate "PB Ring PDF" button, make it look exactly
+  // like a normal part) rather than its own button+modal.
+  const [pbRingCombos, setPbRingCombos] = useState([]); // [{machine_type_name, process_code, machine, process_name, has_template}]
 
   // PDF modal state
   const [pdfModal, setPdfModal] = useState(false);
@@ -214,35 +221,38 @@ const SdsV2Page = () => {
 
   const handleSearch = () => runSearch(cn.trim());
 
-  // Opens the PB Ring PDF directly when there's exactly one (machine, process)
-  // combo for this CN; otherwise lets the user pick one first.
-  const openPbRingPdf = (combo) => {
-    // window.open bypasses the axios interceptors that attach the auth header
-    // on normal calls, so the token travels as a query param — same fallback
-    // middleware/auth.js already supports for file-download links, same
-    // pattern handleGeneratePdf above uses for the live SDS PDF.
-    //
-    // `_t: Date.now()` is required, not cosmetic: the server already sends
-    // Cache-Control: no-store, but window.open to a URL that's byte-identical
-    // to one already open in another tab can just FOCUS that existing tab
-    // instead of issuing a fresh request — confirmed live (2026-10-09): a
-    // re-uploaded tooling/grinding-area photo and a freshly-typed CN-override
-    // value both kept showing the stale pre-upload render until this was
-    // added, even though a direct server call always returned the current
-    // data. handleGeneratePdf above already carries this; this one didn't.
-    const params = new URLSearchParams({
-      cn: data.cn,
-      machine_type_name: combo.machine_type_name,
-      process_code: combo.process_code,
-      _t: Date.now(),
-      token: localStorage.getItem('token') || '',
-    }).toString();
-    window.open(`${server.PBRING_GRID_PDF}?${params}`, '_blank');
-  };
-  const handlePbRingButtonClick = () => {
-    if (pbRingCombos.length === 1) return openPbRingPdf(pbRingCombos[0]);
-    setPbRingPicker(true);
-  };
+  // process_code → PB Ring combos (see hasDataForCn). Used both to splice in
+  // a synthetic Process Info row for a process the real factory plan has no
+  // row for, and to add PB Ring machines into openPdfModal's picker for a
+  // process_code the real plan DOES have.
+  const pbRingByProcess = useMemo(() => {
+    const map = {};
+    for (const c of pbRingCombos) {
+      const code = String(c.process_code || '').trim();
+      if (!code) continue;
+      (map[code] = map[code] || []).push(c);
+    }
+    return map;
+  }, [pbRingCombos]);
+
+  // Real process_info rows, unchanged, plus one synthetic row per PB Ring
+  // process_code the real factory plan has no row for at all — otherwise
+  // that process would have no row to attach a PDF button to. Looks exactly
+  // like a real row (same fields the table/expand logic read); the PDF
+  // button opens the same machine picker, just pre-populated from PB Ring
+  // instead of the (empty, for these) factory tool list.
+  const processInfoRows = useMemo(() => {
+    const real = data?.process_info || [];
+    const realCodes = new Set(real.map((r) => String(r.process_code || '').trim()));
+    const extra = Object.keys(pbRingByProcess)
+      .filter((code) => !realCodes.has(code))
+      .map((code) => {
+        const combos = pbRingByProcess[code];
+        const named = combos.find((c) => c.process_name) || combos[0];
+        return { process_code: code, process_eng: named.process_name || '', wc: '' };
+      });
+    return [...real, ...extra];
+  }, [data, pbRingByProcess]);
 
   const openPdfModal = (processRow) => {
     setSelectedProcess(processRow);
@@ -292,6 +302,36 @@ const SdsV2Page = () => {
       Object.keys(mergedMap).forEach(name => { if (mergedMap[name].machine_group === g) delete mergedMap[name]; });
       visibleMembers.forEach(m => { mergedMap[m.machine_type_name] = m; });
     });
+
+    // PB Ring machines for this process_code (see pbRingByProcess). Deliberate:
+    // several PB Ring machine codes (e.g. KVD300) share their real display name with
+    // an already-registered SDS machine (KVD-300CRII) that has its own real
+    // sds_machine_tool config for the same process — PB Ring wins there by decision
+    // (2026-10-11), so the one entry the picker shows for that name always routes to
+    // the PB Ring PDF. No visual marker — it must look exactly like a normal entry.
+    //
+    // When PB Ring has combos for this process, they REPLACE the real candidate list
+    // above rather than merge into it (user request, 2026-10-11): the generic
+    // sds_machine_tool/code-prefix matches (GS-64PFII, MSG-410, PSG-64, …) are every
+    // machine capable of this process code for ANY part, not ones ever configured or
+    // verified for this specific PB Ring workpiece — showing them as "also valid"
+    // choices next to KVD-300CRII/KVD350C was noise, not an alternative.
+    const pbRingForProcess = pbRingByProcess[String(processRow.process_code || '').trim()] || [];
+    if (pbRingForProcess.length) {
+      Object.keys(mergedMap).forEach((name) => delete mergedMap[name]);
+    }
+    pbRingForProcess.forEach(c => {
+      if (!c.machine) return; // no display name to show — nothing sensible to offer
+      mergedMap[c.machine] = {
+        machine_type_name: c.machine,
+        machine_type_code: null,
+        machine_group: null,
+        _pbRing: true,
+        _pbRingKey: c.machine_type_name,
+        _pbRingProcessCode: c.process_code,
+      };
+    });
+
     const merged = Object.values(mergedMap)
       .sort((a, b) => a.machine_type_name.localeCompare(b.machine_type_name));
 
@@ -349,19 +389,37 @@ const SdsV2Page = () => {
     if (!selectedMachine) { message.warning('Please select machine type'); return; }
     setPdfLoading(true);
     try {
-      const params = {
-        cn: data.cn,
-        machine_type_name: selectedMachine,
-        process_code: selectedProcess?.process_code || '',
-        display_name: displayLabelFor(selectedMachine),
-        _t: Date.now(),
-        token: localStorage.getItem('token') || '',
-      };
+      const selectedEntry = filteredMachineTypes.find(m => m.machine_type_name === selectedMachine);
+      // `_t: Date.now()` is required, not cosmetic, on BOTH branches: the server
+      // already sends Cache-Control: no-store, but a URL byte-identical to one
+      // already open in another tab can just FOCUS that tab instead of issuing a
+      // fresh request — confirmed live (2026-10-09) on the (now-removed) standalone
+      // PB Ring button: a re-uploaded photo / freshly-typed override kept showing
+      // the stale pre-upload render until this was added.
+      const params = selectedEntry?._pbRing
+        ? {
+            cn: data.cn,
+            machine_type_name: selectedEntry._pbRingKey,
+            process_code: selectedEntry._pbRingProcessCode || selectedProcess?.process_code || '',
+            _t: Date.now(),
+            token: localStorage.getItem('token') || '',
+          }
+        : {
+            cn: data.cn,
+            machine_type_name: selectedMachine,
+            process_code: selectedProcess?.process_code || '',
+            display_name: displayLabelFor(selectedMachine),
+            _t: Date.now(),
+            token: localStorage.getItem('token') || '',
+          };
       const queryParams = new URLSearchParams(params).toString();
-      
-      // Grid renderer (Chrome) is the production SDS PDF.
-      const baseUrl = `${server.API_URL}api/sds/v2-headless/pdf-chrome/grid`;
-      
+
+      // Grid renderer (Chrome) is the production SDS PDF; PB Ring's own pipeline
+      // (independent tables, never touches sds_*/tooling_*) renders its own grid.
+      const baseUrl = selectedEntry?._pbRing
+        ? server.PBRING_GRID_PDF
+        : `${server.API_URL}api/sds/v2-headless/pdf-chrome/grid`;
+
       const fullUrl = `${baseUrl}?${queryParams}`;
       const a = document.createElement('a');
       a.href = fullUrl;
@@ -387,22 +445,39 @@ const SdsV2Page = () => {
   // send the CN; a new SDS rev automatically starts unsigned and stays in sync.
   const approvalCn = data?.cn || '';
 
+  // sds_approval has no concept of a PB Ring sheet (own pipeline, own tables) — a
+  // real-looking (cn, machine, process) triple for a PB Ring entry would otherwise
+  // query/display approval state for whatever real sheet happens to share that
+  // name, or silently let a "sign" write land on it. PB Ring has its own separate
+  // approval table/endpoint (pbring_sds_approval) instead — see fetchApproval.
+  const pbRingEntry = filteredMachineTypes.find(m => m.machine_type_name === selectedMachine);
+  const isPbRingSelected = !!pbRingEntry?._pbRing;
+
   const fetchApproval = useCallback(async () => {
     if (!approvalCn || !selectedMachine || !selectedProcess?.process_code) { setApproval(null); return; }
     setApprovalLoading(true);
     try {
-      const res = await axios.get(`${server.MTC_SDS_V2_APPROVAL}/state`, {
-        params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code },
-      });
+      const res = isPbRingSelected
+        ? await axios.get(server.PBRING_GRID_APPROVAL, {
+            params: {
+              cn: approvalCn,
+              machine_type_name: pbRingEntry._pbRingKey,
+              process_code: pbRingEntry._pbRingProcessCode || selectedProcess.process_code,
+            },
+          })
+        : await axios.get(`${server.MTC_SDS_V2_APPROVAL}/state`, {
+            params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code },
+          });
       setApproval(res.data?.success ? res.data : null);
     } catch (_) {
       setApproval(null);
     } finally {
       setApprovalLoading(false);
     }
-  }, [approvalCn, selectedMachine, selectedProcess]);
+  }, [approvalCn, selectedMachine, selectedProcess, isPbRingSelected, pbRingEntry]);
 
   // Load approval status whenever the PDF modal opens or its machine/process changes.
+  // fetchApproval itself picks the real vs PB Ring endpoint.
   useEffect(() => {
     if (pdfModal && selectedMachine && selectedProcess?.process_code) fetchApproval();
     else setApproval(null);
@@ -411,12 +486,19 @@ const SdsV2Page = () => {
   const handleSign = async (role) => {
     setSigningRole(role);
     try {
-      const res = await axios.post(server.MTC_SDS_V2_APPROVAL, {
-        cn: approvalCn,
-        machine_type_name: selectedMachine,
-        process_code: selectedProcess.process_code,
-        role,
-      });
+      const res = isPbRingSelected
+        ? await axios.post(server.PBRING_GRID_APPROVAL, {
+            cn: approvalCn,
+            machine_type_name: pbRingEntry._pbRingKey,
+            process_code: pbRingEntry._pbRingProcessCode || selectedProcess.process_code,
+            role,
+          })
+        : await axios.post(server.MTC_SDS_V2_APPROVAL, {
+            cn: approvalCn,
+            machine_type_name: selectedMachine,
+            process_code: selectedProcess.process_code,
+            role,
+          });
       if (res.data?.success) { message.success(`Signed as ${ROLE_LABEL[role]}`); fetchApproval(); }
     } catch (e) {
       message.error(e.response?.data?.error || 'Sign failed');
@@ -427,9 +509,18 @@ const SdsV2Page = () => {
 
   const handleRevoke = async (role) => {
     try {
-      const res = await axios.delete(server.MTC_SDS_V2_APPROVAL, {
-        params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code, role },
-      });
+      const res = isPbRingSelected
+        ? await axios.delete(server.PBRING_GRID_APPROVAL, {
+            params: {
+              cn: approvalCn,
+              machine_type_name: pbRingEntry._pbRingKey,
+              process_code: pbRingEntry._pbRingProcessCode || selectedProcess.process_code,
+              role,
+            },
+          })
+        : await axios.delete(server.MTC_SDS_V2_APPROVAL, {
+            params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code, role },
+          });
       if (res.data?.success) { message.success('Signature revoked'); fetchApproval(); }
     } catch (e) {
       message.error(e.response?.data?.error || 'Revoke failed');
@@ -468,7 +559,14 @@ const SdsV2Page = () => {
         <Spin spinning={approvalLoading}>
           <Space direction="vertical" style={{ width: '100%' }} size={6}>
             {(approval?.state || []).map((s) => {
-              const canRevoke = s.signed && (approval?.isAdmin || String(s.em_id) === String(empNo));
+              // PB Ring's /approval response has no `isAdmin`/`blockedByOrder` —
+              // own simpler gate (one isPbringAdmin tier, not per-role config/
+              // self-revoke) and `canSign` there already means "order allows it"
+              // with no `permitted` dimension baked in, so deriving blockedByOrder
+              // from it is exact. The real shape already sends both fields.
+              const canRevoke = s.signed && (isPbRingSelected ? isPbringAdminUser : (approval?.isAdmin || String(s.em_id) === String(empNo)));
+              const canSign = isPbRingSelected ? (s.canSign && isPbringAdminUser) : s.canSign;
+              const blockedByOrder = s.blockedByOrder ?? (!s.signed && !s.canSign);
               return (
                 <div key={s.role} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Tag color={s.signed ? 'red' : 'default'} style={{ width: 90, textAlign: 'center', margin: 0 }}>
@@ -482,10 +580,10 @@ const SdsV2Page = () => {
                     </Space>
                   ) : (
                     <Text type="secondary" style={{ flex: 1, fontStyle: 'italic' }}>
-                      {s.blockedByOrder ? `Waiting for ${ROLE_LABEL[PREV_ROLE[s.role]]} to sign first` : 'Not signed yet'}
+                      {blockedByOrder ? `Waiting for ${ROLE_LABEL[PREV_ROLE[s.role]]} to sign first` : 'Not signed yet'}
                     </Text>
                   )}
-                  {s.canSign && !s.signed && (
+                  {canSign && !s.signed && (
                     <Button size="small" type="primary" icon={<EditOutlined />}
                       loading={signingRole === s.role} onClick={() => handleSign(s.role)}>
                       Sign
@@ -1199,15 +1297,6 @@ const SdsV2Page = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {pbRingCombos.length > 0 && (
-                    <Button
-                      icon={<FilePdfOutlined />}
-                      size="large"
-                      onClick={handlePbRingButtonClick}
-                    >
-                      PB Ring PDF
-                    </Button>
-                  )}
                   <Button
                     icon={<HistoryOutlined />}
                     size="large"
@@ -1334,14 +1423,14 @@ const SdsV2Page = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text strong style={{ color: theme.colors.text }}>Process Info</Text>
                         <Text type="secondary" style={{ fontSize: '12px' }}>
-                          {data.process_info?.length || 0} / {data.process_info?.length || 0} Items
+                          {processInfoRows.length} / {processInfoRows.length} Items
                         </Text>
                       </div>
                     }
                     style={{ marginBottom: 16, background: theme.colors.cardBackground }}
                   >
                     <Table
-                      dataSource={data.process_info.map((r, i) => ({ ...r, key: i }))}
+                      dataSource={processInfoRows.map((r, i) => ({ ...r, key: i }))}
                       columns={processInfoCols}
                       pagination={false}
                       size="small"
@@ -1467,27 +1556,6 @@ const SdsV2Page = () => {
             </Text>
           </Space>
         )}
-      </Modal>
-
-      <Modal
-        title="PB Ring PDF — select machine / process"
-        open={pbRingPicker}
-        onCancel={() => setPbRingPicker(false)}
-        footer={null}
-        destroyOnHidden
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          {pbRingCombos.map((combo) => (
-            <Button
-              key={`${combo.machine_type_name}-${combo.process_code}`}
-              block
-              icon={<FilePdfOutlined />}
-              onClick={() => { setPbRingPicker(false); openPbRingPdf(combo); }}
-            >
-              {combo.machine_type_name} · Process {combo.process_code}
-            </Button>
-          ))}
-        </Space>
       </Modal>
 
       <Modal
