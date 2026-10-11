@@ -70,7 +70,30 @@ approval AS (
     FROM pbring_sds_approval
 )
 SELECT c.mc_key, c.cn, c.process_code,
-       (mt.grid_template_id IS NOT NULL) AS has_machine_template,
+       -- "Excel Config" for PB Ring requires BOTH: the machine has a PDF
+       -- layout assigned (pbring_machine_type.grid_template_id — without
+       -- this nothing can render at all, regardless of params), AND the
+       -- GRINDING CONDITION values have actually been typed in for THIS
+       -- part. The first half is a one-time, near-universal setup step
+       -- (true for almost every combo the day a machine is configured) so
+       -- it never gated anything per-CN on its own — user finding
+       -- (2026-10-11): sheets were reporting NO_STAMP (tool+config ready,
+       -- just needs a signature) with zero grinding-condition data
+       -- entered. Confirmed live: the row_N_A/row_N_F rows
+       -- pbring_sds_parameter carries are the auto-seeded LABELS/UNITS
+       -- from the original xlsx import
+       -- (updated_by='import:pbring-sds-template-v3.4.2-labels'), not
+       -- readings anyone typed in. A real per-CN row (cn IS NOT NULL) only
+       -- ever exists from an admin actually entering a value for that
+       -- part — confirmed live: 38 such rows exist total, for exactly 1
+       -- of 3,416 combos. Scoped the same way resolveManualParamMap
+       -- resolves precedence: a process-agnostic override (process_code
+       -- IS NULL) counts for every process of that CN.
+       (mt.grid_template_id IS NOT NULL) AND EXISTS (
+         SELECT 1 FROM pbring_sds_parameter hp
+          WHERE hp.cn = c.cn AND hp.machine_type_name = c.mc_key
+            AND (hp.process_code IS NULL OR hp.process_code = c.process_code)
+       ) AS has_machine_template,
        COALESCE(t.has_tooling_match, false) AS has_tooling_match,
        COALESCE(a.stamped_full, false) AS stamped_full,
        mn.machine
