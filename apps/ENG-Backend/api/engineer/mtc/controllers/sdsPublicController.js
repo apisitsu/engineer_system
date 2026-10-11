@@ -49,6 +49,18 @@
  *       every usable machine_code with the SDS machine it resolves to.
  *   GET /api/public/sds/lots?cn=<CN>&process_code=<PC>&key=<SECRET>
  *       the lots the production plan holds for that CN, so `lot` is picked, never typed.
+ *
+ * PB Ring (2026-10-11): checked BEFORE the real sds_machine_type_code resolution above,
+ * using the SAME `machine`/`machine_type_name` the caller already sends — no link format
+ * change for the calling team. Mirrors the in-app picker's "PB Ring wins" rule
+ * (SdsV2Page.jsx openPdfModal): several PB Ring machine codes share their real display
+ * name with an already-registered SDS machine (e.g. KVD-300CRII), and for a (cn,
+ * process_code) PB Ring has data for, that name now always renders the PB Ring sheet here
+ * too — consistent with the in-app page rather than silently disagreeing with it. See
+ * resolvePbRingCombo. Logged to sds_print_log exactly like a real print (user decision,
+ * 2026-10-11) — no separate source value, so it reads identically to any other row in the
+ * admin Print Log history. parts_no/lot_verified still resolve correctly regardless, since
+ * PB Ring's CN is a real factory CN either way.
  */
 
 const express = require('express');
@@ -57,8 +69,43 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const headless = require('./sdsV2HeadlessController');
 const cnFormat = require('../utils/cnFormat');
 const sdsPrintLog = require('../services/sdsPrintLog');
+const pbring = require('../../pbring/pbringGridService');
+const { renderPdf: renderPbRingPdf } = require('../../pbring/pdfRender');
 
 const router = express.Router();
+
+// PB Ring integration (2026-10-11): the in-app SDS page now folds PB Ring
+// combos into its normal process list/machine picker, "PB Ring wins" when a
+// PB Ring machine code shares its real display name with an
+// already-registered SDS machine (see SdsV2Page.jsx openPdfModal). This
+// public link had none of that — it only ever resolved against the real
+// sds_machine_type_code registry, so a PB-Ring-only machine 400'd and a
+// name-colliding one (e.g. KVD-300CRII) always rendered the REAL sheet,
+// the opposite of the in-app behaviour for the identical request. Checked
+// BEFORE the real resolution below, same precedence as the in-app picker.
+//
+// Hyphen/space-insensitive compare, same normalization sdsMachineByAny
+// below uses — a caller may send "KVD300CRII" or "KVD-300CRII" and both
+// should resolve to PB Ring's "KVD-300CRII" display name (or the raw
+// internal mc_key "KVD300", in case a caller ever has that instead).
+const normMachineKey = (s) => String(s || '').toUpperCase().replace(/[-\s]/g, '');
+
+// Resolves (cn item-no, process_code, raw machine input) to a PB Ring combo
+// {machine_type_name (mc_key), machine (display name), ...} or null. Scoped
+// to the exact process_code — PB Ring's own cn+process combos can repeat
+// the same machine across processes, so an unscoped match could pick the
+// wrong one. No match on a missing process_code: buildStandardGridForMachine/
+// buildTurningGridForMachine both require it, so there is nothing to render.
+async function resolvePbRingCombo(cnItemNo, processCode, rawMachineInput) {
+  if (!cnItemNo || !processCode || !rawMachineInput) return null;
+  const { machines } = await pbring.hasDataForCn(cnItemNo);
+  if (!machines.length) return null;
+  const target = normMachineKey(rawMachineInput);
+  return machines.find((m) =>
+    String(m.process_code) === String(processCode) &&
+    (normMachineKey(m.machine_type_name) === target || normMachineKey(m.machine) === target)
+  ) || null;
+}
 
 // Match an sds_machine_type_code by name → code → group (active rows only). The factory
 // tables sometimes store hyphen-less names (e.g. 'TSG300W') while SDS uses the canonical
@@ -143,6 +190,61 @@ router.get('/sds/pdf', async (req, res) => {
   const lot = String(req.query.lot || '').trim();
 
   try {
+    // PB Ring check FIRST, same precedence as the in-app picker's "PB Ring
+    // wins" rule — see the comment above resolvePbRingCombo. cnItemNo is the
+    // plain 6-digit form every pbring_* table stores (cn above is already
+    // normalized to control-no form for the real pipeline).
+    const cnItemNo = cnFormat.toItemNo(cn) || cnRaw;
+    const rawMachineInput = String(req.query.machine_type_name || req.query.machine || '').trim();
+    const pbRingCombo = await resolvePbRingCombo(cnItemNo, process_code, rawMachineInput);
+    if (pbRingCombo) {
+      const mcKey = pbRingCombo.machine_type_name;
+      const grid = pbring.TURNING_MACHINE_NAMES.includes(mcKey)
+        ? await pbring.buildTurningGridForMachine(cnItemNo, mcKey, process_code)
+        : await pbring.buildStandardGridForMachine(cnItemNo, mcKey, process_code);
+      if (grid) {
+        const html = pbring.buildGridPdfHtml(grid);
+        const pdfBuffer = await renderPbRingPdf(html);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="SDS_${cnItemNo}_${pbRingCombo.machine || mcKey}.pdf"`);
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.send(pdfBuffer);
+
+        // Logged exactly like a real print (user decision, 2026-10-11): no
+        // separate source value, no flag — a PB Ring print lands in the same
+        // sds_print_log / admin Print Log history as any other `source:
+        // 'public'` row, same as the picker shows PB Ring machines with no
+        // visual marker. parts_no/lot_verified still resolve correctly
+        // because PB Ring's CN is a real factory CN either way.
+        const { conditionByToolNumber } = await pbring
+          .buildPbRingValueMap(cnItemNo, mcKey, process_code)
+          .catch(() => ({ conditionByToolNumber: {} }));
+        // Grinding machines have no UI to type tool_detail (Tool Condition is
+        // turning-only) — same fallback the rendered grid itself uses
+        // (applyToolSlotsToGrid): pbring_tooling.tooling_item by tool_code_base.
+        const toolCodes = [...new Set(
+          Object.values(conditionByToolNumber || {}).map((r) => r.tooling_no).filter(Boolean)
+        )];
+        const itemNameByToolCode = await pbring
+          .getToolingItemNames(mcKey, cnItemNo, toolCodes)
+          .catch(() => ({}));
+        const tooling = Object.entries(conditionByToolNumber || {}).map(([slot, row]) => ({
+          slot,
+          name: row.tool_detail || (row.tooling_no && itemNameByToolCode[row.tooling_no]) || '',
+          dwg: row.tooling_no || '',
+        }));
+        sdsPrintLog.record({
+          cn, machineTypeName: pbRingCombo.machine || mcKey,
+          machineCode: rawMachineInput, processCode: process_code, lot,
+          source: 'public', pdfBuffer, tooling, req,
+        });
+        return;
+      }
+      // grid null: the combo's own machine isn't registered in
+      // pbring_machine_type (data exists, template assignment doesn't) —
+      // fall through to the real pipeline rather than 404 outright.
+    }
+
     // machine_type_name wins if given; otherwise resolve the machine code / WC / group.
     const machine_type_name =
       String(req.query.machine_type_name || '').trim() ||

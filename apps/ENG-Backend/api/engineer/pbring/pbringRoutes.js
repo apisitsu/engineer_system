@@ -92,6 +92,20 @@ router.post('/cost/pending/:id/reject', isPbringWriter, pbringController.rejectP
 router.get('/grid/pdf', pbringGridController.getPdf);
 router.get('/grid/has-data', pbringGridController.getHasData);
 
+// Sheet approval (Prepared/Checked/Approved) — own table (pbring_sds_approval),
+// never the real sds_approval (see pbringGridService.js's comment above the
+// functions). Read open to any authenticated user, same as the PDF route;
+// sign/revoke gated isPbringAdmin like every other structural PB Ring action
+// (+New HW, Delete HW, cost approve/reject).
+router.get('/grid/approval', pbringGridController.getApproval);
+router.post('/grid/approval', isPbringAdmin, pbringGridController.postApproval);
+router.delete('/grid/approval', isPbringAdmin, pbringGridController.deleteApproval);
+
+// Auto Stamp config — own table (pbring_auto_stamp_config), own gate.
+// Disabled by default; see pbringAutoStamp.js.
+router.get('/grid/auto-stamp/config', pbringGridController.getAutoStampConfig);
+router.put('/grid/auto-stamp/config', isPbringAdmin, pbringGridController.putAutoStampConfig);
+
 // Grid-template admin (Phase 5.6) — machine<->template assignment, default,
 // and re-run the xlsx import. Gated on isPbringAdmin like the other
 // structural actions above (+New HW, Delete HW).

@@ -19,6 +19,9 @@
  */
 
 const { engPool } = require('../../../instance/eng_db');
+const { maqPool } = require('../../../instance/maq_db');
+const { pool: rodpcPool } = require('../../../instance/instance');
+const sdsV2SearchService = require('../mtc/services/sdsV2SearchService');
 const { classifyParam, importAllTemplates, TEMPLATE_NAMES } = require('../mtc/db_migrations/lib/pbringGridImport');
 
 function escHtml(s) {
@@ -64,22 +67,63 @@ async function buildPbRingValueMap(cn, machineTypeName, processCode) {
     [cn, processCode, machineTypeName]
   );
   const paramRow = paramRows[0];
-  // Header fields (Machine/PN/CN/Process/CT/Revision/...) live as their own
-  // row columns on pbring_sds_param, not inside params JSONB — only the
-  // grinding-condition values (Top_GW_Speed, DressTimeR, ...) are in there.
-  // Verified live: a row with a populated `params` blob had `{{CN}}`/`{{PN}}`
-  // render blank until these were merged in.
-  const paramMap = paramRow ? {
-    ...paramRow.params,
-    CN: paramRow.cn,
-    PN: paramRow.pn,
-    Process_Code: paramRow.process_code,
-    Process: paramRow.process_name,
-    Machine: paramRow.machine,
-    CT: paramRow.ct,
-    REV: paramRow.rev,
-    Revision: paramRow.rev,
-  } : {};
+  // Header fields (Machine/PN/CN/Process/...) live as their own row columns
+  // on pbring_sds_param, not inside params JSONB — only the grinding-condition
+  // values (Top_GW_Speed, DressTimeR, ...) are in there. Verified live: a row
+  // with a populated `params` blob had `{{CN}}`/`{{PN}}` render blank until
+  // these were merged in.
+  const paramMap = paramRow ? { ...paramRow.params } : {};
+  if (paramRow) {
+    paramMap.CN = paramRow.cn;
+    paramMap.Process_Code = paramRow.process_code;
+    paramMap.Process = paramRow.process_name;
+    paramMap.Machine = paramRow.machine;
+  }
+
+  // PART NO / REV / MAT'TYPE / CYCLE TIME (2026-10-11): pulled live from the
+  // same factory tables the real SDS uses — lpb.eng_item, eng_cad_rev_data,
+  // eng_bom+eng_mcode, eng_process_info, via the same searchByCn the live SDS
+  // PDF calls — rather than pbring_sds_param's own pn/ct/rev columns. PB
+  // Ring's CN is a real factory CN (CLAUDE.md "why strict separation
+  // matters"), so the lookup applies unchanged. `rev`/`ct` on
+  // pbring_sds_param were a one-time xlsx import that never carried a value
+  // for any of the 28 PB Ring machines (verified live: 0 of ~2,900 rows) —
+  // `pn` did import and stays as a last-resort fallback for a CN the factory
+  // lookup itself can't find. Fails open: a factory-lookup error must never
+  // block rendering the rest of the sheet.
+  let factory = null;
+  try {
+    factory = await sdsV2SearchService.searchByCn(cn, maqPool, rodpcPool, engPool);
+  } catch (err) {
+    console.warn(`[pbring] factory header lookup failed for cn=${cn}: ${err.message}`);
+  }
+  let factoryCt = null;
+  if (factory && Array.isArray(factory.process_info)) {
+    const fp = processCode
+      ? factory.process_info.find((r) => String(r.process_code) === String(processCode)) || factory.process_info[0]
+      : factory.process_info[0];
+    if (fp) {
+      const forThisMachine = fp.actual_ct_by_machine?.[machineTypeName];
+      factoryCt = forThisMachine ? forThisMachine.ct : (fp.actual_ct ?? fp.ct ?? null);
+    }
+  }
+  paramMap.PN = (factory && factory.parts_no) || paramRow?.pn || '';
+  paramMap.REV = (factory && factory.dwg_rev) || 'NC';
+  paramMap.Revision = paramMap.REV;
+  paramMap.Material = factory ? (factory.sheet_material ?? factory.material?.material ?? '') : '';
+  paramMap.CT = factoryCt != null ? String(factoryCt) : (paramRow?.ct ?? '');
+  // Setup Data Sheet's OWN revision (cell AH4 on the Standard template — distinct
+  // from the part drawing's REV above). pbring_sds_param.rev is the only place PB
+  // Ring ever recorded it; check that old data first, and start at 'NC' when it
+  // was never set (true for every row today, same default the live SDS approval
+  // flow uses for its own sds_rev).
+  paramMap.SdsRev = paramRow?.rev || 'NC';
+  // Every PB Ring part is this one fixed category, unlike live SDS where
+  // CATEGORY is derived per part class (Ball/Race/Body/... Parts) — it is
+  // not a per-CN factory value to look up. Still overridable like every
+  // other auto-filled field (applyHeaderOverridesToGrid / Turning's manual
+  // field run after this and win on a non-blank admin value).
+  paramMap.Category = 'PB Ring Parts';
 
   const { rows: condRows } = await engPool.query(
     `SELECT * FROM pbring_sds_condition WHERE cn = $1 AND process_code = $2 AND mc_key = $3`,
@@ -250,24 +294,38 @@ function buildGridPdfHtml(grid) {
 }
 
 /**
- * Lightweight existence check for the SdsV2Page.jsx auto-detect button. Returns
- * one entry per (machine, process_code) combo so the frontend has everything
- * `grid/pdf` needs without a second round trip — not just which machines have
- * data, since a machine alone is not enough to render (the route also requires
+ * Lightweight existence check for SdsV2Page.jsx's merged process-row flow
+ * (2026-10-11 redesign — folded into the normal process list/PDF picker
+ * instead of a separate "PB Ring PDF" button). Returns one entry per
+ * (machine, process_code) combo, carrying `machine` (the real display name,
+ * e.g. "KVD-300CRII") and `process_name` so the frontend can render a PB
+ * Ring combo indistinguishably from a real process_info/machine-picker row
+ * without a second round trip — not just which machines have data, since a
+ * machine alone is not enough to render (the route also requires
  * process_code).
  */
 async function hasDataForCn(cn) {
   const { rows: paramRows } = await engPool.query(
-    `SELECT DISTINCT mc_key, process_code FROM pbring_sds_param WHERE cn = $1`,
+    `SELECT DISTINCT mc_key, process_code, machine, process_name FROM pbring_sds_param WHERE cn = $1`,
     [cn]
   );
   const { rows: condRows } = await engPool.query(
-    `SELECT DISTINCT mc_key, process_code FROM pbring_sds_condition WHERE cn = $1`,
+    `SELECT DISTINCT mc_key, process_code, machine FROM pbring_sds_condition WHERE cn = $1`,
     [cn]
   );
   const comboByKey = new Map();
   for (const r of [...paramRows, ...condRows]) {
-    comboByKey.set(`${r.mc_key}||${r.process_code}`, { machine_type_name: r.mc_key, process_code: r.process_code });
+    const key = `${r.mc_key}||${r.process_code}`;
+    const existing = comboByKey.get(key) || {};
+    // pbring_sds_condition has no process_name column, so a combo seen only
+    // there keeps whatever the param-row pass already set (or null) rather
+    // than being overwritten blank.
+    comboByKey.set(key, {
+      machine_type_name: r.mc_key,
+      process_code: r.process_code,
+      machine: r.machine || existing.machine || null,
+      process_name: existing.process_name || r.process_name || null,
+    });
   }
   const combos = [...comboByKey.values()];
   if (!combos.length) return { exists: false, machines: [] };
@@ -285,6 +343,8 @@ async function hasDataForCn(cn) {
     .map((c) => ({
       machine_type_name: c.machine_type_name,
       process_code: c.process_code,
+      machine: c.machine,
+      process_name: c.process_name,
       has_template: templateByName.get(c.machine_type_name),
     }));
 
@@ -512,17 +572,18 @@ async function loadStandardGridLive() {
 async function loadToolSlotAddressesLive() {
   const { rows } = await engPool.query(
     `SELECT cell_address, param_key FROM sds_excel_mapping
-      WHERE machine_type_name IS NULL AND (param_key LIKE 'tool_dwg_no_T%' OR param_key LIKE 'maker_T%')`
+      WHERE machine_type_name IS NULL AND (param_key LIKE 'tool_dwg_no_T%' OR param_key LIKE 'maker_T%' OR param_key LIKE 'tool_name_T%')`
   );
   const addr = {};
+  const FIELD = { tool_dwg_no: 'dwgNo', maker: 'maker', tool_name: 'name' };
   for (const r of rows) {
-    const m = /^(tool_dwg_no|maker)_T(\d+)$/.exec(r.param_key);
+    const m = /^(tool_dwg_no|maker|tool_name)_T(\d+)$/.exec(r.param_key);
     if (!m) continue;
     const slot = `T${m[2].padStart(2, '0')}`;
     addr[slot] = addr[slot] || {};
-    addr[slot][m[1] === 'tool_dwg_no' ? 'dwgNo' : 'maker'] = r.cell_address;
+    addr[slot][FIELD[m[1]]] = r.cell_address;
   }
-  return addr; // { T01: { dwgNo: 'M24', maker: 'M25' }, ... T20 }
+  return addr; // { T01: { dwgNo: 'M24', maker: 'M25', name: 'L16' }, ... T20 }
 }
 
 /**
@@ -537,6 +598,7 @@ async function loadToolSlotAddressesLive() {
 const HEADER_FIELD_TO_PARAM_KEY = {
   machine_type_name: 'Machine', parts_no: 'PN', cn: 'CN',
   process_code: 'Process_Code', process_name: 'Process', dwg_rev: 'REV', ct: 'CT',
+  material: 'Material', sds_rev: 'SdsRev', category: 'Category',
 };
 async function loadHeaderAddressesLive() {
   const { rows } = await engPool.query(
@@ -554,10 +616,17 @@ function applyHeaderToGrid(grid, headerAddresses, paramMap) {
     const cellAddr = headerAddresses[sdsField];
     const value = paramMap[pbKey];
     if (!cellAddr || value == null || value === '') continue;
-    grid.cells[addrToRC(cellAddr)] = {
+    const key = addrToRC(cellAddr);
+    const existing = grid.cells[key] || {};
+    // Merge onto the Standard template's own designed alignment instead of
+    // replacing it outright — AH4 (Setup Data Sheet Rev) is authored centered
+    // (`a:{h:'center'}`) in the live grid_json, same as the real SDS renderer's
+    // own setCell (sdsV2HeadlessController.js) preserves `ex.a`. Overwriting
+    // unconditionally printed "NC" left-aligned under a centered header.
+    grid.cells[key] = {
       v: String(value),
-      f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' },
-      a: { h: null, v: 'middle', wrap: false },
+      f: { name: 'Calibri', size: 10, bold: false, italic: false, ...(existing.f || {}), color: '#c00000' },
+      a: { h: null, v: 'middle', wrap: false, ...(existing.a || {}) },
     };
   }
 }
@@ -582,7 +651,32 @@ function orderToolNumbers(keys) {
 }
 
 /** Writes each (tool_number -> condition row) into its assigned T01-T20 slot's real cell addresses. */
-function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses) {
+/**
+ * Grinding machines have no UI to type pbring_sds_condition.tool_detail
+ * directly (Tool Condition is turning-only, by user decision 2026-10-10),
+ * so the tool NAME printed in tool_name_T0N comes from
+ * pbring_tooling.tooling_item instead — the same "Item" column the
+ * Tooling PB Ring monitor page's own search table already shows. Join key
+ * is tool_code_base (confirmed live 2026-10-11: '4036-02-0001' -> 'GUIDE
+ * PLATE', '4036-01-0001' -> 'CARRIER' for KVD300/294065 — tool_code_base is
+ * tool_code with its "(Rev.NC)" suffix already stripped, and matches
+ * pbring_sds_condition.tooling_no exactly). Bulk fetch, not per-row
+ * (db-patterns.md); `DISTINCT ON` picks the earliest row when more than
+ * one pbring_tooling entry happens to share a tool_code_base for this CN.
+ */
+async function getToolingItemNames(mcKey, cn, toolCodes) {
+  if (!toolCodes.length) return {};
+  const { rows } = await engPool.query(
+    `SELECT DISTINCT ON (tool_code_base) tool_code_base, tooling_item
+       FROM pbring_tooling
+      WHERE mc_key = $1 AND cn = $2 AND tool_code_base = ANY($3)
+      ORDER BY tool_code_base, id`,
+    [mcKey, cn, toolCodes]
+  );
+  return Object.fromEntries(rows.map((r) => [r.tool_code_base, r.tooling_item]));
+}
+
+function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses, itemNameByToolCode = {}) {
   const ordered = orderToolNumbers(Object.keys(conditionByToolNumber));
   ordered.forEach((toolNumber, i) => {
     const slot = `T${String(i + 1).padStart(2, '0')}`;
@@ -596,6 +690,10 @@ function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses) {
     };
     colorCell(addr.dwgNo, row.tooling_no);
     colorCell(addr.maker, row.maker);
+    // tool_detail wins if someone ever does type it directly (e.g. a
+    // future turning-style edit path); otherwise fall back to the Tooling
+    // PB Ring list's own Item name for this exact tool_code.
+    colorCell(addr.name, row.tool_detail || (row.tooling_no && itemNameByToolCode[row.tooling_no]));
   });
 }
 
@@ -1059,7 +1157,9 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
   applyHeaderToGrid(grid, headerAddresses, paramMap);
 
   const toolAddresses = await loadToolSlotAddressesLive();
-  applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses);
+  const toolCodes = [...new Set(Object.values(conditionByToolNumber).map((r) => r.tooling_no).filter(Boolean))];
+  const itemNameByToolCode = await getToolingItemNames(machineTypeName, cn, toolCodes);
+  applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses, itemNameByToolCode);
 
   const manualParamMap = await resolveManualParamMap(machineTypeName, cn, processCode);
   applyManualParamsToGrid(grid, manualParamMap);
@@ -1149,8 +1249,22 @@ async function loadTurningGridLive() {
   return JSON.parse(rows[0].grid_json);
 }
 
+// AH3 (SETUP DATA SHEET REV. value) and AA5 (MAT'L TYPE value) were missed
+// when this dict was first built — confirmed live by dumping grid_json id=9's
+// row 3/5 cells: AD3/M5/Y5 are the static labels ("SETUP DATA SHEET REV. :",
+// "MAT'L SIZE : ", "MAT'L TYPE : ") and AH3/O5/AA5 are their pre-styled
+// (color #ff0000) blank value boxes, same convention as every other field
+// here. The real "Turning" template's own O5 equivalent has no factory
+// source (its sds_excel_mapping seed says so explicitly) — but PB Ring's
+// own one-time xlsx import DID capture a per-CN value for it: it lives in
+// pbring_sds_param.params as 'Material_size' (verified live, e.g. CN
+// 294065/QTSMART200M/0081 -> "Ø 57.15"), just never wired to a cell before.
+// paramMap already carries it verbatim (buildPbRingValueMap spreads
+// paramRow.params in) — no extra resolution needed, unlike every other
+// factory-sourced field above.
 const TURNING_PB_HEADER_ADDR = {
   machine_type_name: 'C3', parts_no: 'O3', dwg_rev: 'U3', ct: 'C4', cn: 'O4',
+  sds_rev: 'AH3', material: 'AA5', material_size: 'O5', category: 'C5',
 };
 // process_code_name is a combined field (code + name, like the old
 // template), built from two paramMap keys — not a 1:1 lookup, so it's
@@ -1160,27 +1274,37 @@ const TURNING_PB_PROCESS_ADDR = 'AA3';
 
 // Manual-override fields, same mechanism and storage (pbring_sds_parameter,
 // flat keys) as PBRING_HEADER_OVERRIDE_FIELDS already uses for the Standard
-// template — this layout added Category/Program No/Program Name cells the
-// old "Turning" never had. No auto-source for any of these on turning
-// machines, so they render blank until an admin types a machine-default or
-// CN-override value for them, exactly like Standard's Program No/Name.
+// template — this layout added Category/Program No/Program Name/Mat'l Size
+// cells the old "Turning" never had. Program No/Program Rev have no
+// auto-source and render blank until an admin types a value; Category and
+// Mat'l Size DO auto-fill now (applyTurningHeaderToGrid, run first) — these
+// entries just let an admin override that default per machine or per CN,
+// applied after and winning on any non-blank value, same precedence as
+// Standard's CT override.
 const TURNING_PB_HEADER_OVERRIDE_FIELDS = [
   { key: 'program_no', label: 'Program No', cell: 'AA4' },
-  { key: 'program_name', label: 'Program Name', cell: 'AH4' },
+  { key: 'program_name', label: 'Program Rev', cell: 'AH4' },
   { key: 'category', label: 'Category', cell: 'C5' },
+  { key: 'material_size', label: "Mat'l Size", cell: 'O5' },
 ];
 
 function applyTurningHeaderToGrid(grid, paramMap) {
   for (const [sdsField, pbKey] of Object.entries({
     machine_type_name: 'Machine', parts_no: 'PN', dwg_rev: 'REV', ct: 'CT', cn: 'CN',
+    sds_rev: 'SdsRev', material: 'Material', material_size: 'Material_size', category: 'Category',
   })) {
     const cellAddr = TURNING_PB_HEADER_ADDR[sdsField];
     const value = paramMap[pbKey];
     if (!cellAddr || value == null || value === '') continue;
-    grid.cells[addrToRC(cellAddr)] = {
+    const key = addrToRC(cellAddr);
+    const existing = grid.cells[key] || {};
+    // Merge onto the template's own designed alignment (AH3 is authored
+    // right-aligned) instead of replacing it — see the Standard template's
+    // applyHeaderToGrid fix for the same bug (AH4 losing its center align).
+    grid.cells[key] = {
       v: String(value),
-      f: { name: 'Calibri', size: 10, bold: false, italic: false, color: '#c00000' },
-      a: { h: null, v: 'middle', wrap: false },
+      f: { name: 'Calibri', size: 10, bold: false, italic: false, ...(existing.f || {}), color: '#c00000' },
+      a: { h: null, v: 'middle', wrap: false, ...(existing.a || {}) },
     };
   }
   const code = paramMap.Process_Code, name = paramMap.Process;
@@ -1297,13 +1421,174 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
   return grid;
 }
 
+// ── PB Ring sheet approval (Prepared/Checked/Approved) ──────────────────────
+// Own table (pbring_sds_approval, migration 20261015_), own permission gate
+// (isPbringAdmin, in pbringRoutes.js) — never the real sds_approval /
+// sds_approval_role_config. See the migration header for why: several PB
+// Ring machine codes share their real display name with an already-
+// registered SDS machine, and signing into the shared table under that name
+// would write into the same row a real engineer's production approval
+// lives in. Wide, one-row-per-sheet shape mirrors sds_approval, minus
+// sds_rev-keying, dept/source columns, backfill and Kanban board intake —
+// out of scope for this first version (user decision 2026-10-11: the
+// 3-step SEQUENCE, not the full configurable role-matrix).
+const PBRING_APPROVAL_ROLE_ORDER = ['prepared', 'checked', 'approved'];
+
+async function getPbRingApproval(cn, machineTypeName, processCode) {
+  const { rows } = await engPool.query(
+    `SELECT * FROM pbring_sds_approval WHERE cn = $1 AND machine_type_name = $2 AND process_code = $3`,
+    [cn, machineTypeName, processCode]
+  );
+  return rows[0] || null;
+}
+
+function pbRingRoleRec(row, role) {
+  if (!row) return null;
+  const emId = row[`${role}_em_id`];
+  if (!emId) return null;
+  return { em_id: emId, signer_name: row[`${role}_name`] || '', signed_at: row[`${role}_at`] || null };
+}
+
+// role is validated against PBRING_APPROVAL_ROLE_ORDER before use, so the
+// interpolated column names are a fixed whitelist (no user input in SQL) —
+// same pattern as sdsApprovalController.js's roleCols.
+function pbRingRoleCols(role) {
+  return { em_id: `${role}_em_id`, name: `${role}_name`, at: `${role}_at`, source: `${role}_source` };
+}
+
+/**
+ * Sign one role. `source` distinguishes 'live' (someone pressed Sign) from
+ * 'auto' (pbringAutoStamp.js, the configured responsible person) — same
+ * governance reason the real system's sds_approval keeps it: the seal
+ * carries a real person's name even when they did not press Sign.
+ * Previous role must already be signed (sequential, same for both sources
+ * — auto-stamp's own caller already walks the roles in order and stops at
+ * the first unconfigured one, but this check is what actually enforces it).
+ */
+async function signPbRingApproval(cn, machineTypeName, processCode, role, empno, signerName, source = 'live') {
+  if (!PBRING_APPROVAL_ROLE_ORDER.includes(role)) {
+    throw new Error(`role must be one of ${PBRING_APPROVAL_ROLE_ORDER.join(', ')}`);
+  }
+  const idx = PBRING_APPROVAL_ROLE_ORDER.indexOf(role);
+  if (idx > 0) {
+    const existing = await getPbRingApproval(cn, machineTypeName, processCode);
+    const prev = PBRING_APPROVAL_ROLE_ORDER[idx - 1];
+    if (!pbRingRoleRec(existing, prev)) {
+      const err = new Error(`'${prev}' must be signed before '${role}'`);
+      err.status = 409;
+      throw err;
+    }
+  }
+  const c = pbRingRoleCols(role);
+  const { rows } = await engPool.query(
+    `INSERT INTO pbring_sds_approval (cn, machine_type_name, process_code, ${c.em_id}, ${c.name}, ${c.at}, ${c.source})
+     VALUES ($1,$2,$3,$4,$5, now(), $6)
+     ON CONFLICT (cn, machine_type_name, process_code)
+     DO UPDATE SET ${c.em_id} = EXCLUDED.${c.em_id}, ${c.name} = EXCLUDED.${c.name}, ${c.at} = now(), ${c.source} = EXCLUDED.${c.source}, updated_at = now()
+     RETURNING *`,
+    [cn, machineTypeName, processCode, empno, signerName, source]
+  );
+  return rows[0];
+}
+
+/** Revoke one role's signature. Deletes the row once every role is unsigned. */
+async function revokePbRingApproval(cn, machineTypeName, processCode, role) {
+  if (!PBRING_APPROVAL_ROLE_ORDER.includes(role)) {
+    throw new Error(`role must be one of ${PBRING_APPROVAL_ROLE_ORDER.join(', ')}`);
+  }
+  const c = pbRingRoleCols(role);
+  const { rows } = await engPool.query(
+    `UPDATE pbring_sds_approval SET ${c.em_id} = NULL, ${c.name} = NULL, ${c.at} = NULL, ${c.source} = NULL, updated_at = now()
+      WHERE cn = $1 AND machine_type_name = $2 AND process_code = $3
+      RETURNING *`,
+    [cn, machineTypeName, processCode]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  if (PBRING_APPROVAL_ROLE_ORDER.every((r) => !row[`${r}_em_id`])) {
+    await engPool.query(`DELETE FROM pbring_sds_approval WHERE id = $1`, [row.id]);
+  }
+  return row;
+}
+
+// ── Auto Stamp config (single row, id=1) — read by pbringAutoStamp.js ───────
+// No role-config fallback (unlike the real sds_auto_stamp_config, which
+// falls back to sds_approval_role_config) — PB Ring has no equivalent
+// configurable permission matrix. The explicit em_id per role IS the only
+// source, consistent with isPbringAdmin being the one gate everywhere else
+// in this domain.
+async function getPbRingAutoStampConfig() {
+  const { rows } = await engPool.query(`SELECT * FROM pbring_auto_stamp_config WHERE id = 1`);
+  const r = rows[0] || {};
+  return {
+    enabled: !!r.enabled,
+    max_per_run: Number(r.max_per_run) > 0 ? Math.floor(Number(r.max_per_run)) : 200,
+    prepared: r.prepared_em_id ? { em_id: r.prepared_em_id, name: r.prepared_name || r.prepared_em_id } : null,
+    checked: r.checked_em_id ? { em_id: r.checked_em_id, name: r.checked_name || r.checked_em_id } : null,
+    approved: r.approved_em_id ? { em_id: r.approved_em_id, name: r.approved_name || r.approved_em_id } : null,
+    updated_by: r.updated_by || null,
+    updated_at: r.updated_at || null,
+  };
+}
+
+// Partial update — every field COALESCEs onto the existing row, so a PUT
+// that only sends e.g. {max_per_run} leaves the configured signers alone.
+// (Omitted → JS undefined → the pg driver sends SQL NULL → COALESCE keeps
+// the existing value. To actually CLEAR a signer, send an empty string —
+// COALESCE('', existing) = '', which getPbRingAutoStampConfig then reads
+// back as "no signer configured" the same as NULL.)
+async function savePbRingAutoStampConfig(patch, updatedBy) {
+  const { enabled, max_per_run, prepared_em_id, prepared_name, checked_em_id, checked_name, approved_em_id, approved_name } = patch;
+  const { rows } = await engPool.query(
+    `UPDATE pbring_auto_stamp_config SET
+       enabled = COALESCE($1, enabled),
+       max_per_run = COALESCE($2, max_per_run),
+       prepared_em_id = COALESCE($3, prepared_em_id), prepared_name = COALESCE($4, prepared_name),
+       checked_em_id = COALESCE($5, checked_em_id), checked_name = COALESCE($6, checked_name),
+       approved_em_id = COALESCE($7, approved_em_id), approved_name = COALESCE($8, approved_name),
+       updated_by = $9, updated_at = now()
+     WHERE id = 1
+     RETURNING *`,
+    [enabled, max_per_run, prepared_em_id, prepared_name, checked_em_id, checked_name, approved_em_id, approved_name, updatedBy || null]
+  );
+  return rows[0];
+}
+
+// Moves/creates the shared Kanban card for a PB Ring sheet's approval —
+// reuses kanbanIntake.syncCard, the SAME generic mechanism the real
+// sds_approval uses, but under its OWN sourceType ('pbring_sds_approval')
+// so cards never mix with real production approval cards and, per
+// kanbanIntake's own design, silently no-ops until an admin configures a
+// board/list for this sourceType (mtc_board_config — no new admin UI
+// needed, the existing generic board-config endpoint already handles any
+// sourceType). Fail-open — a board-sync failure must never break a sign.
+async function syncPbRingApprovalBoardCard({ io, cn, machineTypeName, processCode, role, signerName }) {
+  try {
+    const kanbanIntake = require('../mtc/services/kanbanIntake');
+    await kanbanIntake.syncCard({
+      io,
+      sourceType: 'pbring_sds_approval',
+      sourceRef: `${cn}||${machineTypeName}||${processCode}`,
+      stageKey: role,
+      name: `PB Ring SDS ${cn} · ${machineTypeName} · ${processCode}`,
+      description: `Signed ${role} by ${signerName}`,
+      link: {
+        url: `/eng/mtc_eng/sds-v2?cn=${encodeURIComponent(cn)}&machine=${encodeURIComponent(machineTypeName)}&process=${encodeURIComponent(processCode)}`,
+        name: `Open SDS ${cn} — sign`,
+      },
+    });
+  } catch (e) {
+    console.warn('[pbring] board card sync failed:', e.message);
+  }
+}
+
 module.exports = {
   loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
   getTemplateById, createTemplate, updateTemplate, deleteTemplate,
   parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
   loadStandardGridLive, buildStandardGridForMachine,
-  loadToolSlotAddressesLive, applyToolSlotsToGrid, loadHeaderAddressesLive, applyHeaderToGrid,
+  loadToolSlotAddressesLive, applyToolSlotsToGrid, getToolingItemNames, loadHeaderAddressesLive, applyHeaderToGrid,
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
   loadTurningGridLive, applyTurningHeaderToGrid, applyTurningHeaderOverridesToGrid,
   applyTurningToolSlotsToGrid, turningPbSlotAddresses, TURNING_PB_HEADER_OVERRIDE_FIELDS,
@@ -1313,4 +1598,6 @@ module.exports = {
   toolingFamily, getToolingFamilyOptions,
   getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
+  PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
+  getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
 };

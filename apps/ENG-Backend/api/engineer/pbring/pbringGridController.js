@@ -16,6 +16,8 @@ const {
   getToolingFamilyOptions,
   getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
+  PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
+  getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 const cnFormat = require('../mtc/utils/cnFormat');
@@ -89,6 +91,98 @@ async function getHasData(req, res) {
   } catch (err) {
     console.error('[pbring:grid:has-data]', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to check PB Ring data' });
+  }
+}
+
+// ── PB Ring sheet approval (Prepared/Checked/Approved) ──────────────────────
+// Own table/permission gate — never the real sds_approval. See
+// pbringGridService.js's comment above the functions and the migration
+// header (20261015_pbring_create_sds_approval.js) for why.
+async function getApproval(req, res) {
+  try {
+    const cn = normalizeCn(req.query.cn);
+    const { machine_type_name, process_code } = req.query;
+    if (!cn || !machine_type_name || !process_code) {
+      return res.status(400).json({ success: false, error: 'cn, machine_type_name and process_code are required' });
+    }
+    const row = await getPbRingApproval(cn, machine_type_name, process_code);
+    const state = PBRING_APPROVAL_ROLE_ORDER.map((role, i) => {
+      const emId = row && row[`${role}_em_id`];
+      const prevSigned = i === 0 || !!(row && row[`${PBRING_APPROVAL_ROLE_ORDER[i - 1]}_em_id`]);
+      return {
+        role,
+        signed: !!emId,
+        signer_name: (row && row[`${role}_name`]) || null,
+        signed_at: (row && row[`${role}_at`]) || null,
+        em_id: emId || null,
+        canSign: !emId && prevSigned,
+      };
+    });
+    res.json({ success: true, state });
+  } catch (err) {
+    console.error('[pbring:grid:approval:get]', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load approval state' });
+  }
+}
+
+async function postApproval(req, res) {
+  try {
+    const cn = normalizeCn(req.body.cn);
+    const { machine_type_name, process_code, role } = req.body || {};
+    if (!cn || !machine_type_name || !process_code || !role) {
+      return res.status(400).json({ success: false, error: 'cn, machine_type_name, process_code and role are required' });
+    }
+    if (!req.user?.empno) return res.status(401).json({ success: false, error: 'user context missing' });
+    const signerName = req.user.name || String(req.user.empno);
+    const row = await signPbRingApproval(
+      cn, machine_type_name, process_code, role, req.user.empno, signerName, 'live'
+    );
+    // Fire-and-forget, after the response is prepared — a board-sync failure
+    // must never fail a sign. Same sourceType ('pbring_sds_approval') as
+    // auto-stamp uses, so a live sign and an auto sign move the SAME card.
+    syncPbRingApprovalBoardCard({ io: req.app.get('io'), cn, machineTypeName: machine_type_name, processCode: process_code, role, signerName })
+      .catch(() => {});
+    res.json({ success: true, approval: row });
+  } catch (err) {
+    console.error('[pbring:grid:approval:post]', err);
+    res.status(err.status || 500).json({ success: false, error: err.message || 'Failed to sign' });
+  }
+}
+
+async function deleteApproval(req, res) {
+  try {
+    const cn = normalizeCn(req.query.cn);
+    const { machine_type_name, process_code, role } = req.query;
+    if (!cn || !machine_type_name || !process_code || !role) {
+      return res.status(400).json({ success: false, error: 'cn, machine_type_name, process_code and role are required' });
+    }
+    const row = await revokePbRingApproval(cn, machine_type_name, process_code, role);
+    res.json({ success: true, approval: row });
+  } catch (err) {
+    console.error('[pbring:grid:approval:delete]', err);
+    res.status(err.status || 500).json({ success: false, error: err.message || 'Failed to revoke' });
+  }
+}
+
+// ── Auto Stamp config (own table, own gate) ──────────────────────────────────
+// Mirrors GET/PUT /api/sds/v2/report/auto-stamp/config, scoped to PB Ring's
+// own pbring_auto_stamp_config — see pbringAutoStamp.js header.
+async function getAutoStampConfig(req, res) {
+  try {
+    res.json({ success: true, config: await getPbRingAutoStampConfig() });
+  } catch (err) {
+    console.error('[pbring:grid:auto-stamp:get]', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load auto-stamp config' });
+  }
+}
+
+async function putAutoStampConfig(req, res) {
+  try {
+    const row = await savePbRingAutoStampConfig(req.body || {}, req.user?.empno);
+    res.json({ success: true, config: row });
+  } catch (err) {
+    console.error('[pbring:grid:auto-stamp:put]', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to save auto-stamp config' });
   }
 }
 
@@ -414,6 +508,8 @@ async function deleteGrindingImageRoute(req, res) {
 
 module.exports = {
   getPdf, getHasData,
+  getApproval, postApproval, deleteApproval,
+  getAutoStampConfig, putAutoStampConfig,
   getTemplates, getMachineTypes, putMachineTemplate, putTemplateDefault, postReimport,
   getTemplate, postTemplate, putTemplate, deleteTemplate: deleteTemplateRoute,
   postXlsxUploadSheets, postXlsxUpload, getTemplateBlankPdf,
