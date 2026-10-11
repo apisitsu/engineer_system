@@ -15,10 +15,12 @@
  * into sds_machine_type_code would pollute it for unrelated real CNs (see
  * CLAUDE.md "why strict separation matters"). PB Ring's own universe is
  * already bounded and known: every (cn, mc_key, process_code) combo that
- * exists in pbring_sds_param / pbring_sds_condition. No external DB calls
- * (maqPool/rodpcPool) — unlike buildPbRingValueMap, which is NOT reused
- * here on purpose: calling it per-row for a sweep of every PB Ring combo
- * would be hundreds of factory look-ups per report build. Bulk SQL only.
+ * exists in pbring_sds_param / pbring_sds_condition, further filtered to
+ * ones with real production history (see getProducedComboKeys below).
+ * Only ONE bulk maqPool query for that — unlike buildPbRingValueMap, which
+ * is NOT reused here on purpose: calling it per-row for a sweep of every
+ * PB Ring combo would be hundreds of factory look-ups per report build.
+ * Bulk SQL only, same discipline the rest of this codebase uses.
  *
  * Merged into the real /coverage response by sdsV2ReportController.js's
  * mergeInPbRingCoverage() — this module only produces rows, it does not
@@ -27,6 +29,7 @@
  */
 
 const { engPool } = require('../../../instance/eng_db');
+const { maqPool } = require('../../../instance/maq_db');
 const cnFormat = require('../mtc/utils/cnFormat');
 
 // Mirrors sdsV2ReportController.js's PART_TYPE_ITEM_PREFIX (not exported —
@@ -104,6 +107,28 @@ SELECT c.mc_key, c.cn, c.process_code,
   LEFT JOIN machine_names mn ON mn.mc_key = c.mc_key AND mn.cn = c.cn AND mn.process_code = c.process_code
 `;
 
+// Bulk production-history check — user request (2026-10-11): a combo with no
+// real lot ever run on the floor shouldn't count as Pending (or Complete)
+// at all, only ones the shop has actually produced. One query for every
+// combo in this build, same discipline as the rest of this file (never a
+// per-row maqPool round trip). Mirrors productionHistoryService.getProducedMachines's
+// own normalization — lpb.pc_production.control_no is the plain item-no form
+// and sometimes carries a trailing variant suffix ("350528-C"); split_part
+// strips it on both sides of the join so "294065" and "294065-C" match the
+// same key. Matches on (cn, process) only, deliberately not machine — PB
+// Ring's own machine naming frequently doesn't map to the real floor code.
+async function getProducedComboKeys(itemNos) {
+  if (!itemNos.length) return new Set();
+  const { rows } = await maqPool.query(
+    `SELECT DISTINCT split_part(control_no, '-', 1) AS cn, process
+       FROM lpb.pc_production
+      WHERE process IS NOT NULL
+        AND split_part(control_no, '-', 1) = ANY($1)`,
+    [itemNos]
+  );
+  return new Set(rows.map((r) => `${r.cn}||${r.process}`));
+}
+
 /**
  * @param {(r) => {coverage_level, coverage_level_saved, pending_reason}} classifyCoverage
  *   Passed in rather than required directly, so this module never needs to
@@ -111,10 +136,13 @@ SELECT c.mc_key, c.cn, c.process_code,
  *   module load) just to reach one pure function.
  */
 async function buildPbRingCoverageRows(classifyCoverage) {
-  const [{ rows }, monitorCns] = await Promise.all([
+  const [{ rows: comboRows }, monitorCns] = await Promise.all([
     engPool.query(COMBOS_SQL),
     getPbRingMonitorCns(),
   ]);
+
+  const producedKeys = await getProducedComboKeys([...new Set(comboRows.map((r) => r.cn))]);
+  const rows = comboRows.filter((r) => producedKeys.has(`${r.cn}||${r.process_code}`));
 
   return rows.map((r) => {
     const cn = cnFormat.toControlNo(r.cn) || r.cn;
