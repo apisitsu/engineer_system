@@ -141,13 +141,25 @@ async function getProductionInfo(itemNos) {
   return new Map(rows.map((r) => [`${r.cn}||${r.process}`, r]));
 }
 
-/**
- * @param {(r) => {coverage_level, coverage_level_saved, pending_reason}} classifyCoverage
- *   Passed in rather than required directly, so this module never needs to
- *   `require()` the report controller (which boots an express Router at
- *   module load) just to reach one pure function.
- */
-async function buildPbRingCoverageRows(classifyCoverage) {
+// Stale-while-revalidate cache around the whole build — same shape as
+// sdsV2ReportController.js's own `_coverageCache`/`_coverageBuilding`.
+// Required the moment getProductionInfo above stopped being cheap: it has
+// to scan every row of lpb.pc_production (856k rows, no usable index — see
+// its own header) because `split_part(control_no, '-', 1) = ANY(...)` is
+// not sargable, so no index on control_no could help even if one existed.
+// Measured live, 2026-10-11: 6-24s depending on load. mergeInPbRingCoverage
+// calls buildPbRingCoverageRows on EVERY /coverage request (by design, so
+// PB Ring data never waits for the real report's own rebuild cycle) — at
+// that cost per call, the "instant" cached branch of /coverage stopped
+// being instant, blew past the frontend's 10s default timeout, and the
+// dashboard started showing "Failed to load coverage data" on an otherwise
+// perfectly healthy backend. A combo's production history does not change
+// minute to minute, so a 10-min TTL costs nothing real.
+const PB_ROWS_TTL_MS = 10 * 60 * 1000;
+let _pbRowsCache = null;     // { at, rows }
+let _pbRowsBuilding = null;  // Promise<rows> while a rebuild is in flight
+
+async function _buildPbRowsNow(classifyCoverage) {
   const [{ rows: comboRows }, monitorCns] = await Promise.all([
     engPool.query(COMBOS_SQL),
     getPbRingMonitorCns(),
@@ -211,6 +223,39 @@ async function buildPbRingCoverageRows(classifyCoverage) {
     const classified = classifyCoverage(base);
     return { ...base, ...classified, coverage_level_saved: classified.coverage_level };
   });
+}
+
+/**
+ * @param {(r) => {coverage_level, coverage_level_saved, pending_reason}} classifyCoverage
+ *   Passed in rather than required directly, so this module never needs to
+ *   `require()` the report controller (which boots an express Router at
+ *   module load) just to reach one pure function.
+ */
+async function buildPbRingCoverageRows(classifyCoverage) {
+  if (_pbRowsCache && Date.now() - _pbRowsCache.at < PB_ROWS_TTL_MS) {
+    return _pbRowsCache.rows;
+  }
+
+  // Nothing cached yet at all (first call since process start) — block,
+  // same as any other cold-cache path in this codebase. Every later call
+  // for the next PB_ROWS_TTL_MS is instant.
+  if (!_pbRowsCache) {
+    const rows = await _buildPbRowsNow(classifyCoverage);
+    _pbRowsCache = { at: Date.now(), rows };
+    return rows;
+  }
+
+  // Stale but present → serve the stale rows now, refresh in the
+  // background. One rebuild in flight at a time; a request that lands
+  // mid-refresh just gets the still-stale rows rather than piling on a
+  // second identical query.
+  if (!_pbRowsBuilding) {
+    _pbRowsBuilding = _buildPbRowsNow(classifyCoverage)
+      .then((rows) => { _pbRowsCache = { at: Date.now(), rows }; return rows; })
+      .catch((e) => { console.warn('[pbring] coverage-rows background rebuild failed:', e.message); throw e; })
+      .finally(() => { _pbRowsBuilding = null; });
+  }
+  return _pbRowsCache.rows;
 }
 
 /**
