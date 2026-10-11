@@ -1309,8 +1309,14 @@ async function mergeInPbRingCoverage(payload) {
 
   if (!removedForMonitor && !pbMonitorRows.length && !promoted.length) return payload; // nothing changed
 
+  // A promoted combo's OLD real row (Pending, since Complete was excluded
+  // above) must be dropped here — it is the same physical sheet as the
+  // promoted row being added, not a second one. Missing this filter would
+  // double-count it: stale Pending in needsAttention AND fresh Complete in
+  // cohortRows for the identical (cn, machine, process) key.
+  const promotedKeys = new Set(promoted.map(key));
   const cohortRows = [
-    ...realCohortKept,
+    ...realCohortKept.filter((r) => !promotedKeys.has(key(r))),
     ...pbMonitorRows.map(slim),
     ...promoted.map(slim),
   ];
@@ -1318,7 +1324,10 @@ async function mergeInPbRingCoverage(payload) {
   // Complete) — that is the substitution: a monitor CN's unsigned PB Ring
   // backlog is now what this report's worklist shows for it, in place of
   // whatever the real system used to say.
-  const needsAttention = [...realNeedsAttentionKept, ...pbMonitorPending.map(slim)];
+  const needsAttention = [
+    ...realNeedsAttentionKept.filter((r) => !promotedKeys.has(key(r))),
+    ...pbMonitorPending.map(slim),
+  ];
 
   const total = cohortRows.length;
   const complete = cohortRows.filter((r) => r.coverage_level === 'COMPLETE').length;
