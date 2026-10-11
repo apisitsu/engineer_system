@@ -101,6 +101,11 @@ const SdsV2Page = () => {
   const userPerms = useAuthStore(state => state.userPerms);
   const empNo = useAuthStore(state => state.empNo);
   const isAdmin = userRole === 'AD' || userDepartment === 'AD' || (userPerms || []).includes('sds_admin');
+  // Mirrors the backend's isPbringAdmin = hasFeature('pbring_admin') gate
+  // (middleware/mtcAuth.js) — client-side only, so the Sign/Revoke buttons on
+  // a PB Ring sheet aren't shown to someone the server will 403 anyway.
+  const isPbringAdminUser = userRole === 'AD' || userDepartment === 'AD'
+    || (userPerms || []).includes('pbring_admin') || (userPerms || []).includes('all_mtc');
   const [cn, setCn] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -434,40 +439,57 @@ const SdsV2Page = () => {
   // sds_approval has no concept of a PB Ring sheet (own pipeline, own tables) — a
   // real-looking (cn, machine, process) triple for a PB Ring entry would otherwise
   // query/display approval state for whatever real sheet happens to share that
-  // name, or silently let a "sign" write land on it. Skip the real lookup entirely
-  // when the selected machine is PB Ring-sourced.
-  const isPbRingSelected = !!filteredMachineTypes.find(m => m.machine_type_name === selectedMachine)?._pbRing;
+  // name, or silently let a "sign" write land on it. PB Ring has its own separate
+  // approval table/endpoint (pbring_sds_approval) instead — see fetchApproval.
+  const pbRingEntry = filteredMachineTypes.find(m => m.machine_type_name === selectedMachine);
+  const isPbRingSelected = !!pbRingEntry?._pbRing;
 
   const fetchApproval = useCallback(async () => {
-    if (!approvalCn || !selectedMachine || !selectedProcess?.process_code || isPbRingSelected) { setApproval(null); return; }
+    if (!approvalCn || !selectedMachine || !selectedProcess?.process_code) { setApproval(null); return; }
     setApprovalLoading(true);
     try {
-      const res = await axios.get(`${server.MTC_SDS_V2_APPROVAL}/state`, {
-        params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code },
-      });
+      const res = isPbRingSelected
+        ? await axios.get(server.PBRING_GRID_APPROVAL, {
+            params: {
+              cn: approvalCn,
+              machine_type_name: pbRingEntry._pbRingKey,
+              process_code: pbRingEntry._pbRingProcessCode || selectedProcess.process_code,
+            },
+          })
+        : await axios.get(`${server.MTC_SDS_V2_APPROVAL}/state`, {
+            params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code },
+          });
       setApproval(res.data?.success ? res.data : null);
     } catch (_) {
       setApproval(null);
     } finally {
       setApprovalLoading(false);
     }
-  }, [approvalCn, selectedMachine, selectedProcess, isPbRingSelected]);
+  }, [approvalCn, selectedMachine, selectedProcess, isPbRingSelected, pbRingEntry]);
 
   // Load approval status whenever the PDF modal opens or its machine/process changes.
+  // fetchApproval itself picks the real vs PB Ring endpoint.
   useEffect(() => {
-    if (pdfModal && selectedMachine && selectedProcess?.process_code && !isPbRingSelected) fetchApproval();
+    if (pdfModal && selectedMachine && selectedProcess?.process_code) fetchApproval();
     else setApproval(null);
-  }, [pdfModal, selectedMachine, selectedProcess, fetchApproval, isPbRingSelected]);
+  }, [pdfModal, selectedMachine, selectedProcess, fetchApproval]);
 
   const handleSign = async (role) => {
     setSigningRole(role);
     try {
-      const res = await axios.post(server.MTC_SDS_V2_APPROVAL, {
-        cn: approvalCn,
-        machine_type_name: selectedMachine,
-        process_code: selectedProcess.process_code,
-        role,
-      });
+      const res = isPbRingSelected
+        ? await axios.post(server.PBRING_GRID_APPROVAL, {
+            cn: approvalCn,
+            machine_type_name: pbRingEntry._pbRingKey,
+            process_code: pbRingEntry._pbRingProcessCode || selectedProcess.process_code,
+            role,
+          })
+        : await axios.post(server.MTC_SDS_V2_APPROVAL, {
+            cn: approvalCn,
+            machine_type_name: selectedMachine,
+            process_code: selectedProcess.process_code,
+            role,
+          });
       if (res.data?.success) { message.success(`Signed as ${ROLE_LABEL[role]}`); fetchApproval(); }
     } catch (e) {
       message.error(e.response?.data?.error || 'Sign failed');
@@ -478,9 +500,18 @@ const SdsV2Page = () => {
 
   const handleRevoke = async (role) => {
     try {
-      const res = await axios.delete(server.MTC_SDS_V2_APPROVAL, {
-        params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code, role },
-      });
+      const res = isPbRingSelected
+        ? await axios.delete(server.PBRING_GRID_APPROVAL, {
+            params: {
+              cn: approvalCn,
+              machine_type_name: pbRingEntry._pbRingKey,
+              process_code: pbRingEntry._pbRingProcessCode || selectedProcess.process_code,
+              role,
+            },
+          })
+        : await axios.delete(server.MTC_SDS_V2_APPROVAL, {
+            params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code, role },
+          });
       if (res.data?.success) { message.success('Signature revoked'); fetchApproval(); }
     } catch (e) {
       message.error(e.response?.data?.error || 'Revoke failed');
@@ -519,7 +550,14 @@ const SdsV2Page = () => {
         <Spin spinning={approvalLoading}>
           <Space direction="vertical" style={{ width: '100%' }} size={6}>
             {(approval?.state || []).map((s) => {
-              const canRevoke = s.signed && (approval?.isAdmin || String(s.em_id) === String(empNo));
+              // PB Ring's /approval response has no `isAdmin`/`blockedByOrder` —
+              // own simpler gate (one isPbringAdmin tier, not per-role config/
+              // self-revoke) and `canSign` there already means "order allows it"
+              // with no `permitted` dimension baked in, so deriving blockedByOrder
+              // from it is exact. The real shape already sends both fields.
+              const canRevoke = s.signed && (isPbRingSelected ? isPbringAdminUser : (approval?.isAdmin || String(s.em_id) === String(empNo)));
+              const canSign = isPbRingSelected ? (s.canSign && isPbringAdminUser) : s.canSign;
+              const blockedByOrder = s.blockedByOrder ?? (!s.signed && !s.canSign);
               return (
                 <div key={s.role} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Tag color={s.signed ? 'red' : 'default'} style={{ width: 90, textAlign: 'center', margin: 0 }}>
@@ -533,10 +571,10 @@ const SdsV2Page = () => {
                     </Space>
                   ) : (
                     <Text type="secondary" style={{ flex: 1, fontStyle: 'italic' }}>
-                      {s.blockedByOrder ? `Waiting for ${ROLE_LABEL[PREV_ROLE[s.role]]} to sign first` : 'Not signed yet'}
+                      {blockedByOrder ? `Waiting for ${ROLE_LABEL[PREV_ROLE[s.role]]} to sign first` : 'Not signed yet'}
                     </Text>
                   )}
-                  {s.canSign && !s.signed && (
+                  {canSign && !s.signed && (
                     <Button size="small" type="primary" icon={<EditOutlined />}
                       loading={signingRole === s.role} onClick={() => handleSign(s.role)}>
                       Sign

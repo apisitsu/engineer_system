@@ -1421,6 +1421,88 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
   return grid;
 }
 
+// ── PB Ring sheet approval (Prepared/Checked/Approved) ──────────────────────
+// Own table (pbring_sds_approval, migration 20261015_), own permission gate
+// (isPbringAdmin, in pbringRoutes.js) — never the real sds_approval /
+// sds_approval_role_config. See the migration header for why: several PB
+// Ring machine codes share their real display name with an already-
+// registered SDS machine, and signing into the shared table under that name
+// would write into the same row a real engineer's production approval
+// lives in. Wide, one-row-per-sheet shape mirrors sds_approval, minus
+// sds_rev-keying, dept/source columns, backfill and Kanban board intake —
+// out of scope for this first version (user decision 2026-10-11: the
+// 3-step SEQUENCE, not the full configurable role-matrix).
+const PBRING_APPROVAL_ROLE_ORDER = ['prepared', 'checked', 'approved'];
+
+async function getPbRingApproval(cn, machineTypeName, processCode) {
+  const { rows } = await engPool.query(
+    `SELECT * FROM pbring_sds_approval WHERE cn = $1 AND machine_type_name = $2 AND process_code = $3`,
+    [cn, machineTypeName, processCode]
+  );
+  return rows[0] || null;
+}
+
+function pbRingRoleRec(row, role) {
+  if (!row) return null;
+  const emId = row[`${role}_em_id`];
+  if (!emId) return null;
+  return { em_id: emId, signer_name: row[`${role}_name`] || '', signed_at: row[`${role}_at`] || null };
+}
+
+// role is validated against PBRING_APPROVAL_ROLE_ORDER before use, so the
+// interpolated column names are a fixed whitelist (no user input in SQL) —
+// same pattern as sdsApprovalController.js's roleCols.
+function pbRingRoleCols(role) {
+  return { em_id: `${role}_em_id`, name: `${role}_name`, at: `${role}_at` };
+}
+
+/** Live sign: identity from the caller, now(), previous role must already be signed. */
+async function signPbRingApproval(cn, machineTypeName, processCode, role, empno, signerName) {
+  if (!PBRING_APPROVAL_ROLE_ORDER.includes(role)) {
+    throw new Error(`role must be one of ${PBRING_APPROVAL_ROLE_ORDER.join(', ')}`);
+  }
+  const idx = PBRING_APPROVAL_ROLE_ORDER.indexOf(role);
+  if (idx > 0) {
+    const existing = await getPbRingApproval(cn, machineTypeName, processCode);
+    const prev = PBRING_APPROVAL_ROLE_ORDER[idx - 1];
+    if (!pbRingRoleRec(existing, prev)) {
+      const err = new Error(`'${prev}' must be signed before '${role}'`);
+      err.status = 409;
+      throw err;
+    }
+  }
+  const c = pbRingRoleCols(role);
+  const { rows } = await engPool.query(
+    `INSERT INTO pbring_sds_approval (cn, machine_type_name, process_code, ${c.em_id}, ${c.name}, ${c.at})
+     VALUES ($1,$2,$3,$4,$5, now())
+     ON CONFLICT (cn, machine_type_name, process_code)
+     DO UPDATE SET ${c.em_id} = EXCLUDED.${c.em_id}, ${c.name} = EXCLUDED.${c.name}, ${c.at} = now(), updated_at = now()
+     RETURNING *`,
+    [cn, machineTypeName, processCode, empno, signerName]
+  );
+  return rows[0];
+}
+
+/** Revoke one role's signature. Deletes the row once every role is unsigned. */
+async function revokePbRingApproval(cn, machineTypeName, processCode, role) {
+  if (!PBRING_APPROVAL_ROLE_ORDER.includes(role)) {
+    throw new Error(`role must be one of ${PBRING_APPROVAL_ROLE_ORDER.join(', ')}`);
+  }
+  const c = pbRingRoleCols(role);
+  const { rows } = await engPool.query(
+    `UPDATE pbring_sds_approval SET ${c.em_id} = NULL, ${c.name} = NULL, ${c.at} = NULL, updated_at = now()
+      WHERE cn = $1 AND machine_type_name = $2 AND process_code = $3
+      RETURNING *`,
+    [cn, machineTypeName, processCode]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  if (PBRING_APPROVAL_ROLE_ORDER.every((r) => !row[`${r}_em_id`])) {
+    await engPool.query(`DELETE FROM pbring_sds_approval WHERE id = $1`, [row.id]);
+  }
+  return row;
+}
+
 module.exports = {
   loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
@@ -1437,4 +1519,5 @@ module.exports = {
   toolingFamily, getToolingFamilyOptions,
   getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
+  PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
 };
