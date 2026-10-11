@@ -1284,7 +1284,12 @@ async function mergeInPbRingCoverage(payload) {
     has_tooling_match: r.has_tooling_match, has_machine_template: r.has_machine_template,
     tooling_source: r.tooling_source, tooling_not_required: r.tooling_not_required,
     limit_excluded: false, limit_reason: null,
-    first_prod_date: null, last_prod_date: null, first_month: null,
+    // Real dates now (2026-10-11) — buildPbRingCoverageRows only ever returns
+    // combos that passed its own production-history check, and carries the
+    // MIN/MAX comp_date for exactly this reason. Hardcoding null here made
+    // every PB Ring row look unproduced in any UI column reading these
+    // fields, even though the filter had already confirmed the opposite.
+    first_prod_date: r.first_prod_date, last_prod_date: r.last_prod_date, first_month: r.first_month,
   });
 
   // Step 1 — monitor-listed CNs: real rows removed, PB Ring's OWN rows for

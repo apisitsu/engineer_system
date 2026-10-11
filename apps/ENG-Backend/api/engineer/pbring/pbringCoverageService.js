@@ -16,7 +16,7 @@
  * CLAUDE.md "why strict separation matters"). PB Ring's own universe is
  * already bounded and known: every (cn, mc_key, process_code) combo that
  * exists in pbring_sds_param / pbring_sds_condition, further filtered to
- * ones with real production history (see getProducedComboKeys below).
+ * ones with real production history (see getProductionInfo below).
  * Only ONE bulk maqPool query for that — unlike buildPbRingValueMap, which
  * is NOT reused here on purpose: calling it per-row for a sweep of every
  * PB Ring combo would be hundreds of factory look-ups per report build.
@@ -117,16 +117,28 @@ SELECT c.mc_key, c.cn, c.process_code,
 // strips it on both sides of the join so "294065" and "294065-C" match the
 // same key. Matches on (cn, process) only, deliberately not machine — PB
 // Ring's own machine naming frequently doesn't map to the real floor code.
-async function getProducedComboKeys(itemNos) {
-  if (!itemNos.length) return new Set();
+//
+// Also carries MIN/MAX comp_date per combo — not just a yes/no — because a
+// row that passed this filter still looked, in the UI, exactly like one
+// that hadn't: mergeInPbRingCoverage's `slim()` hardcoded
+// first_prod_date/last_prod_date to null for every PB Ring row (reported
+// live, 2026-10-11: sampled PB Ring Parts rows in the real "CNs Requiring
+// Action" list all had genuine production — 2 to 7 lots each — yet showed
+// blank dates). Returning the real range here lets buildPbRingCoverageRows
+// fill those fields for real instead of nulling them.
+async function getProductionInfo(itemNos) {
+  if (!itemNos.length) return new Map();
   const { rows } = await maqPool.query(
-    `SELECT DISTINCT split_part(control_no, '-', 1) AS cn, process
+    `SELECT split_part(control_no, '-', 1) AS cn, process,
+            MIN(comp_date) AS first_prod_date,
+            MAX(comp_date) AS last_prod_date
        FROM lpb.pc_production
       WHERE process IS NOT NULL
-        AND split_part(control_no, '-', 1) = ANY($1)`,
+        AND split_part(control_no, '-', 1) = ANY($1)
+      GROUP BY split_part(control_no, '-', 1), process`,
     [itemNos]
   );
-  return new Set(rows.map((r) => `${r.cn}||${r.process}`));
+  return new Map(rows.map((r) => [`${r.cn}||${r.process}`, r]));
 }
 
 /**
@@ -141,11 +153,12 @@ async function buildPbRingCoverageRows(classifyCoverage) {
     getPbRingMonitorCns(),
   ]);
 
-  const producedKeys = await getProducedComboKeys([...new Set(comboRows.map((r) => r.cn))]);
-  const rows = comboRows.filter((r) => producedKeys.has(`${r.cn}||${r.process_code}`));
+  const productionInfo = await getProductionInfo([...new Set(comboRows.map((r) => r.cn))]);
+  const rows = comboRows.filter((r) => productionInfo.has(`${r.cn}||${r.process_code}`));
 
   return rows.map((r) => {
     const cn = cnFormat.toControlNo(r.cn) || r.cn;
+    const prod = productionInfo.get(`${r.cn}||${r.process_code}`);
     // machine_type_name is the DISPLAY name (e.g. "KVD-300CRII"), not the
     // mc_key ("KVD300") — it has to match the real report's own
     // machine_type_name spelling so the dedup key in mergeInPbRingCoverage
@@ -175,9 +188,13 @@ async function buildPbRingCoverageRows(classifyCoverage) {
       tooling_source: 'pbring',
       limit_excluded: false,
       limit_reason: null,
-      first_prod_date: null,
-      last_prod_date: null,
-      first_month: null,
+      // Real dates from the production-history check above (every row here
+      // passed it) — same derivation sdsV2ReportController.js uses for the
+      // real report's own cohortRows, so a shared "First Production" column
+      // reads correctly for a PB Ring row too.
+      first_prod_date: prod.first_prod_date,
+      last_prod_date: prod.last_prod_date,
+      first_month: prod.first_prod_date ? new Date(prod.first_prod_date).toISOString().slice(0, 7) : null,
       _pbring: true,
       _pbRingKey: r.mc_key,
       // Every pbring_* table (including pbring_sds_approval) keys on the
