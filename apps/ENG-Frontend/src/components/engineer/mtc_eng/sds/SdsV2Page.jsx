@@ -303,14 +303,23 @@ const SdsV2Page = () => {
       visibleMembers.forEach(m => { mergedMap[m.machine_type_name] = m; });
     });
 
-    // PB Ring machines for this process_code (see pbRingByProcess) — added last so a
-    // same-named real machine is OVERWRITTEN rather than offered twice. Deliberate:
+    // PB Ring machines for this process_code (see pbRingByProcess). Deliberate:
     // several PB Ring machine codes (e.g. KVD300) share their real display name with
     // an already-registered SDS machine (KVD-300CRII) that has its own real
     // sds_machine_tool config for the same process — PB Ring wins there by decision
     // (2026-10-11), so the one entry the picker shows for that name always routes to
     // the PB Ring PDF. No visual marker — it must look exactly like a normal entry.
+    //
+    // When PB Ring has combos for this process, they REPLACE the real candidate list
+    // above rather than merge into it (user request, 2026-10-11): the generic
+    // sds_machine_tool/code-prefix matches (GS-64PFII, MSG-410, PSG-64, …) are every
+    // machine capable of this process code for ANY part, not ones ever configured or
+    // verified for this specific PB Ring workpiece — showing them as "also valid"
+    // choices next to KVD-300CRII/KVD350C was noise, not an alternative.
     const pbRingForProcess = pbRingByProcess[String(processRow.process_code || '').trim()] || [];
+    if (pbRingForProcess.length) {
+      Object.keys(mergedMap).forEach((name) => delete mergedMap[name]);
+    }
     pbRingForProcess.forEach(c => {
       if (!c.machine) return; // no display name to show — nothing sensible to offer
       mergedMap[c.machine] = {
