@@ -57,7 +57,10 @@
  * name with an already-registered SDS machine (e.g. KVD-300CRII), and for a (cn,
  * process_code) PB Ring has data for, that name now always renders the PB Ring sheet here
  * too — consistent with the in-app page rather than silently disagreeing with it. See
- * resolvePbRingCombo. Not recorded in sds_print_log — see the inline comment in the route.
+ * resolvePbRingCombo. Logged to sds_print_log exactly like a real print (user decision,
+ * 2026-10-11) — no separate source value, so it reads identically to any other row in the
+ * admin Print Log history. parts_no/lot_verified still resolve correctly regardless, since
+ * PB Ring's CN is a real factory CN either way.
  */
 
 const express = require('express');
@@ -206,11 +209,24 @@ router.get('/sds/pdf', async (req, res) => {
         res.setHeader('Content-Disposition', `inline; filename="SDS_${cnItemNo}_${pbRingCombo.machine || mcKey}.pdf"`);
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.send(pdfBuffer);
-        // Not logged to sds_print_log — that table's evidentiary join
-        // (parts_no, tooling_snapshot, approval seals) is built around the
-        // real pipeline's own config, and a PB Ring machine_type_name is not
-        // a real sds_machine_type_code row. Same "never touches sds_*"
-        // boundary PB Ring keeps everywhere else in this codebase.
+
+        // Logged exactly like a real print (user decision, 2026-10-11): no
+        // separate source value, no flag — a PB Ring print lands in the same
+        // sds_print_log / admin Print Log history as any other `source:
+        // 'public'` row, same as the picker shows PB Ring machines with no
+        // visual marker. parts_no/lot_verified still resolve correctly
+        // because PB Ring's CN is a real factory CN either way.
+        const { conditionByToolNumber } = await pbring
+          .buildPbRingValueMap(cnItemNo, mcKey, process_code)
+          .catch(() => ({ conditionByToolNumber: {} }));
+        const tooling = Object.entries(conditionByToolNumber || {}).map(([slot, row]) => ({
+          slot, name: row.tool_detail || '', dwg: row.tooling_no || '',
+        }));
+        sdsPrintLog.record({
+          cn, machineTypeName: pbRingCombo.machine || mcKey,
+          machineCode: rawMachineInput, processCode: process_code, lot,
+          source: 'public', pdfBuffer, tooling, req,
+        });
         return;
       }
       // grid null: the combo's own machine isn't registered in
