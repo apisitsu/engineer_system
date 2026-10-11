@@ -88,17 +88,31 @@ SELECT c.mc_key, c.cn, c.process_code,
  *   module load) just to reach one pure function.
  */
 async function buildPbRingCoverageRows(classifyCoverage) {
-  const { rows } = await engPool.query(COMBOS_SQL);
+  const [{ rows }, monitorCns] = await Promise.all([
+    engPool.query(COMBOS_SQL),
+    getPbRingMonitorCns(),
+  ]);
 
   return rows.map((r) => {
+    const cn = cnFormat.toControlNo(r.cn) || r.cn;
     // machine_type_name is the DISPLAY name (e.g. "KVD-300CRII"), not the
     // mc_key ("KVD300") — it has to match the real report's own
     // machine_type_name spelling so the dedup key in mergeInPbRingCoverage
     // actually collides for a name-sharing machine ("PB Ring wins", the
     // same rule SdsV2Page.jsx's picker and the public PDF link both use).
     const base = {
-      cn: cnFormat.toControlNo(r.cn) || r.cn,
-      part_type: partTypeFromItemNo(r.cn),
+      cn,
+      // A CN confirmed on PB Ring's own MONITOR list (pbring_tooling, see
+      // getPbRingMonitorCns) gets a dedicated Part Type label instead of
+      // the usual Ball/Race/Body/Sleeve/Spherical/Mecha classification —
+      // user request (2026-10-11): that list is the authoritative "this is
+      // a PB Ring part" confirmation, not just a CN with SDS sheet data
+      // filled in (the broader pbring_sds_param/condition universe every
+      // row here is actually drawn from). Only ever visible on a row that
+      // reaches the merged report at all, i.e. one that got promoted to
+      // Complete (mergeInPbRingCoverage) — PB Ring's own Pending rows are
+      // never surfaced there.
+      part_type: monitorCns.has(cn) ? 'PB Ring Parts' : partTypeFromItemNo(r.cn),
       machine_type_name: r.machine || r.mc_key,
       machine_code: null,
       process_code: r.process_code,
