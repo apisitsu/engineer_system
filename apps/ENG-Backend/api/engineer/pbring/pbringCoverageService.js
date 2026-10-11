@@ -131,4 +131,21 @@ async function buildPbRingCoverageRows(classifyCoverage) {
   });
 }
 
-module.exports = { buildPbRingCoverageRows, partTypeFromItemNo };
+/**
+ * The CNs on PB Ring's own monitor list (pbring_tooling — the "Tooling PB
+ * Ring" page's Search tab / HW cost-tracking list), NOT the much larger
+ * pbring_sds_param/pbring_sds_condition universe every other function in
+ * this file reads (36-ish CNs vs ~870 — confirmed live, 2026-10-11). User
+ * decision: THIS is the list that says "this CN is a PB Ring part" — once
+ * a CN is on it, every process for that CN belongs to PB Ring, not just
+ * whichever machine/process pbring_sds_param happens to also have data
+ * for. Returned as control-no form (e.g. "C29-04065") to match
+ * cohortRows/needsAttention's own cn spelling — pbring_tooling itself
+ * stores the plain item-no form like every other pbring_* table.
+ */
+async function getPbRingMonitorCns() {
+  const { rows } = await engPool.query(`SELECT DISTINCT cn FROM pbring_tooling WHERE cn IS NOT NULL`);
+  return new Set(rows.map((r) => cnFormat.toControlNo(r.cn) || r.cn));
+}
+
+module.exports = { buildPbRingCoverageRows, partTypeFromItemNo, getPbRingMonitorCns };

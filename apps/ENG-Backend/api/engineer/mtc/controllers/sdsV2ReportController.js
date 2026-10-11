@@ -12,7 +12,7 @@ const templateBConformance = require('../services/templateBConformance');
 const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 const cache = require('../services/agents/CacheAgent');
-const { buildPbRingCoverageRows } = require('../../pbring/pbringCoverageService');
+const { buildPbRingCoverageRows, getPbRingMonitorCns } = require('../../pbring/pbringCoverageService');
 const pbringAutoStamp = require('../../pbring/pbringAutoStamp');
 // The "Scope" button on the SDS Coverage Report page (backlog-to-board,
 // auto-stamp config, bulk parameter import, report config). Separate key from
@@ -1217,18 +1217,36 @@ const publicCoverage = ({ cohortRows, ...rest }) => rest;
  * on its own Tooling PB Ring page, not something this shared report needs
  * to also carry 3,416 fresh entries for.
  *
- * Current rule (user decision): this report reverts to exactly its
- * real-only baseline, and PB Ring can only ever ADD completions to it —
- * never add to Pending, never downgrade a real COMPLETE row. A PB Ring
- * combo that is not yet COMPLETE (tool+template+fully signed, same
- * classifyCoverage() as the real rows) contributes NOTHING here; today
- * PB Ring has 0 complete rows, so this function is a no-op and the report
- * is byte-for-byte what buildCoverage() alone produced. As PB Ring sheets
- * get signed off, each one that is COMPLETE either fills a gap the real
- * system had for that exact (cn, machine, process) — converting a real
- * Pending row (or a combo missing from the real scan entirely) to
- * Complete — or, if the real side already shows Complete for that combo,
- * changes nothing (no double count).
+ * Current rule (user decision, extended same day): this report reverts to
+ * exactly its real-only baseline and changes in only two ways:
+ *
+ *   1. CN-level hide. A CN on PB Ring's own MONITOR list (pbring_tooling —
+ *      the "Tooling PB Ring" page's own HW/cost-tracking list, ~36 CNs —
+ *      deliberately NOT the much larger pbring_sds_param/condition universe
+ *      every other PB Ring feature reads, ~870 CNs) is, in the user's own
+ *      words, a PB Ring part for EVERY process, not just whichever
+ *      machine/process pbring_sds_param happens to also have data for.
+ *      Every real row for such a CN is dropped — Complete or Pending alike
+ *      — regardless of whether PB Ring has anything to say about that
+ *      specific machine/process. This can genuinely remove real Pending
+ *      work from the worklist with nothing to replace it (if PB Ring
+ *      hasn't signed that combo off yet) — that is the point: once a CN is
+ *      monitor-listed, the real system's own per-process tracking for it is
+ *      considered redundant, full stop, not just superseded where PB Ring
+ *      has caught up.
+ *   2. Completion promotion (unchanged from the previous version): a PB
+ *      Ring combo that is COMPLETE (tool+template+fully signed, same
+ *      classifyCoverage() as the real rows) and not already matched by a
+ *      real COMPLETE row for the exact same (cn, machine, process) is
+ *      ADDED. Never adds to Pending, never downgrades a real Complete row
+ *      that survived step 1. This runs AFTER step 1, so for a monitor CN
+ *      (whose real rows are now gone) a PB Ring Complete row is never a
+ *      no-op — it always gets added, since nothing is left to compare
+ *      against.
+ *
+ * Today PB Ring has 0 complete rows and the monitor list may be empty on a
+ * fresh install, so in the common case this function changes nothing and
+ * the report is byte-for-byte what buildCoverage() alone produced.
  *
  * Deliberately narrow: only `total`/`uniqueCnCount`/`complete`/`completePct`/
  * `pdfReady`/`pdfReadyPct`/`pending`/`pendingPct`/`pendingByReason` and the
@@ -1241,24 +1259,32 @@ const publicCoverage = ({ cohortRows, ...rest }) => rest;
  * drop-in.
  */
 async function mergeInPbRingCoverage(payload) {
-  let pbRows;
+  let pbRows, monitorCns;
   try {
-    pbRows = await buildPbRingCoverageRows(classifyCoverage);
+    [pbRows, monitorCns] = await Promise.all([
+      buildPbRingCoverageRows(classifyCoverage),
+      getPbRingMonitorCns(),
+    ]);
   } catch (e) {
     console.warn('[SDS Report] PB Ring coverage merge failed:', e.message);
     return payload; // fail-open — a PB Ring query error must never break the real report
   }
-  const pbComplete = pbRows.filter((r) => r.coverage_level === 'COMPLETE');
-  if (!pbComplete.length) return payload; // nothing signed off yet — report unchanged
 
   const key = (r) => `${r.cn}||${r.machine_type_name}||${r.process_code}`;
-  const realCohortByKey = new Map((payload.cohortRows || []).map((r) => [key(r), r]));
 
-  // Only the PB Ring completions that actually change something: skip a
-  // combo the real side already reports COMPLETE for (no-op, not a
-  // duplicate add).
-  const promoted = pbComplete.filter((r) => realCohortByKey.get(key(r))?.coverage_level !== 'COMPLETE');
-  if (!promoted.length) return payload;
+  // Step 1 — CN-level hide for PB Ring's own monitor list.
+  const isMonitored = (r) => monitorCns.has(r.cn);
+  let cohortRows = (payload.cohortRows || []).filter((r) => !isMonitored(r));
+  let needsAttention = (payload.needsAttention || []).filter((r) => !isMonitored(r));
+  const hiddenFromGeneral = (payload.cohortRows || []).length - cohortRows.length;
+
+  // Step 2 — completion promotion, evaluated against the ALREADY-hidden
+  // cohort so a monitor CN's PB Ring Complete rows are never a no-op.
+  const pbComplete = pbRows.filter((r) => r.coverage_level === 'COMPLETE');
+  const cohortByKey = new Map(cohortRows.map((r) => [key(r), r]));
+  const promoted = pbComplete.filter((r) => cohortByKey.get(key(r))?.coverage_level !== 'COMPLETE');
+
+  if (!hiddenFromGeneral && !promoted.length) return payload; // nothing changed
 
   const promotedKeys = new Set(promoted.map(key));
   const slim = (r) => ({
@@ -1272,14 +1298,8 @@ async function mergeInPbRingCoverage(payload) {
     first_prod_date: null, last_prod_date: null, first_month: null,
   });
 
-  // A promoted combo's real row (if any — it was Pending, since Complete was
-  // excluded above) is replaced by the PB Ring Complete row; everything else
-  // is untouched byte-for-byte.
-  const cohortRows = [
-    ...(payload.cohortRows || []).filter((r) => !promotedKeys.has(key(r))),
-    ...promoted.map(slim),
-  ];
-  const needsAttention = (payload.needsAttention || []).filter((r) => !promotedKeys.has(key(r)));
+  cohortRows = [...cohortRows.filter((r) => !promotedKeys.has(key(r))), ...promoted.map(slim)];
+  needsAttention = needsAttention.filter((r) => !promotedKeys.has(key(r)));
 
   const total = cohortRows.length;
   const complete = cohortRows.filter((r) => r.coverage_level === 'COMPLETE').length;
@@ -1313,14 +1333,18 @@ async function mergeInPbRingCoverage(payload) {
       { level: 'COMPLETE', count: complete, label: 'Complete (PDF Ready)' },
       { level: 'PENDING', count: pending, label: 'Pending (needs config)' },
     ],
-    // Exposed so the dashboard can show a "PB Ring: N sheets completed" note
-    // without having to re-derive it from cohortRows itself.
+    // Exposed so the dashboard can show a "PB Ring: N sheets, M monitored
+    // CNs hidden from general tracking" note without re-deriving it.
     pbring: {
       total: pbRows.length,
       complete: pbComplete.length,
       pending: pbRows.length - pbComplete.length,
+      monitorCns: monitorCns.size,
+      // Real rows removed because their CN is on the monitor list (step 1) —
+      // includes both Complete and Pending real rows that got dropped.
+      hiddenFromGeneral,
       // Of the PB Ring Complete sheets, how many actually changed this
-      // report (vs. the real side already agreeing it's Complete).
+      // report (vs. a real COMPLETE row already surviving step 1).
       promotedToComplete: promoted.length,
     },
   };
