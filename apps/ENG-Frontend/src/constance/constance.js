@@ -112,6 +112,7 @@ export const server = {
   PBRING_CONDITION: `${apiUrl}api/engineer/pbring/condition`, // ?cn=&machine_type_name=&process_code= (GET); PUT row; append /:id (DELETE)
   PBRING_GRID_AUTO_STAMP_CONFIG: `${apiUrl}api/engineer/pbring/grid/auto-stamp/config`, // GET / PUT — same shape as MTC_SDS_V2_AUTO_STAMP_CONFIG, fed to the shared AutoStampSection component
   PBRING_GRID_AUTO_STAMP_RUN: `${apiUrl}api/engineer/pbring/grid/auto-stamp/run`, // POST ?dryRun=1 — same shape as MTC_SDS_V2_AUTO_STAMP
+  PBRING_GRID_APPROVAL_ROLE_CONFIG: `${apiUrl}api/engineer/pbring/grid/approval/role-config`, // GET / POST / PUT :id / DELETE :id — same shape as MTC_SDS_V2_APPROVAL_ROLE_CONFIG, fed to the shared ApprovalRoleConfig component
   PBRING_CONDITION_HISTORY: `${apiUrl}api/engineer/pbring/condition/history`, // ?machine_type_name=&process_code= (GET)
   PBRING_CONDITION_FROM_HISTORY: `${apiUrl}api/engineer/pbring/condition/from-history`, // POST
 

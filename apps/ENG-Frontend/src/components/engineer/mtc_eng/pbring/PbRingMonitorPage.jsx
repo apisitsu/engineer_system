@@ -15,6 +15,7 @@ import { httpClient as axios } from '../../../../utils/HttpClient';
 import { useTheme } from '../../../../theme';
 import { useAuthStore } from '../../../../stores/authStore';
 import AutoStampSection from '../sds/AutoStampSection';
+import ApprovalRoleConfig from '../sds/ApprovalRoleConfig';
 
 // Same status list as the backend's pbringConstants.STATUS — kept in sync by hand,
 // same way the prototype's own STATUS array was a plain shared constant.
@@ -1959,6 +1960,22 @@ export default function PbRingMonitorPage() {
     tabItems.push({ key: 'param-config', label: 'Parameter Config', children: <ParamConfigTab /> });
     tabItems.push({ key: 'condition', label: 'Tool Condition', children: <ConditionTab /> });
     tabItems.push({ key: 'images', label: 'Images', children: <ImagesTab /> });
+    // Reuses the real SDS Approval Roles UI as-is, pointed at PB Ring's own
+    // pbring_approval_role_config — user request (2026-10-12). Sign/revoke
+    // on /grid/approval now consult this table (see pbringGridController.js);
+    // an empty table (the default) still means "admin only", same as before.
+    tabItems.push({
+      key: 'approval-roles', label: 'Approval Roles',
+      children: (
+        <Card style={{ maxWidth: 820 }}>
+          <ApprovalRoleConfig
+            apiBase={server.PBRING_GRID_APPROVAL_ROLE_CONFIG}
+            alertMessage="Configure PB Ring signing permissions (Prepared / Checked / Approved)"
+            adminHint="Admins (department/role = AD, or the pbring_admin / all_mtc permission) can already sign every role without a rule."
+          />
+        </Card>
+      ),
+    });
     // Reuses the real SDS Auto Stamp UI as-is, pointed at PB Ring's own
     // pbring_auto_stamp_config/pbringAutoStamp.js — user request (2026-10-12).
     // See AutoStampSection.jsx's header and pbringGridController.js's

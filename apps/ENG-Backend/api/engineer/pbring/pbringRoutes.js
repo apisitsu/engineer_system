@@ -94,12 +94,23 @@ router.get('/grid/has-data', pbringGridController.getHasData);
 
 // Sheet approval (Prepared/Checked/Approved) — own table (pbring_sds_approval),
 // never the real sds_approval (see pbringGridService.js's comment above the
-// functions). Read open to any authenticated user, same as the PDF route;
-// sign/revoke gated isPbringAdmin like every other structural PB Ring action
-// (+New HW, Delete HW, cost approve/reject).
+// functions). Read open to any authenticated user, same as the PDF route.
+// Sign/revoke are no longer gated isPbringAdmin at the route level (changed
+// 2026-10-12) — the handler now checks pbring_approval_role_config, mirroring
+// the real sign route's userCanSign; an admin can still always sign/revoke,
+// and an empty config table (the default) still means "admin only", so this
+// is a behaviour-preserving change until an admin actually adds a rule.
 router.get('/grid/approval', pbringGridController.getApproval);
-router.post('/grid/approval', isPbringAdmin, pbringGridController.postApproval);
-router.delete('/grid/approval', isPbringAdmin, pbringGridController.deleteApproval);
+router.post('/grid/approval', pbringGridController.postApproval);
+router.delete('/grid/approval', pbringGridController.deleteApproval);
+
+// Who may sign each role — own table (pbring_approval_role_config), never
+// sds_approval_role_config. Mirrors /api/sds/v2/approval/role-config so
+// ApprovalRoleConfig.jsx is reusable as-is once pointed at this base URL.
+router.get('/grid/approval/role-config', pbringGridController.getApprovalRoleConfig);
+router.post('/grid/approval/role-config', isPbringAdmin, pbringGridController.postApprovalRoleConfig);
+router.put('/grid/approval/role-config/:id', isPbringAdmin, pbringGridController.putApprovalRoleConfig);
+router.delete('/grid/approval/role-config/:id', isPbringAdmin, pbringGridController.deleteApprovalRoleConfig);
 
 // Auto Stamp config — own table (pbring_auto_stamp_config), own gate.
 // Disabled by default; see pbringAutoStamp.js.

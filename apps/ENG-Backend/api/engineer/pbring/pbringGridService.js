@@ -1461,8 +1461,10 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
 // would write into the same row a real engineer's production approval
 // lives in. Wide, one-row-per-sheet shape mirrors sds_approval, minus
 // sds_rev-keying, dept/source columns, backfill and Kanban board intake —
-// out of scope for this first version (user decision 2026-10-11: the
-// 3-step SEQUENCE, not the full configurable role-matrix).
+// out of scope for the first version (user decision 2026-10-11: the
+// 3-step SEQUENCE, not the full configurable role-matrix). The role-matrix
+// itself landed 2026-10-12 — see pbringUserCanSign/pbringApprovalRoleConfig
+// below — once the user asked to reuse the real ApprovalRoleConfig.jsx UI.
 const PBRING_APPROVAL_ROLE_ORDER = ['prepared', 'checked', 'approved'];
 
 async function getPbRingApproval(cn, machineTypeName, processCode) {
@@ -1471,6 +1473,50 @@ async function getPbRingApproval(cn, machineTypeName, processCode) {
     [cn, machineTypeName, processCode]
   );
   return rows[0] || null;
+}
+
+// ── Who may sign each role — pbring_approval_role_config (2026-10-12) ───────
+// Mirrors sdsApprovalController.js's getRoleConfig/userCanSign exactly
+// (same match_type vocabulary: any/department/role/feature_perm/em_id), own
+// table — never sds_approval_role_config, same separation reason as
+// pbring_sds_approval vs sds_approval. "Admin" here is pbring's own
+// definition (AD dept/role, OR the pbring_admin/all_mtc permission —
+// matches hasFeature('pbring_admin'), the route guard this replaces at the
+// handler level for POST/DELETE /grid/approval) rather than the real
+// system's AD-only override, since that is what "pbring admin" has always
+// meant everywhere else in this domain (isPbringAdmin in pbringRoutes.js,
+// PbRingMonitorPage.jsx's own isPbringAdmin check).
+async function getPbRingRoleConfig() {
+  const { rows } = await engPool.query(
+    `SELECT id, role, match_type, match_value, enabled, note FROM pbring_approval_role_config ORDER BY role, id`
+  );
+  return rows;
+}
+
+function isPbringAdminUser(user) {
+  const dept = (user && (user.department || user.u_department)) || '';
+  const role = (user && (user.role || user.u_role)) || '';
+  const perms = Array.isArray(user?.perms) ? user.perms : [];
+  return dept === 'AD' || role === 'AD' || perms.includes('pbring_admin') || perms.includes('all_mtc');
+}
+
+function pbringUserCanSign(user, role, cfgRows) {
+  if (isPbringAdminUser(user)) return true;
+  const rows = (cfgRows || []).filter((r) => r.role === role && r.enabled);
+  if (!rows.length) return false; // no rule + not admin -> deny, same as today's isPbringAdmin-only gate
+  const dept = (user && (user.department || user.u_department)) || '';
+  const roleOf = (user && (user.role || user.u_role)) || '';
+  const perms = Array.isArray(user?.perms) ? user.perms : [];
+  return rows.some((r) => {
+    switch (r.match_type) {
+      case 'any':          return true;
+      case 'department':   return r.match_value === dept;
+      case 'role':         return r.match_value === roleOf;
+      case 'feature_perm': return perms.includes(r.match_value);
+      case 'em_id':        return String(r.match_value) === String(user?.empno);
+      default:              return false;
+    }
+  });
 }
 
 function pbRingRoleRec(row, role) {
@@ -1544,10 +1590,11 @@ async function revokePbRingApproval(cn, machineTypeName, processCode, role) {
 
 // ── Auto Stamp config (single row, id=1) — read by pbringAutoStamp.js ───────
 // No role-config fallback (unlike the real sds_auto_stamp_config, which
-// falls back to sds_approval_role_config) — PB Ring has no equivalent
-// configurable permission matrix. The explicit em_id per role IS the only
-// source, consistent with isPbringAdmin being the one gate everywhere else
-// in this domain.
+// falls back to sds_approval_role_config) — the explicit em_id per role is
+// the only source. pbring_approval_role_config (added 2026-10-12, above)
+// gates who may SIGN; auto-stamp deliberately stays a separate, simpler
+// explicit-only picker (see AutoStampSection.jsx's hasRoleConfig={false}
+// usage for PB Ring) rather than resolving through it.
 async function getPbRingAutoStampConfig() {
   const { rows } = await engPool.query(`SELECT * FROM pbring_auto_stamp_config WHERE id = 1`);
   const r = rows[0] || {};
@@ -1613,6 +1660,29 @@ async function syncPbRingApprovalBoardCard({ io, cn, machineTypeName, processCod
   }
 }
 
+// ── pbring_approval_role_config CRUD — mirrors sdsApprovalController.js's
+// role-config routes exactly, against PB Ring's own table.
+async function addPbringRoleConfig({ role, match_type, match_value, note }) {
+  const { rows } = await engPool.query(
+    `INSERT INTO pbring_approval_role_config (role, match_type, match_value, note) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [role, match_type, match_type === 'any' ? null : match_value, note || null]
+  );
+  return rows[0];
+}
+async function updatePbringRoleConfig(id, { enabled, note }) {
+  const { rows } = await engPool.query(
+    `UPDATE pbring_approval_role_config SET
+       enabled = COALESCE($1, enabled),
+       note    = COALESCE($2, note)
+     WHERE id = $3 RETURNING *`,
+    [typeof enabled === 'boolean' ? enabled : null, note ?? null, id]
+  );
+  return rows[0] || null;
+}
+async function deletePbringRoleConfig(id) {
+  await engPool.query(`DELETE FROM pbring_approval_role_config WHERE id = $1`, [id]);
+}
+
 module.exports = {
   loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
   listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
@@ -1631,4 +1701,6 @@ module.exports = {
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
   PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
   getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
+  getPbRingRoleConfig, pbringUserCanSign, isPbringAdminUser,
+  addPbringRoleConfig, updatePbringRoleConfig, deletePbringRoleConfig,
 };

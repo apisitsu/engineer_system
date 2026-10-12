@@ -18,6 +18,8 @@ const {
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
   PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
   getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
+  getPbRingRoleConfig, pbringUserCanSign, isPbringAdminUser,
+  addPbringRoleConfig, updatePbringRoleConfig, deletePbringRoleConfig,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 const cnFormat = require('../mtc/utils/cnFormat');
@@ -133,6 +135,15 @@ async function postApproval(req, res) {
       return res.status(400).json({ success: false, error: 'cn, machine_type_name, process_code and role are required' });
     }
     if (!req.user?.empno) return res.status(401).json({ success: false, error: 'user context missing' });
+    // Permission moved here from the route guard (2026-10-12) — was a blanket
+    // isPbringAdmin on the whole route; now admin OR a matching enabled rule
+    // in pbring_approval_role_config, same shape as the real sign route's
+    // userCanSign. An empty config table (the default) behaves identically
+    // to the old gate: only an admin can sign.
+    const cfg = await getPbRingRoleConfig();
+    if (!pbringUserCanSign(req.user, role, cfg)) {
+      return res.status(403).json({ success: false, error: `You are not permitted to sign as ${role}` });
+    }
     const signerName = req.user.name || String(req.user.empno);
     const row = await signPbRingApproval(
       cn, machine_type_name, process_code, role, req.user.empno, signerName, 'live'
@@ -156,11 +167,70 @@ async function deleteApproval(req, res) {
     if (!cn || !machine_type_name || !process_code || !role) {
       return res.status(400).json({ success: false, error: 'cn, machine_type_name, process_code and role are required' });
     }
+    // Admin, or the signer revoking their own signature — same rule the real
+    // revoke route uses (sdsApprovalController.js), not the role-config
+    // signing rules (revoking isn't "signing as").
+    if (!isPbringAdminUser(req.user)) {
+      const existing = await getPbRingApproval(cn, machine_type_name, process_code);
+      const emId = existing && existing[`${role}_em_id`];
+      if (emId && String(emId) !== String(req.user?.empno)) {
+        return res.status(403).json({ success: false, error: 'You may only revoke your own signature' });
+      }
+    }
     const row = await revokePbRingApproval(cn, machine_type_name, process_code, role);
     res.json({ success: true, approval: row });
   } catch (err) {
     console.error('[pbring:grid:approval:delete]', err);
     res.status(err.status || 500).json({ success: false, error: err.message || 'Failed to revoke' });
+  }
+}
+
+// ── Approval role config CRUD — mirrors sdsApprovalController.js's
+// /role-config routes exactly, against pbring_approval_role_config. GET is
+// open to any authenticated user (same as the real one — the config list
+// itself isn't sensitive); write routes gated isPbringAdmin at the route
+// level in pbringRoutes.js, same as the real ones are gated isAdmin.
+async function getApprovalRoleConfig(req, res) {
+  try {
+    res.json({ success: true, config: await getPbRingRoleConfig() });
+  } catch (err) {
+    console.error('[pbring:grid:approval:role-config:get]', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+}
+async function postApprovalRoleConfig(req, res) {
+  const { role, match_type, match_value, note } = req.body || {};
+  if (!PBRING_APPROVAL_ROLE_ORDER.includes(role)) {
+    return res.status(400).json({ success: false, error: `role must be one of ${PBRING_APPROVAL_ROLE_ORDER.join(', ')}` });
+  }
+  if (!['any', 'department', 'role', 'feature_perm', 'em_id'].includes(match_type)) {
+    return res.status(400).json({ success: false, error: 'invalid match_type' });
+  }
+  if (match_type !== 'any' && !match_value) return res.status(400).json({ success: false, error: 'match_value is required' });
+  try {
+    res.json({ success: true, config: await addPbringRoleConfig({ role, match_type, match_value, note }) });
+  } catch (err) {
+    console.error('[pbring:grid:approval:role-config:post]', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+}
+async function putApprovalRoleConfig(req, res) {
+  try {
+    const row = await updatePbringRoleConfig(req.params.id, req.body || {});
+    if (!row) return res.status(404).json({ success: false, error: 'not found' });
+    res.json({ success: true, config: row });
+  } catch (err) {
+    console.error('[pbring:grid:approval:role-config:put]', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+}
+async function deleteApprovalRoleConfig(req, res) {
+  try {
+    await deletePbringRoleConfig(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[pbring:grid:approval:role-config:delete]', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 }
 
@@ -559,6 +629,7 @@ async function deleteGrindingImageRoute(req, res) {
 module.exports = {
   getPdf, getHasData,
   getApproval, postApproval, deleteApproval,
+  getApprovalRoleConfig, postApprovalRoleConfig, putApprovalRoleConfig, deleteApprovalRoleConfig,
   getAutoStampConfig, putAutoStampConfig, postAutoStampRun,
   getTemplates, getMachineTypes, putMachineTemplate, putTemplateDefault, postReimport,
   getTemplate, postTemplate, putTemplate, deleteTemplate: deleteTemplateRoute,
