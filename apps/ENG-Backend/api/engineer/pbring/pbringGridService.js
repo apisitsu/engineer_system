@@ -760,38 +760,68 @@ async function getManualParams(machineTypeName, cn, processCode) {
  * a key with an empty/omitted value and an existing row id is deleted
  * instead of written as an empty string, so clearing a cell removes the
  * override rather than freezing a blank.
+ *
+ * Bulk SQL only (one DELETE + chunked multi-row INSERT), not a per-row
+ * loop — the machine-default grid alone is 43 rows x 9 cols x 2
+ * (value + type) + headers + the GW section, ~930 params in one save.
+ * Measured live, 2026-10-12: the old per-row `await` loop (931 sequential
+ * round trips in one transaction) took 60s+ and never finished — the
+ * frontend's 10s default timeout turned every full-grid Save into "Save
+ * failed" on an otherwise healthy backend, same failure shape as the
+ * Coverage Report's split_part scan. Chunk size matches db-patterns.md's
+ * convention (2000 rows x 6 cols = 12000 params, under pg's 65535 limit);
+ * today's payloads are one chunk, but a chunk size caps this against any
+ * future config size.
  */
 async function saveManualParams(machineTypeName, cn, processCode, params, empno) {
   const cnVal = cn || null;
   const pcVal = cnVal ? (processCode || null) : null; // machine-default rows stay process-agnostic
   const list = Array.isArray(params) ? params : [];
 
+  const toDelete = [];
+  const toUpsert = [];
+  for (const { param_key, param_value, delete: del } of list) {
+    if (!param_key || !String(param_key).trim()) continue;
+    const key = String(param_key).trim();
+    if (del || param_value == null || param_value === '') toDelete.push(key);
+    else toUpsert.push({ key, value: String(param_value) });
+  }
+
   const client = await engPool.connect();
   try {
     await client.query('BEGIN');
+
+    if (toDelete.length) {
+      await client.query(
+        `DELETE FROM pbring_sds_parameter
+          WHERE machine_type_name = $1 AND param_key = ANY($2)
+            AND COALESCE(cn,'') = COALESCE($3,'') AND COALESCE(process_code,'') = COALESCE($4,'')`,
+        [machineTypeName, toDelete, cnVal, pcVal]
+      );
+    }
+
     const saved = [];
-    for (const { param_key, param_value, delete: del } of list) {
-      if (!param_key || !String(param_key).trim()) continue;
-      const key = String(param_key).trim();
-      if (del || param_value == null || param_value === '') {
-        await client.query(
-          `DELETE FROM pbring_sds_parameter
-            WHERE machine_type_name = $1 AND param_key = $2
-              AND COALESCE(cn,'') = COALESCE($3,'') AND COALESCE(process_code,'') = COALESCE($4,'')`,
-          [machineTypeName, key, cnVal, pcVal]
-        );
-        continue;
-      }
+    const CHUNK = 2000;
+    for (let i = 0; i < toUpsert.length; i += CHUNK) {
+      const chunk = toUpsert.slice(i, i + CHUNK);
+      const COLS = 6;
+      const placeholders = chunk.map((_, ri) =>
+        `(${Array.from({ length: COLS }, (__, ci) => `$${ri * COLS + ci + 1}`).join(',')})`
+      ).join(',');
+      const values = chunk.flatMap(({ key, value }) =>
+        [cnVal, machineTypeName, key, value, pcVal, empno || null]
+      );
       const r = await client.query(
         `INSERT INTO pbring_sds_parameter (cn, machine_type_name, param_key, param_value, process_code, updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
+         VALUES ${placeholders}
          ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
          DO UPDATE SET param_value = EXCLUDED.param_value, updated_by = EXCLUDED.updated_by, updated_at = NOW()
          RETURNING id, param_key, param_value`,
-        [cnVal, machineTypeName, key, String(param_value), pcVal, empno || null]
+        values
       );
-      saved.push(r.rows[0]);
+      saved.push(...r.rows);
     }
+
     await client.query('COMMIT');
     return saved;
   } catch (e) {
