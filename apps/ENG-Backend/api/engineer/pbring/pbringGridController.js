@@ -167,9 +167,34 @@ async function deleteApproval(req, res) {
 // ── Auto Stamp config (own table, own gate) ──────────────────────────────────
 // Mirrors GET/PUT /api/sds/v2/report/auto-stamp/config, scoped to PB Ring's
 // own pbring_auto_stamp_config — see pbringAutoStamp.js header.
+//
+// The GET response is reshaped to the {explicit, signers, role_config_candidates}
+// envelope the real AutoStampSection.jsx component expects — user request
+// (2026-10-12): reuse that component as-is for PB Ring rather than building a
+// second one. getPbRingAutoStampConfig()'s own flat {prepared, checked, approved}
+// shape is NOT changed here (pbringAutoStamp.js's runAutoStamp reads `cfg[role]`
+// directly off it) — this wrapping happens only at the HTTP boundary. PB Ring has
+// no role-config fallback table, so `signers` is identical to `explicit` and
+// `role_config_candidates` is always empty — the component's "From role config"
+// badge and "N candidates, pick one" hint simply never render for PB Ring, which
+// is the correct behaviour (there's nothing to fall back to).
+function wrapAutoStampConfigForUi(raw) {
+  const asEntry = (v) => ({ em_id: v?.em_id || '', name: v?.name || '' });
+  const explicit = { prepared: asEntry(raw.prepared), checked: asEntry(raw.checked), approved: asEntry(raw.approved) };
+  return {
+    enabled: raw.enabled,
+    max_per_run: raw.max_per_run,
+    explicit,
+    signers: { prepared: raw.prepared || null, checked: raw.checked || null, approved: raw.approved || null },
+    role_config_candidates: {},
+    updated_by: raw.updated_by,
+    updated_at: raw.updated_at,
+  };
+}
+
 async function getAutoStampConfig(req, res) {
   try {
-    res.json({ success: true, config: await getPbRingAutoStampConfig() });
+    res.json({ success: true, config: wrapAutoStampConfigForUi(await getPbRingAutoStampConfig()) });
   } catch (err) {
     console.error('[pbring:grid:auto-stamp:get]', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to load auto-stamp config' });
@@ -178,11 +203,36 @@ async function getAutoStampConfig(req, res) {
 
 async function putAutoStampConfig(req, res) {
   try {
+    // AutoStampSection.jsx's save() posts its flattened draft directly
+    // ({enabled, max_per_run, prepared_em_id, prepared_name, ...}) — already
+    // exactly the shape savePbRingAutoStampConfig expects, no adapter needed.
     const row = await savePbRingAutoStampConfig(req.body || {}, req.user?.empno);
-    res.json({ success: true, config: row });
+    res.json({ success: true, config: wrapAutoStampConfigForUi(await getPbRingAutoStampConfig()) });
   } catch (err) {
     console.error('[pbring:grid:auto-stamp:put]', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to save auto-stamp config' });
+  }
+}
+
+// Manual trigger for the AutoStampSection.jsx "Dry-run"/"Run now" buttons.
+// classifyCoverage is lazy-required (not at module top) — same reason
+// syncPbRingApprovalBoardCard below lazy-requires kanbanIntake: avoids any
+// boot-order coupling between controller modules. Safe to require
+// sdsV2ReportController here (no cycle: it requires pbringCoverageService
+// and pbringAutoStamp, neither of which requires this controller back) —
+// verified by grep before adding this.
+async function postAutoStampRun(req, res) {
+  try {
+    const { classifyCoverage } = require('../mtc/controllers/sdsV2ReportController');
+    const pbringAutoStamp = require('./pbringAutoStamp');
+    const result = await pbringAutoStamp.runAutoStamp(classifyCoverage, {
+      io: req.app.get('io'),
+      dryRun: !!req.query.dryRun,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[pbring:grid:auto-stamp:run]', err);
+    res.status(500).json({ ok: false, error: err.message || 'Auto Stamp run failed' });
   }
 }
 
@@ -509,7 +559,7 @@ async function deleteGrindingImageRoute(req, res) {
 module.exports = {
   getPdf, getHasData,
   getApproval, postApproval, deleteApproval,
-  getAutoStampConfig, putAutoStampConfig,
+  getAutoStampConfig, putAutoStampConfig, postAutoStampRun,
   getTemplates, getMachineTypes, putMachineTemplate, putTemplateDefault, postReimport,
   getTemplate, postTemplate, putTemplate, deleteTemplate: deleteTemplateRoute,
   postXlsxUploadSheets, postXlsxUpload, getTemplateBlankPdf,

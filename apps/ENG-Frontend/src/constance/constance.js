@@ -110,6 +110,8 @@ export const server = {
   PBRING_GRID_ADMIN_GRINDING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/grinding-images`, // ?machine_type_name= (GET list)
   PBRING_GRID_ADMIN_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/grinding-image`, // POST (multipart) / DELETE ?machine_type_name=&cn=&process_code=
   PBRING_CONDITION: `${apiUrl}api/engineer/pbring/condition`, // ?cn=&machine_type_name=&process_code= (GET); PUT row; append /:id (DELETE)
+  PBRING_GRID_AUTO_STAMP_CONFIG: `${apiUrl}api/engineer/pbring/grid/auto-stamp/config`, // GET / PUT — same shape as MTC_SDS_V2_AUTO_STAMP_CONFIG, fed to the shared AutoStampSection component
+  PBRING_GRID_AUTO_STAMP_RUN: `${apiUrl}api/engineer/pbring/grid/auto-stamp/run`, // POST ?dryRun=1 — same shape as MTC_SDS_V2_AUTO_STAMP
   PBRING_CONDITION_HISTORY: `${apiUrl}api/engineer/pbring/condition/history`, // ?machine_type_name=&process_code= (GET)
   PBRING_CONDITION_FROM_HISTORY: `${apiUrl}api/engineer/pbring/condition/from-history`, // POST
 

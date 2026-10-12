@@ -105,6 +105,11 @@ router.delete('/grid/approval', isPbringAdmin, pbringGridController.deleteApprov
 // Disabled by default; see pbringAutoStamp.js.
 router.get('/grid/auto-stamp/config', pbringGridController.getAutoStampConfig);
 router.put('/grid/auto-stamp/config', isPbringAdmin, pbringGridController.putAutoStampConfig);
+// Manual trigger — mirrors POST /api/sds/v2/report/auto-stamp (?dryRun=1),
+// so the real AutoStampSection.jsx's "Dry-run"/"Run now" buttons work
+// unmodified against PB Ring once pointed at this URL (see
+// pbringGridController.postAutoStampRun for the response-shape note).
+router.post('/grid/auto-stamp/run', isPbringAdmin, pbringGridController.postAutoStampRun);
 
 // Grid-template admin (Phase 5.6) — machine<->template assignment, default,
 // and re-run the xlsx import. Gated on isPbringAdmin like the other

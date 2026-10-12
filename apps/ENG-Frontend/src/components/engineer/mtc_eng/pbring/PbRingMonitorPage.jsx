@@ -14,6 +14,7 @@ import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { useTheme } from '../../../../theme';
 import { useAuthStore } from '../../../../stores/authStore';
+import AutoStampSection from '../sds/AutoStampSection';
 
 // Same status list as the backend's pbringConstants.STATUS — kept in sync by hand,
 // same way the prototype's own STATUS array was a plain shared constant.
@@ -1958,6 +1959,23 @@ export default function PbRingMonitorPage() {
     tabItems.push({ key: 'param-config', label: 'Parameter Config', children: <ParamConfigTab /> });
     tabItems.push({ key: 'condition', label: 'Tool Condition', children: <ConditionTab /> });
     tabItems.push({ key: 'images', label: 'Images', children: <ImagesTab /> });
+    // Reuses the real SDS Auto Stamp UI as-is, pointed at PB Ring's own
+    // pbring_auto_stamp_config/pbringAutoStamp.js — user request (2026-10-12).
+    // See AutoStampSection.jsx's header and pbringGridController.js's
+    // wrapAutoStampConfigForUi for how the two backends line up.
+    tabItems.push({
+      key: 'auto-stamp', label: 'Auto Stamp',
+      children: (
+        <Card style={{ maxWidth: 820 }}>
+          <AutoStampSection
+            configUrl={server.PBRING_GRID_AUTO_STAMP_CONFIG}
+            runUrl={server.PBRING_GRID_AUTO_STAMP_RUN}
+            adminPerm="pbring_admin"
+            hasRoleConfig={false}
+          />
+        </Card>
+      ),
+    });
   }
 
   const bodyContent = (
