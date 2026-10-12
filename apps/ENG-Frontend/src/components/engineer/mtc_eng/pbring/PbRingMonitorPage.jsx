@@ -1281,7 +1281,6 @@ function ParamConfigTab() {
 
   const machineListCols = [
     { title: 'Machine Type Name', dataIndex: 'machine_type_name' },
-    { title: 'Source Sheet', dataIndex: 'source_sheet_name', render: (v) => v || <Text type="secondary">-</Text> },
     {
       title: '', key: 'action', width: 120,
       render: (_, row) => (

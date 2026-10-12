@@ -380,6 +380,7 @@ async function listMachineTypes() {
             mt.grid_template_id, gt.name AS grid_template_name
        FROM pbring_machine_type mt
        LEFT JOIN pbring_grid_template gt ON gt.id = mt.grid_template_id
+      WHERE mt.is_active
       ORDER BY mt.machine_type_name`
   );
   return rows;
