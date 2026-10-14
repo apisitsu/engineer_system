@@ -94,37 +94,41 @@ router.get('/grid/has-data', pbringGridController.getHasData);
 
 // Sheet approval (Prepared/Checked/Approved) — own table (pbring_sds_approval),
 // never the real sds_approval (see pbringGridService.js's comment above the
-// functions). Read open to any authenticated user, same as the PDF route;
-// sign/revoke gated isPbringAdmin like every other structural PB Ring action
-// (+New HW, Delete HW, cost approve/reject).
+// functions). Read open to any authenticated user, same as the PDF route.
+// Sign/revoke are no longer gated isPbringAdmin at the route level (changed
+// 2026-10-12) — the handler now checks pbring_approval_role_config, mirroring
+// the real sign route's userCanSign; an admin can still always sign/revoke,
+// and an empty config table (the default) still means "admin only", so this
+// is a behaviour-preserving change until an admin actually adds a rule.
 router.get('/grid/approval', pbringGridController.getApproval);
-router.post('/grid/approval', isPbringAdmin, pbringGridController.postApproval);
-router.delete('/grid/approval', isPbringAdmin, pbringGridController.deleteApproval);
+router.post('/grid/approval', pbringGridController.postApproval);
+router.delete('/grid/approval', pbringGridController.deleteApproval);
+
+// Who may sign each role — own table (pbring_approval_role_config), never
+// sds_approval_role_config. Mirrors /api/sds/v2/approval/role-config so
+// ApprovalRoleConfig.jsx is reusable as-is once pointed at this base URL.
+router.get('/grid/approval/role-config', pbringGridController.getApprovalRoleConfig);
+router.post('/grid/approval/role-config', isPbringAdmin, pbringGridController.postApprovalRoleConfig);
+router.put('/grid/approval/role-config/:id', isPbringAdmin, pbringGridController.putApprovalRoleConfig);
+router.delete('/grid/approval/role-config/:id', isPbringAdmin, pbringGridController.deleteApprovalRoleConfig);
 
 // Auto Stamp config — own table (pbring_auto_stamp_config), own gate.
 // Disabled by default; see pbringAutoStamp.js.
 router.get('/grid/auto-stamp/config', pbringGridController.getAutoStampConfig);
 router.put('/grid/auto-stamp/config', isPbringAdmin, pbringGridController.putAutoStampConfig);
+// Manual trigger — mirrors POST /api/sds/v2/report/auto-stamp (?dryRun=1),
+// so the real AutoStampSection.jsx's "Dry-run"/"Run now" buttons work
+// unmodified against PB Ring once pointed at this URL (see
+// pbringGridController.postAutoStampRun for the response-shape note).
+router.post('/grid/auto-stamp/run', isPbringAdmin, pbringGridController.postAutoStampRun);
 
-// Grid-template admin (Phase 5.6) — machine<->template assignment, default,
-// and re-run the xlsx import. Gated on isPbringAdmin like the other
-// structural actions above (+New HW, Delete HW).
-router.get('/grid/admin/templates', isPbringAdmin, pbringGridController.getTemplates);
+// Active machine list — used by the Approval Roles / Auto Stamp / Parameter
+// Config tabs' machine picker. The Phase 5 grid-template admin routes that
+// used to sit here (template CRUD, machine<->template assignment, xlsx
+// upload, blank-preview PDF) were removed 2026-10-14 along with
+// pbring_grid_template/pbring_excel_mapping — see pbringGridService.js's
+// header and migration 20261014_pbring_drop_grid_template_phase5.js.
 router.get('/grid/admin/machine-types', isPbringAdmin, pbringGridController.getMachineTypes);
-router.put('/grid/admin/machine-types/:id', isPbringAdmin, pbringGridController.putMachineTemplate);
-router.put('/grid/admin/templates/:id/default', isPbringAdmin, pbringGridController.putTemplateDefault);
-router.post('/grid/admin/reimport', isPbringAdmin, pbringGridController.postReimport);
-
-// Full template CRUD + xlsx upload — PbRingGridTemplateEditor.jsx, a
-// duplicate of SdsBlankTemplateGrid.jsx's editing surface (own route
-// namespace, own tables — zero coupling with sds_grid_template/sds_excel_mapping).
-router.get('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.getTemplate);
-router.post('/grid/admin/templates', isPbringAdmin, pbringGridController.postTemplate);
-router.put('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.putTemplate);
-router.delete('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.deleteTemplate);
-router.post('/grid/admin/templates/from-xlsx-upload/sheets', isPbringAdmin, pbringGridController.postXlsxUploadSheets);
-router.post('/grid/admin/templates/from-xlsx-upload', isPbringAdmin, pbringGridController.postXlsxUpload);
-router.get('/grid/admin/templates/:id/pdf-blank', isPbringAdmin, pbringGridController.getTemplateBlankPdf);
 
 // Parameter Config (Phase 6, problem #3) — per-machine GRIND/DRESS CONDITION
 // row definitions (label/param_key/unit), seeded from the xlsx import,

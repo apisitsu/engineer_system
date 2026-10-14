@@ -554,6 +554,21 @@ router.put('/parameters', isAdmin, flushSds, async (req, res) => {
 /**
  * PUT /api/sds/v2/admin/parameters/bulk — upsert multiple parameters at once
  * Body: { cn, machine_type_name, params: [{ param_key, param_value }, ...] }
+ *
+ * Bulk SQL (one chunked multi-row INSERT), not a per-row loop — the full
+ * machine-default grid (MachineConfigTab's "Save") sends ~930 params in one
+ * request (43 rows x 9 cols x 2 [value+type] + headers + the 6-row GW
+ * section). Found live, 2026-10-12, while comparing this route against the
+ * identical bug already fixed in PB Ring's equivalent
+ * (pbringGridService.saveManualParams): the old per-row `await` loop here
+ * is the exact same anti-pattern — 930 sequential round trips in one
+ * transaction, which a realistic full-grid save measured at 60s+ for PB
+ * Ring before axios's default timeout gave up on the client while the
+ * server kept working. Same discipline as db-patterns.md's bulk-insert
+ * convention. Semantics are unchanged: every param in the array is always
+ * upserted (never deleted — a blank param_value is written through as SQL
+ * NULL, same as the old per-row version; clearing a row is still the
+ * separate DELETE /parameters/:id route below).
  */
 router.put('/parameters/bulk', isAdmin, flushSds, async (req, res) => {
   const { cn, machine_type_name, params, process_code } = req.body;
@@ -564,24 +579,36 @@ router.put('/parameters/bulk', isAdmin, flushSds, async (req, res) => {
   // Only CN overrides may pin a process_code; machine-default rows stay process-agnostic.
   const pcVal = cnVal && process_code && process_code !== 'null' ? String(process_code).trim() : null;
   const updatedBy = req.user?.empno || null;
+  const list = params
+    .filter((p) => p.param_key?.trim())
+    .map((p) => ({ key: p.param_key.trim(), value: p.param_value ?? null }));
+  if (!list.length) return res.json({ saved: [], count: 0 });
 
   const client = await engPool.connect();
   try {
     await client.query('BEGIN');
     const saved = [];
-    for (const { param_key, param_value } of params) {
-      if (!param_key?.trim()) continue;
+    const CHUNK = 2000;
+    for (let i = 0; i < list.length; i += CHUNK) {
+      const chunk = list.slice(i, i + CHUNK);
+      const COLS = 6;
+      const placeholders = chunk.map((_, ri) =>
+        `(${Array.from({ length: COLS }, (__, ci) => `$${ri * COLS + ci + 1}`).join(',')})`
+      ).join(',');
+      const values = chunk.flatMap(({ key, value }) =>
+        [cnVal, machine_type_name.trim(), key, value, pcVal, updatedBy]
+      );
       const r = await client.query(
         `INSERT INTO ${TABLES.SDS_PARAMETER} (cn, machine_type_name, param_key, param_value, process_code, updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
+         VALUES ${placeholders}
          ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
          DO UPDATE SET param_value = EXCLUDED.param_value,
                        updated_by  = EXCLUDED.updated_by,
                        updated_at  = NOW()
          RETURNING id, param_key, param_value`,
-        [cnVal, machine_type_name.trim(), param_key.trim(), param_value ?? null, pcVal, updatedBy]
+        values
       );
-      saved.push(r.rows[0]);
+      saved.push(...r.rows);
     }
     await client.query('COMMIT');
     res.json({ saved, count: saved.length });

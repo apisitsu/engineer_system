@@ -32,7 +32,21 @@ const MATCH_HINT = {
   em_id: 'Employee No, e.g. T1460',
 };
 
-const ApprovalRoleConfig = ({ theme }) => {
+// Reused as-is for PB Ring (2026-10-12): `apiBase` lets a caller point this
+// at a different backend without touching this file — PB Ring's own
+// pbring_approval_role_config routes mirror the real
+// /api/sds/v2/approval/role-config shape exactly (GET list, POST add, PUT
+// /:id {enabled,note}, DELETE /:id). `description` overrides the Alert's
+// explanatory text, since "SDS" wouldn't read right for PB Ring. Both
+// default to the real SDS endpoint/copy, so the existing
+// `<ApprovalRoleConfig theme={theme} />` call in SdsV2AdminPage.jsx is
+// unaffected.
+const ApprovalRoleConfig = ({
+  theme,
+  apiBase = server.MTC_SDS_V2_APPROVAL_ROLE_CONFIG,
+  alertMessage = 'Configure SDS signing permissions (Prepared / Checked / Approved)',
+  adminHint = 'Admins (department/role = AD) can already sign every role without a rule.',
+}) => {
   const { message } = App.useApp();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -44,14 +58,14 @@ const ApprovalRoleConfig = ({ theme }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get(server.MTC_SDS_V2_APPROVAL_ROLE_CONFIG);
+      const res = await axios.get(apiBase);
       setRows(res.data?.config || []);
     } catch {
       message.error('Load failed');
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, [apiBase, message]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -61,7 +75,7 @@ const ApprovalRoleConfig = ({ theme }) => {
     try {
       const vals = await form.validateFields();
       setSaving(true);
-      await axios.post(server.MTC_SDS_V2_APPROVAL_ROLE_CONFIG, {
+      await axios.post(apiBase, {
         role: vals.role,
         match_type: vals.match_type,
         match_value: vals.match_type === 'any' ? null : vals.match_value?.trim(),
@@ -80,7 +94,7 @@ const ApprovalRoleConfig = ({ theme }) => {
 
   const toggleEnabled = async (row) => {
     try {
-      await axios.put(`${server.MTC_SDS_V2_APPROVAL_ROLE_CONFIG}/${row.id}`, { enabled: !row.enabled });
+      await axios.put(`${apiBase}/${row.id}`, { enabled: !row.enabled });
       load();
     } catch (err) {
       message.error(err.response?.data?.error || 'Update failed');
@@ -89,7 +103,7 @@ const ApprovalRoleConfig = ({ theme }) => {
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`${server.MTC_SDS_V2_APPROVAL_ROLE_CONFIG}/${id}`);
+      await axios.delete(`${apiBase}/${id}`);
       message.success('Deleted');
       load();
     } catch (err) {
@@ -130,11 +144,11 @@ const ApprovalRoleConfig = ({ theme }) => {
     <div>
       <Alert
         type="info" showIcon style={{ marginBottom: 12 }}
-        message="Configure SDS signing permissions (Prepared / Checked / Approved)"
+        message={alertMessage}
         description={
           <Text type="secondary" style={{ fontSize: 12 }}>
             Each rule grants "anyone matching the condition" the right to sign that role (multiple rules combine with OR).
-            Admins (department/role = AD) can already sign every role without a rule.
+            {' '}{adminHint}
           </Text>
         }
       />

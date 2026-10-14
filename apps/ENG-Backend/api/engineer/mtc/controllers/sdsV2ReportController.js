@@ -1032,7 +1032,7 @@ async function buildCoverage() {
     //
     // `complete` = a sheet that is TOOL + EXCEL ready AND fully approval-stamped
     // (`coverage_level === 'COMPLETE'`); `complete_saved` is the same via a factory-plan
-    // tool only (the KZW baseline; the gap up to `complete` is the T-Select #1 boost).
+    // tool only (the Innovator baseline; the gap up to `complete` is the T-Select #1 boost).
     // Both numerator and denominator bucket on the sheet's FIRST-PRODUCED month, and
     // MISSING rows (no process plan at all) are excluded — so `complete_pct` reads
     // "of the sheets we could work on, how many are done" per production cohort.
@@ -1095,7 +1095,7 @@ async function buildCoverage() {
       return {
         month,
         complete:       cumComplete,         // tool + Excel + stamped, incl. T-Select #1
-        complete_saved: cumCompleteSaved,    // same via factory-plan tool only (KZW)
+        complete_saved: cumCompleteSaved,    // same via factory-plan tool only (Innovator)
         pending:        Math.max(0, cumWorkable - cumComplete),
         complete_pct:       pct(cumComplete, cumWorkable),
         complete_saved_pct: pct(cumCompleteSaved, cumWorkable),
