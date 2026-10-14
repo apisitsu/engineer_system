@@ -122,25 +122,13 @@ router.put('/grid/auto-stamp/config', isPbringAdmin, pbringGridController.putAut
 // pbringGridController.postAutoStampRun for the response-shape note).
 router.post('/grid/auto-stamp/run', isPbringAdmin, pbringGridController.postAutoStampRun);
 
-// Grid-template admin (Phase 5.6) — machine<->template assignment, default,
-// and re-run the xlsx import. Gated on isPbringAdmin like the other
-// structural actions above (+New HW, Delete HW).
-router.get('/grid/admin/templates', isPbringAdmin, pbringGridController.getTemplates);
+// Active machine list — used by the Approval Roles / Auto Stamp / Parameter
+// Config tabs' machine picker. The Phase 5 grid-template admin routes that
+// used to sit here (template CRUD, machine<->template assignment, xlsx
+// upload, blank-preview PDF) were removed 2026-10-14 along with
+// pbring_grid_template/pbring_excel_mapping — see pbringGridService.js's
+// header and migration 20261014_pbring_drop_grid_template_phase5.js.
 router.get('/grid/admin/machine-types', isPbringAdmin, pbringGridController.getMachineTypes);
-router.put('/grid/admin/machine-types/:id', isPbringAdmin, pbringGridController.putMachineTemplate);
-router.put('/grid/admin/templates/:id/default', isPbringAdmin, pbringGridController.putTemplateDefault);
-router.post('/grid/admin/reimport', isPbringAdmin, pbringGridController.postReimport);
-
-// Full template CRUD + xlsx upload — PbRingGridTemplateEditor.jsx, a
-// duplicate of SdsBlankTemplateGrid.jsx's editing surface (own route
-// namespace, own tables — zero coupling with sds_grid_template/sds_excel_mapping).
-router.get('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.getTemplate);
-router.post('/grid/admin/templates', isPbringAdmin, pbringGridController.postTemplate);
-router.put('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.putTemplate);
-router.delete('/grid/admin/templates/:id', isPbringAdmin, pbringGridController.deleteTemplate);
-router.post('/grid/admin/templates/from-xlsx-upload/sheets', isPbringAdmin, pbringGridController.postXlsxUploadSheets);
-router.post('/grid/admin/templates/from-xlsx-upload', isPbringAdmin, pbringGridController.postXlsxUpload);
-router.get('/grid/admin/templates/:id/pdf-blank', isPbringAdmin, pbringGridController.getTemplateBlankPdf);
 
 // Parameter Config (Phase 6, problem #3) — per-machine GRIND/DRESS CONDITION
 // row definitions (label/param_key/unit), seeded from the xlsx import,
