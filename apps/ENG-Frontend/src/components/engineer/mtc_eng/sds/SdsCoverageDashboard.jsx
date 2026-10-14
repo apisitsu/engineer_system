@@ -603,7 +603,7 @@ export default function SdsCoverageDashboard() {
   // otherwise put the previous month behind the `isPrevLast` synthetic row. Each row's
   // `complete`/`pending`/`complete_pct` (and `byPartType[pt].*`) are CUMULATIVE, so the
   // difference between two adjacent months is exactly that month's net change.
-  // Bars are stamp-GATED complete (KZW baseline + THAI T-Select #1) vs pending. Stable
+  // Bars are stamp-GATED complete (Innovator baseline + THAI T-Select #1) vs pending. Stable
   // against a later bulk sign because the BACKEND now buckets each completion by the
   // month it was fully stamped (max sign date), not the part's first-produced month —
   // so signing work in August lifts only the August bar, not every historical bar.
@@ -675,7 +675,7 @@ export default function SdsCoverageDashboard() {
     datasets: [
       {
         type: 'bar',
-        label: 'KZW Complete',
+        label: 'Innovator Complete',
         data: monthlyStatus.map(r => r.complete_saved ?? r.complete),
         backgroundColor: monthlyStatus.map(r => hexToRgba(C.green, fill(r, 0.30, 0.75))),
         borderColor: monthlyStatus.map(r => hexToRgba(C.green, faint(r) ? 0.55 : 1)),
@@ -709,7 +709,7 @@ export default function SdsCoverageDashboard() {
       {
         // Invisible marker, plotted on the same CN axis ('y') as the bars, at exactly
         // half of that month's total (complete+pending) — so its point sits at the true
-        // vertical MIDDLE of the stacked bar regardless of how the KZW/THAI/Pending split
+        // vertical MIDDLE of the stacked bar regardless of how the Innovator/THAI/Pending split
         // falls, and an anchor:'center' datalabel there reads as "the number inside the
         // bar" rather than competing with the count/delta/% stack already crowded above
         // it. No width tiering needed: unlike a horizontal label, this has nothing beside
@@ -733,7 +733,7 @@ export default function SdsCoverageDashboard() {
           },
           color: '#fff',
           // A dark stroke around white text keeps it legible whether it lands on the
-          // pale KZW green, the softer THAI green, or the tan Pending segment.
+          // pale Innovator green, the softer THAI green, or the tan Pending segment.
           textStrokeColor: 'rgba(0,0,0,0.6)',
           textStrokeWidth: 3,
           anchor: 'center',
@@ -743,7 +743,7 @@ export default function SdsCoverageDashboard() {
       },
       {
         type: 'line',
-        label: 'Complete % (KZW+THAI)',
+        label: 'Complete % (Innovator+THAI)',
         // Cut the line at the last month that actually has data (null → no point),
         // so it stops at the latest month instead of diving to 0% across empty
         // future months — same behaviour as the Inspection "Monthly Trend — FYE" line.
@@ -915,9 +915,9 @@ export default function SdsCoverageDashboard() {
     },
   };
 
-  // ── KZW Complete per Month (net additions, not cumulative) ─────────────────────
+  // ── Innovator Complete per Month (net additions, not cumulative) ────────────────
   // `monthlyStatus` carries CUMULATIVE complete_saved — this chart wants the net
-  // change month to month, so each bar is literally "how many were KZW-completed
+  // change month to month, so each bar is literally "how many were Innovator-completed
   // in this month". Diffing two adjacent cumulative snapshots is also why a carried-
   // forward month (no new sign that month) nets to 0 automatically — no separate
   // "no activity" case needed. Index 0 (the previous-FY `isPrevLast` baseline, when
@@ -950,7 +950,7 @@ export default function SdsCoverageDashboard() {
     return {
       labels: kzwMonthlyNet.map(r => fmtMonth(r.month)),
       datasets: [{
-        label: 'KZW Complete',
+        label: 'Innovator Complete',
         data: kzwMonthlyNet.map(r => r.net),
         backgroundColor: kzwMonthlyNet.map(r => hexToRgba(r.net < 0 ? C.red : C.green,
           (filterMonth && r.month !== filterMonth) ? 0.25 : (r.month === curMonth ? 0.4 : 0.75))),
@@ -972,7 +972,7 @@ export default function SdsCoverageDashboard() {
     },
     plugins: {
       legend: { display: false },
-      tooltip: { callbacks: { label: ctx => `KZW Complete: ${ctx.parsed.y.toLocaleString()}` } },
+      tooltip: { callbacks: { label: ctx => `Innovator Complete: ${ctx.parsed.y.toLocaleString()}` } },
       datalabels: {
         display: (ctx) => {
           const net = kzwMonthlyNet[ctx.dataIndex]?.net;
@@ -992,7 +992,7 @@ export default function SdsCoverageDashboard() {
       y: {
         ticks: { color: C.textSec, font: { size: 10 } },
         grid: { color: C.gridLine },
-        title: { display: true, text: 'CNs completed (KZW)', color: C.textSec, font: { size: 10 } },
+        title: { display: true, text: 'CNs completed (Innovator)', color: C.textSec, font: { size: 10 } },
       },
     },
   };
@@ -1203,7 +1203,7 @@ export default function SdsCoverageDashboard() {
                 {/* "New SDS Reqs per Month" moved up here (was in the Charts Row below) —
                     TOTAL now sits stacked above Pending instead, so this slot would
                     otherwise sit empty. Same span=8 width it already had down there.
-                    Fixed 350px, matching KZW Complete per Month — matching the KPI
+                    Fixed 350px, matching Innovator Complete per Month — matching the KPI
                     block's own (shorter) height instead squished the chart too thin to
                     read. The KPI block keeps its own natural compact size either way
                     (no stretch), so this trades a tall-chart/short-cards height
@@ -1237,7 +1237,7 @@ export default function SdsCoverageDashboard() {
                     <Col span={16}>
                       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 10, boxSizing: 'border-box' }}>
                         {/* TOTAL — same compact stat-tile shape as Complete/Pending/%Complete;
-                            the KZW/THAI detail it used to carry is already shown in the
+                            the Innovator/THAI detail it used to carry is already shown in the
                             Complete and %Complete breakdown cards below it. */}
                         <div style={{ ...cardStyle, borderTop: `3px solid ${C.cyan}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1 }}>
                           <MiniStatCard label="Total" value={cardKpi?.total ?? 0} color={C.cyan} C={C} bare
@@ -1255,11 +1255,11 @@ export default function SdsCoverageDashboard() {
                             onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
                             dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
                           <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
-                          {/* `align="stretch"` so KZW/THAI match Pending's full stretched
+                          {/* `align="stretch"` so Innovator/THAI match Pending's full stretched
                               height instead of sitting at their own shorter natural size. */}
                           <Row gutter={[8, 8]} align="stretch" style={{ flex: 1 }}>
                             <Col span={12}>
-                              <SubStatCard label="KZW complete" value={scopedStats.completeSaved} color={C.green} C={C} bare />
+                              <SubStatCard label="Innovator complete" value={scopedStats.completeSaved} color={C.green} C={C} bare />
                             </Col>
                             <Col span={12} style={{ borderLeft: `1px solid ${C.border}` }}>
                               {scopedStats.complete - scopedStats.completeSaved > 0 && (
@@ -1281,7 +1281,7 @@ export default function SdsCoverageDashboard() {
                           <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
                           <Row gutter={[8, 8]} align="stretch" style={{ flex: 1 }}>
                             <Col span={12}>
-                              <SubStatCard label="KZW %" value={scopedStats.completeSavedPct} suffix="%"
+                              <SubStatCard label="Innovator %" value={scopedStats.completeSavedPct} suffix="%"
                                 color={scopedStats.completeSavedPct >= 90 ? C.green : C.red} C={C} bare />
                             </Col>
                             <Col span={12} style={{ borderLeft: `1px solid ${C.border}` }}>
@@ -1341,15 +1341,15 @@ export default function SdsCoverageDashboard() {
               </div>
             )}
 
-            {/* ── KZW Complete per Month + Cumulative Coverage Status ──────────── */}
+            {/* ── Innovator Complete per Month + Cumulative Coverage Status ───── */}
             {/* Both fixed at 350px — same literal height, not a stretch/measure trick,
                 so they're guaranteed equal regardless of either chart's content. */}
             <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
               <Col span={8}>
                 <div style={{ ...cardStyle, height: 350, display: 'flex', flexDirection: 'column' }}>
                   {sectionTitle(
-                    <Tooltip title="How many sheets were KZW-completed (baseline stamp) IN that month — the net change between adjacent cumulative snapshots, not a running total. A month with no new sign nets to 0; a sheet reverting to pending nets negative.">
-                      <span style={{ cursor: 'help' }}>KZW Complete per Month</span>
+                    <Tooltip title="How many sheets were Innovator-completed (baseline stamp) IN that month — the net change between adjacent cumulative snapshots, not a running total. A month with no new sign nets to 0; a sheet reverting to pending nets negative.">
+                      <span style={{ cursor: 'help' }}>Innovator Complete per Month</span>
                     </Tooltip>,
                     C
                   )}
