@@ -1,8 +1,7 @@
 'use strict';
 
 /**
- * PB Ring grid-template rendering: resolve a (cn, machine_type_name,
- * process_code) into real values and turn the stored grid_json into a
+ * PB Ring grid rendering — turns the live SDS "Standard" grid_json into a
  * printable HTML page, independent of the live SDS pipeline.
  *
  * `buildGridPdfHtml` is duplicated from `sdsV2HeadlessController.js:1281+`
@@ -10,47 +9,24 @@
  * tooling-image table/feature. Kept otherwise as-is: it's generic grid->HTML
  * geometry (merges/borders/fills/text-spill), not SDS business logic.
  *
- * Value resolution does NOT need `pbring_excel_mapping` at render time —
- * `classifyParam` (from db_migrations/lib/pbringGridImport.js) is a pure,
- * deterministic function of the placeholder's own name, so every {{param}}
- * in the grid's own cell text can be resolved directly. The mapping table
- * exists for traceability/future admin editing, not as a render-time
- * dependency — avoids a second source of truth drifting from the grid itself.
+ * The Phase 5 pipeline this file originally carried (`pbring_grid_template`,
+ * `pbring_excel_mapping`, the `{{param}}`-literal-cell import from xlsx, and
+ * the full template CRUD/editor it fed) was retired 2026-10-14 — Phase 6
+ * (below, `loadStandardGridLive`/`buildStandardGridForMachine`) replaced it
+ * for every machine back on 2026-10-07, and both tables had been genuinely
+ * read by nothing since. Dropped by migration
+ * `20261014_pbring_drop_grid_template_phase5.js`; `--revert` recreates them
+ * empty (the Phase 5 data itself was only ever an import artifact, not
+ * anything an admin had edited — see that migration's header).
  */
 
 const { engPool } = require('../../../instance/eng_db');
 const { maqPool } = require('../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../instance/instance');
 const sdsV2SearchService = require('../mtc/services/sdsV2SearchService');
-const { classifyParam, importAllTemplates, TEMPLATE_NAMES } = require('../mtc/db_migrations/lib/pbringGridImport');
 
 function escHtml(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/**
- * Resolves the template grid for a machine: its assigned grid_template_id,
- * falling back to the is_default template. Returns { grid, machineTypeId }
- * or null if the machine isn't registered.
- */
-async function loadGridForMachine(machineTypeName) {
-  const { rows: mtRows } = await engPool.query(
-    `SELECT id, grid_template_id FROM pbring_machine_type WHERE machine_type_name = $1 AND is_active`,
-    [machineTypeName]
-  );
-  if (!mtRows.length) return null;
-  const mt = mtRows[0];
-
-  let templateId = mt.grid_template_id;
-  if (!templateId) {
-    const { rows: defRows } = await engPool.query(`SELECT id FROM pbring_grid_template WHERE is_default LIMIT 1`);
-    if (!defRows.length) return null;
-    templateId = defRows[0].id;
-  }
-
-  const { rows: gtRows } = await engPool.query(`SELECT grid_json FROM pbring_grid_template WHERE id = $1`, [templateId]);
-  if (!gtRows.length) return null;
-  return { grid: JSON.parse(gtRows[0].grid_json), machineTypeId: mt.id };
 }
 
 /**
@@ -133,31 +109,6 @@ async function buildPbRingValueMap(cn, machineTypeName, processCode) {
   for (const row of condRows) conditionByToolNumber[row.tool_number] = row;
 
   return { paramMap, conditionByToolNumber };
-}
-
-/**
- * Substitutes every {{param_key}} in the grid's own cell text with a real
- * value, via classifyParam — no mutation of the caller's grid object (the
- * caller already owns a fresh JSON.parse of the stored grid_json per request).
- */
-function applyValuesToGrid(grid, paramMap, conditionByToolNumber) {
-  const cells = grid.cells || {};
-  for (const key of Object.keys(cells)) {
-    const cell = cells[key];
-    if (!cell || typeof cell.v !== 'string' || cell.v.indexOf('{{') === -1) continue;
-    cell.v = cell.v.replace(/\{\{(\w+)\}\}/g, (_, paramKey) => {
-      const classified = classifyParam(paramKey);
-      let value;
-      if (classified.source === 'condition') {
-        const row = conditionByToolNumber[classified.tool_number];
-        value = row ? row[classified.condition_field] : null;
-      } else {
-        value = paramMap[paramKey];
-      }
-      return value == null ? '' : String(value);
-    });
-  }
-  return grid;
 }
 
 /** Duplicated from sdsV2HeadlessController.js:1281+, image machinery stripped. */
@@ -330,215 +281,41 @@ async function hasDataForCn(cn) {
   const combos = [...comboByKey.values()];
   if (!combos.length) return { exists: false, machines: [] };
 
+  // has_template used to mean "has a grid_template_id assigned" (Phase 5);
+  // every machine renders through the live Standard layout unconditionally
+  // now (Phase 6), so any active, registered machine can render — the field
+  // is kept (SdsV2Page.jsx still carries it in its combo state) but is now
+  // simply "is this machine active and known", same test as the registry
+  // query itself.
   const mcKeys = [...new Set(combos.map((c) => c.machine_type_name))];
   const { rows: mtRows } = await engPool.query(
-    `SELECT machine_type_name, grid_template_id IS NOT NULL AS has_template
-       FROM pbring_machine_type WHERE machine_type_name = ANY($1) AND is_active`,
+    `SELECT machine_type_name FROM pbring_machine_type WHERE machine_type_name = ANY($1) AND is_active`,
     [mcKeys]
   );
-  const templateByName = new Map(mtRows.map((r) => [r.machine_type_name, r.has_template]));
+  const activeNames = new Set(mtRows.map((r) => r.machine_type_name));
 
   const machines = combos
-    .filter((c) => templateByName.has(c.machine_type_name))
+    .filter((c) => activeNames.has(c.machine_type_name))
     .map((c) => ({
       machine_type_name: c.machine_type_name,
       process_code: c.process_code,
       machine: c.machine,
       process_name: c.process_name,
-      has_template: templateByName.get(c.machine_type_name),
+      has_template: true,
     }));
 
   return { exists: machines.length > 0, machines };
 }
 
-/**
- * Admin: machine<->template assignment (used by the "Grid Templates" tab on
- * the PB Ring Monitor page) plus full template CRUD + xlsx parsing (used by
- * PbRingGridTemplateEditor.jsx, the full Excel-style layout editor — a
- * duplicate of SdsBlankTemplateGrid.jsx's editing surface, not SDS's
- * "Excel Parameter Config" per-CN value grid, which has no PB Ring
- * equivalent: every {{param}} resolves automatically from
- * pbring_sds_param/pbring_sds_condition, there is no manual per-CN override
- * step here).
- */
-
-/** GET admin: templates list with how many machines each is assigned to. */
-async function listTemplates() {
-  const { rows } = await engPool.query(
-    `SELECT gt.id, gt.name, gt.is_default, gt.updated_at,
-            (SELECT COUNT(*) FROM pbring_machine_type m WHERE m.grid_template_id = gt.id) AS assigned_count
-       FROM pbring_grid_template gt
-      ORDER BY gt.is_default DESC, gt.name`
-  );
-  return rows;
-}
-
-/** GET admin: machine types with their assigned template id/name. */
+/** GET: active machine types (used by the Approval Roles / Auto Stamp / Parameter Config tabs' machine picker). */
 async function listMachineTypes() {
   const { rows } = await engPool.query(
-    `SELECT mt.id, mt.machine_type_name, mt.source_sheet_name, mt.is_active,
-            mt.grid_template_id, gt.name AS grid_template_name
-       FROM pbring_machine_type mt
-       LEFT JOIN pbring_grid_template gt ON gt.id = mt.grid_template_id
-      ORDER BY mt.machine_type_name`
+    `SELECT id, machine_type_name, source_sheet_name, is_active
+       FROM pbring_machine_type
+      WHERE is_active
+      ORDER BY machine_type_name`
   );
   return rows;
-}
-
-/** PUT admin: assign (or clear, with null) a machine's grid template. */
-async function assignMachineTemplate(machineTypeId, gridTemplateId) {
-  const { rows } = await engPool.query(
-    `UPDATE pbring_machine_type SET grid_template_id = $1, updated_at = now() WHERE id = $2
-     RETURNING id, machine_type_name, grid_template_id`,
-    [gridTemplateId || null, machineTypeId]
-  );
-  return rows[0] || null;
-}
-
-/** PUT admin: make one template the default (fallback for a machine with none assigned). */
-async function setDefaultTemplate(templateId) {
-  const client = await engPool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(`UPDATE pbring_grid_template SET is_default = FALSE WHERE is_default`);
-    const { rows } = await client.query(
-      `UPDATE pbring_grid_template SET is_default = TRUE, updated_at = now() WHERE id = $1 RETURNING id`,
-      [templateId]
-    );
-    if (!rows[0]) { await client.query('ROLLBACK'); return false; }
-    await client.query('COMMIT');
-    return true;
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * POST admin: re-run the xlsx import — the whole 18-machine roster by default,
- * or a subset via `templateNames`. Same importAllTemplates the one-time
- * migration uses (see lib/pbringGridImport.js); upserts in place by template
- * name, so re-running after the source workbook changes updates the existing
- * rows rather than creating new ones.
- */
-async function reimportTemplates(templateNames, empno) {
-  const names = Array.isArray(templateNames) && templateNames.length
-    ? templateNames.filter((n) => TEMPLATE_NAMES.includes(n))
-    : TEMPLATE_NAMES;
-  if (!names.length) throw new Error('No valid template names to import');
-  return importAllTemplates({ templateNames: names, createdBy: empno ? `admin:${empno}` : undefined });
-}
-
-// ---- Full template CRUD (PbRingGridTemplateEditor.jsx) ----
-
-/** GET admin: one template with its parsed grid. */
-async function getTemplateById(id) {
-  const { rows } = await engPool.query(
-    `SELECT id, name, is_default, grid_json, updated_at FROM pbring_grid_template WHERE id = $1`,
-    [id]
-  );
-  if (!rows[0]) return null;
-  let grid = null;
-  try { grid = JSON.parse(rows[0].grid_json); } catch (_) { grid = null; }
-  return { id: rows[0].id, name: rows[0].name, is_default: rows[0].is_default, grid, updated_at: rows[0].updated_at };
-}
-
-/** POST admin: create a new template — { name, grid? } or { name, copyFromId }. */
-async function createTemplate({ name, grid, copyFromId }, empno) {
-  if (!name || !String(name).trim()) throw new Error('name is required');
-  let gridJson;
-  if (grid && typeof grid === 'object' && !Array.isArray(grid)) {
-    gridJson = JSON.stringify(grid);
-  } else if (copyFromId) {
-    const src = await engPool.query(`SELECT grid_json FROM pbring_grid_template WHERE id = $1`, [copyFromId]);
-    gridJson = src.rows[0]?.grid_json;
-  }
-  if (!gridJson) {
-    const def = await engPool.query(`SELECT grid_json FROM pbring_grid_template WHERE is_default LIMIT 1`);
-    gridJson = def.rows[0]?.grid_json || JSON.stringify({ rows: 56, cols: 48, borders: {}, fills: {}, cells: {}, merges: [] });
-  }
-  const { rows } = await engPool.query(
-    `INSERT INTO pbring_grid_template (name, grid_json, is_default, created_by)
-     VALUES ($1, $2, FALSE, $3) RETURNING id, name, is_default, updated_at`,
-    [String(name).trim(), gridJson, empno || null]
-  );
-  return rows[0];
-}
-
-/** PUT admin: update a template's name and/or grid. */
-async function updateTemplate(id, { name, grid }, empno) {
-  if (name == null && grid == null) throw new Error('name or grid required');
-  if (grid != null && (typeof grid !== 'object' || Array.isArray(grid))) throw new Error('grid must be an object');
-  const sets = [], vals = [];
-  if (name != null) { vals.push(String(name).trim()); sets.push(`name = $${vals.length}`); }
-  if (grid != null) { vals.push(JSON.stringify(grid)); sets.push(`grid_json = $${vals.length}`); }
-  vals.push(empno || null); sets.push(`updated_by = $${vals.length}`);
-  vals.push(id);
-  const { rows } = await engPool.query(
-    `UPDATE pbring_grid_template SET ${sets.join(', ')}, updated_at = now() WHERE id = $${vals.length}
-     RETURNING id, name, is_default, updated_at`,
-    vals
-  );
-  return rows[0] || null;
-}
-
-/** DELETE admin: remove a template (the default is protected; assigned machines keep their FK, which ON DELETE SET NULL clears). */
-async function deleteTemplate(id) {
-  const { rows } = await engPool.query(`SELECT is_default FROM pbring_grid_template WHERE id = $1`, [id]);
-  if (!rows[0]) return { ok: false, reason: 'not_found' };
-  if (rows[0].is_default) return { ok: false, reason: 'is_default' };
-  await engPool.query(`DELETE FROM pbring_grid_template WHERE id = $1`, [id]);
-  return { ok: true };
-}
-
-/**
- * Parse an admin-uploaded .xlsx (any workbook) into the editor grid model,
- * from an in-memory buffer — same shape/bounds logic as
- * sdsV2AdminController.parseXlsxGridFromBuffer. `sheet` selects a worksheet
- * by 1-based index or exact name, defaulting to the first.
- */
-const UPLOAD_MAX_ROWS = 120, UPLOAD_MAX_COLS = 52;
-async function parseXlsxGridFromBuffer(buffer, sheet) {
-  const ExcelJS = require('exceljs');
-  const { gridFromWorksheet: gfw } = require('../mtc/db_migrations/lib/pbringGridImport');
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer);
-  let ws = wb.worksheets[0];
-  if (sheet != null && String(sheet).trim() !== '') {
-    const s = String(sheet).trim();
-    const byIndex = /^\d+$/.test(s) ? wb.worksheets[Number(s) - 1] : null;
-    ws = byIndex || wb.worksheets.find((w) => w.name === s) || ws;
-  }
-  if (!ws) throw new Error('workbook has no worksheets');
-  // ws.dimensions nests the real used-range under .model ({top,left,bottom,right}) —
-  // reading .bottom/.right straight off ws.dimensions is always undefined.
-  const dim = (ws.dimensions && ws.dimensions.model) || {};
-  const rows = Math.min(UPLOAD_MAX_ROWS, Math.max(1, dim.bottom || ws.rowCount || 56));
-  const cols = Math.min(UPLOAD_MAX_COLS, Math.max(1, dim.right || ws.columnCount || 48));
-  return gfw(ws, rows, cols);
-}
-
-/** Lists worksheet names in an uploaded .xlsx (no cell parsing) for the sheet-picker modal. */
-async function listXlsxSheets(buffer) {
-  const ExcelJS = require('exceljs');
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer);
-  return wb.worksheets.map((ws, i) => ({ index: i + 1, name: ws.name }));
-}
-
-/**
- * Blank-template preview: renders a template's grid exactly as stored, with
- * NO value substitution — every {{param}} literal stays visible. Unlike the
- * live render route (buildPbRingValueMap + applyValuesToGrid), this needs no
- * cn/machine/process at all, so an admin can preview a template's layout the
- * moment it's created, before any machine is even assigned to it.
- */
-async function renderBlankTemplateHtml(id) {
-  const tpl = await getTemplateById(id);
-  if (!tpl) return null;
-  return buildGridPdfHtml(tpl.grid);
 }
 
 /**
@@ -759,38 +536,68 @@ async function getManualParams(machineTypeName, cn, processCode) {
  * a key with an empty/omitted value and an existing row id is deleted
  * instead of written as an empty string, so clearing a cell removes the
  * override rather than freezing a blank.
+ *
+ * Bulk SQL only (one DELETE + chunked multi-row INSERT), not a per-row
+ * loop — the machine-default grid alone is 43 rows x 9 cols x 2
+ * (value + type) + headers + the GW section, ~930 params in one save.
+ * Measured live, 2026-10-12: the old per-row `await` loop (931 sequential
+ * round trips in one transaction) took 60s+ and never finished — the
+ * frontend's 10s default timeout turned every full-grid Save into "Save
+ * failed" on an otherwise healthy backend, same failure shape as the
+ * Coverage Report's split_part scan. Chunk size matches db-patterns.md's
+ * convention (2000 rows x 6 cols = 12000 params, under pg's 65535 limit);
+ * today's payloads are one chunk, but a chunk size caps this against any
+ * future config size.
  */
 async function saveManualParams(machineTypeName, cn, processCode, params, empno) {
   const cnVal = cn || null;
   const pcVal = cnVal ? (processCode || null) : null; // machine-default rows stay process-agnostic
   const list = Array.isArray(params) ? params : [];
 
+  const toDelete = [];
+  const toUpsert = [];
+  for (const { param_key, param_value, delete: del } of list) {
+    if (!param_key || !String(param_key).trim()) continue;
+    const key = String(param_key).trim();
+    if (del || param_value == null || param_value === '') toDelete.push(key);
+    else toUpsert.push({ key, value: String(param_value) });
+  }
+
   const client = await engPool.connect();
   try {
     await client.query('BEGIN');
+
+    if (toDelete.length) {
+      await client.query(
+        `DELETE FROM pbring_sds_parameter
+          WHERE machine_type_name = $1 AND param_key = ANY($2)
+            AND COALESCE(cn,'') = COALESCE($3,'') AND COALESCE(process_code,'') = COALESCE($4,'')`,
+        [machineTypeName, toDelete, cnVal, pcVal]
+      );
+    }
+
     const saved = [];
-    for (const { param_key, param_value, delete: del } of list) {
-      if (!param_key || !String(param_key).trim()) continue;
-      const key = String(param_key).trim();
-      if (del || param_value == null || param_value === '') {
-        await client.query(
-          `DELETE FROM pbring_sds_parameter
-            WHERE machine_type_name = $1 AND param_key = $2
-              AND COALESCE(cn,'') = COALESCE($3,'') AND COALESCE(process_code,'') = COALESCE($4,'')`,
-          [machineTypeName, key, cnVal, pcVal]
-        );
-        continue;
-      }
+    const CHUNK = 2000;
+    for (let i = 0; i < toUpsert.length; i += CHUNK) {
+      const chunk = toUpsert.slice(i, i + CHUNK);
+      const COLS = 6;
+      const placeholders = chunk.map((_, ri) =>
+        `(${Array.from({ length: COLS }, (__, ci) => `$${ri * COLS + ci + 1}`).join(',')})`
+      ).join(',');
+      const values = chunk.flatMap(({ key, value }) =>
+        [cnVal, machineTypeName, key, value, pcVal, empno || null]
+      );
       const r = await client.query(
         `INSERT INTO pbring_sds_parameter (cn, machine_type_name, param_key, param_value, process_code, updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
+         VALUES ${placeholders}
          ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
          DO UPDATE SET param_value = EXCLUDED.param_value, updated_by = EXCLUDED.updated_by, updated_at = NOW()
          RETURNING id, param_key, param_value`,
-        [cnVal, machineTypeName, key, String(param_value), pcVal, empno || null]
+        values
       );
-      saved.push(r.rows[0]);
+      saved.push(...r.rows);
     }
+
     await client.query('COMMIT');
     return saved;
   } catch (e) {
@@ -1430,8 +1237,10 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
 // would write into the same row a real engineer's production approval
 // lives in. Wide, one-row-per-sheet shape mirrors sds_approval, minus
 // sds_rev-keying, dept/source columns, backfill and Kanban board intake —
-// out of scope for this first version (user decision 2026-10-11: the
-// 3-step SEQUENCE, not the full configurable role-matrix).
+// out of scope for the first version (user decision 2026-10-11: the
+// 3-step SEQUENCE, not the full configurable role-matrix). The role-matrix
+// itself landed 2026-10-12 — see pbringUserCanSign/pbringApprovalRoleConfig
+// below — once the user asked to reuse the real ApprovalRoleConfig.jsx UI.
 const PBRING_APPROVAL_ROLE_ORDER = ['prepared', 'checked', 'approved'];
 
 async function getPbRingApproval(cn, machineTypeName, processCode) {
@@ -1440,6 +1249,50 @@ async function getPbRingApproval(cn, machineTypeName, processCode) {
     [cn, machineTypeName, processCode]
   );
   return rows[0] || null;
+}
+
+// ── Who may sign each role — pbring_approval_role_config (2026-10-12) ───────
+// Mirrors sdsApprovalController.js's getRoleConfig/userCanSign exactly
+// (same match_type vocabulary: any/department/role/feature_perm/em_id), own
+// table — never sds_approval_role_config, same separation reason as
+// pbring_sds_approval vs sds_approval. "Admin" here is pbring's own
+// definition (AD dept/role, OR the pbring_admin/all_mtc permission —
+// matches hasFeature('pbring_admin'), the route guard this replaces at the
+// handler level for POST/DELETE /grid/approval) rather than the real
+// system's AD-only override, since that is what "pbring admin" has always
+// meant everywhere else in this domain (isPbringAdmin in pbringRoutes.js,
+// PbRingMonitorPage.jsx's own isPbringAdmin check).
+async function getPbRingRoleConfig() {
+  const { rows } = await engPool.query(
+    `SELECT id, role, match_type, match_value, enabled, note FROM pbring_approval_role_config ORDER BY role, id`
+  );
+  return rows;
+}
+
+function isPbringAdminUser(user) {
+  const dept = (user && (user.department || user.u_department)) || '';
+  const role = (user && (user.role || user.u_role)) || '';
+  const perms = Array.isArray(user?.perms) ? user.perms : [];
+  return dept === 'AD' || role === 'AD' || perms.includes('pbring_admin') || perms.includes('all_mtc');
+}
+
+function pbringUserCanSign(user, role, cfgRows) {
+  if (isPbringAdminUser(user)) return true;
+  const rows = (cfgRows || []).filter((r) => r.role === role && r.enabled);
+  if (!rows.length) return false; // no rule + not admin -> deny, same as today's isPbringAdmin-only gate
+  const dept = (user && (user.department || user.u_department)) || '';
+  const roleOf = (user && (user.role || user.u_role)) || '';
+  const perms = Array.isArray(user?.perms) ? user.perms : [];
+  return rows.some((r) => {
+    switch (r.match_type) {
+      case 'any':          return true;
+      case 'department':   return r.match_value === dept;
+      case 'role':         return r.match_value === roleOf;
+      case 'feature_perm': return perms.includes(r.match_value);
+      case 'em_id':        return String(r.match_value) === String(user?.empno);
+      default:              return false;
+    }
+  });
 }
 
 function pbRingRoleRec(row, role) {
@@ -1513,10 +1366,11 @@ async function revokePbRingApproval(cn, machineTypeName, processCode, role) {
 
 // ── Auto Stamp config (single row, id=1) — read by pbringAutoStamp.js ───────
 // No role-config fallback (unlike the real sds_auto_stamp_config, which
-// falls back to sds_approval_role_config) — PB Ring has no equivalent
-// configurable permission matrix. The explicit em_id per role IS the only
-// source, consistent with isPbringAdmin being the one gate everywhere else
-// in this domain.
+// falls back to sds_approval_role_config) — the explicit em_id per role is
+// the only source. pbring_approval_role_config (added 2026-10-12, above)
+// gates who may SIGN; auto-stamp deliberately stays a separate, simpler
+// explicit-only picker (see AutoStampSection.jsx's hasRoleConfig={false}
+// usage for PB Ring) rather than resolving through it.
 async function getPbRingAutoStampConfig() {
   const { rows } = await engPool.query(`SELECT * FROM pbring_auto_stamp_config WHERE id = 1`);
   const r = rows[0] || {};
@@ -1582,11 +1436,32 @@ async function syncPbRingApprovalBoardCard({ io, cn, machineTypeName, processCod
   }
 }
 
+// ── pbring_approval_role_config CRUD — mirrors sdsApprovalController.js's
+// role-config routes exactly, against PB Ring's own table.
+async function addPbringRoleConfig({ role, match_type, match_value, note }) {
+  const { rows } = await engPool.query(
+    `INSERT INTO pbring_approval_role_config (role, match_type, match_value, note) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [role, match_type, match_type === 'any' ? null : match_value, note || null]
+  );
+  return rows[0];
+}
+async function updatePbringRoleConfig(id, { enabled, note }) {
+  const { rows } = await engPool.query(
+    `UPDATE pbring_approval_role_config SET
+       enabled = COALESCE($1, enabled),
+       note    = COALESCE($2, note)
+     WHERE id = $3 RETURNING *`,
+    [typeof enabled === 'boolean' ? enabled : null, note ?? null, id]
+  );
+  return rows[0] || null;
+}
+async function deletePbringRoleConfig(id) {
+  await engPool.query(`DELETE FROM pbring_approval_role_config WHERE id = $1`, [id]);
+}
+
 module.exports = {
-  loadGridForMachine, buildPbRingValueMap, applyValuesToGrid, buildGridPdfHtml, hasDataForCn,
-  listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
-  getTemplateById, createTemplate, updateTemplate, deleteTemplate,
-  parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
+  buildPbRingValueMap, buildGridPdfHtml, hasDataForCn,
+  listMachineTypes,
   loadStandardGridLive, buildStandardGridForMachine,
   loadToolSlotAddressesLive, applyToolSlotsToGrid, getToolingItemNames, loadHeaderAddressesLive, applyHeaderToGrid,
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
@@ -1600,4 +1475,6 @@ module.exports = {
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
   PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
   getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
+  getPbRingRoleConfig, pbringUserCanSign, isPbringAdminUser,
+  addPbringRoleConfig, updatePbringRoleConfig, deletePbringRoleConfig,
 };

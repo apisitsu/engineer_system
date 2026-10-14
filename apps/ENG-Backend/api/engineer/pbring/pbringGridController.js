@@ -8,9 +8,7 @@
 
 const {
   buildGridPdfHtml, hasDataForCn,
-  listTemplates, listMachineTypes, assignMachineTemplate, setDefaultTemplate, reimportTemplates,
-  getTemplateById, createTemplate, updateTemplate, deleteTemplate,
-  parseXlsxGridFromBuffer, listXlsxSheets, renderBlankTemplateHtml,
+  listMachineTypes,
   getManualParams, saveManualParams, buildStandardGridForMachine,
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
   getToolingFamilyOptions,
@@ -18,6 +16,8 @@ const {
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
   PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
   getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
+  getPbRingRoleConfig, pbringUserCanSign, isPbringAdminUser,
+  addPbringRoleConfig, updatePbringRoleConfig, deletePbringRoleConfig,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 const cnFormat = require('../mtc/utils/cnFormat');
@@ -133,6 +133,15 @@ async function postApproval(req, res) {
       return res.status(400).json({ success: false, error: 'cn, machine_type_name, process_code and role are required' });
     }
     if (!req.user?.empno) return res.status(401).json({ success: false, error: 'user context missing' });
+    // Permission moved here from the route guard (2026-10-12) — was a blanket
+    // isPbringAdmin on the whole route; now admin OR a matching enabled rule
+    // in pbring_approval_role_config, same shape as the real sign route's
+    // userCanSign. An empty config table (the default) behaves identically
+    // to the old gate: only an admin can sign.
+    const cfg = await getPbRingRoleConfig();
+    if (!pbringUserCanSign(req.user, role, cfg)) {
+      return res.status(403).json({ success: false, error: `You are not permitted to sign as ${role}` });
+    }
     const signerName = req.user.name || String(req.user.empno);
     const row = await signPbRingApproval(
       cn, machine_type_name, process_code, role, req.user.empno, signerName, 'live'
@@ -156,6 +165,16 @@ async function deleteApproval(req, res) {
     if (!cn || !machine_type_name || !process_code || !role) {
       return res.status(400).json({ success: false, error: 'cn, machine_type_name, process_code and role are required' });
     }
+    // Admin, or the signer revoking their own signature — same rule the real
+    // revoke route uses (sdsApprovalController.js), not the role-config
+    // signing rules (revoking isn't "signing as").
+    if (!isPbringAdminUser(req.user)) {
+      const existing = await getPbRingApproval(cn, machine_type_name, process_code);
+      const emId = existing && existing[`${role}_em_id`];
+      if (emId && String(emId) !== String(req.user?.empno)) {
+        return res.status(403).json({ success: false, error: 'You may only revoke your own signature' });
+      }
+    }
     const row = await revokePbRingApproval(cn, machine_type_name, process_code, role);
     res.json({ success: true, approval: row });
   } catch (err) {
@@ -164,12 +183,86 @@ async function deleteApproval(req, res) {
   }
 }
 
+// ── Approval role config CRUD — mirrors sdsApprovalController.js's
+// /role-config routes exactly, against pbring_approval_role_config. GET is
+// open to any authenticated user (same as the real one — the config list
+// itself isn't sensitive); write routes gated isPbringAdmin at the route
+// level in pbringRoutes.js, same as the real ones are gated isAdmin.
+async function getApprovalRoleConfig(req, res) {
+  try {
+    res.json({ success: true, config: await getPbRingRoleConfig() });
+  } catch (err) {
+    console.error('[pbring:grid:approval:role-config:get]', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+}
+async function postApprovalRoleConfig(req, res) {
+  const { role, match_type, match_value, note } = req.body || {};
+  if (!PBRING_APPROVAL_ROLE_ORDER.includes(role)) {
+    return res.status(400).json({ success: false, error: `role must be one of ${PBRING_APPROVAL_ROLE_ORDER.join(', ')}` });
+  }
+  if (!['any', 'department', 'role', 'feature_perm', 'em_id'].includes(match_type)) {
+    return res.status(400).json({ success: false, error: 'invalid match_type' });
+  }
+  if (match_type !== 'any' && !match_value) return res.status(400).json({ success: false, error: 'match_value is required' });
+  try {
+    res.json({ success: true, config: await addPbringRoleConfig({ role, match_type, match_value, note }) });
+  } catch (err) {
+    console.error('[pbring:grid:approval:role-config:post]', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+}
+async function putApprovalRoleConfig(req, res) {
+  try {
+    const row = await updatePbringRoleConfig(req.params.id, req.body || {});
+    if (!row) return res.status(404).json({ success: false, error: 'not found' });
+    res.json({ success: true, config: row });
+  } catch (err) {
+    console.error('[pbring:grid:approval:role-config:put]', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+}
+async function deleteApprovalRoleConfig(req, res) {
+  try {
+    await deletePbringRoleConfig(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[pbring:grid:approval:role-config:delete]', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+}
+
 // ── Auto Stamp config (own table, own gate) ──────────────────────────────────
 // Mirrors GET/PUT /api/sds/v2/report/auto-stamp/config, scoped to PB Ring's
 // own pbring_auto_stamp_config — see pbringAutoStamp.js header.
+//
+// The GET response is reshaped to the {explicit, signers, role_config_candidates}
+// envelope the real AutoStampSection.jsx component expects — user request
+// (2026-10-12): reuse that component as-is for PB Ring rather than building a
+// second one. getPbRingAutoStampConfig()'s own flat {prepared, checked, approved}
+// shape is NOT changed here (pbringAutoStamp.js's runAutoStamp reads `cfg[role]`
+// directly off it) — this wrapping happens only at the HTTP boundary. PB Ring has
+// no role-config fallback table, so `signers` is identical to `explicit` and
+// `role_config_candidates` is always empty — the component's "From role config"
+// badge and "N candidates, pick one" hint simply never render for PB Ring, which
+// is the correct behaviour (there's nothing to fall back to).
+function wrapAutoStampConfigForUi(raw) {
+  const asEntry = (v) => ({ em_id: v?.em_id || '', name: v?.name || '' });
+  const explicit = { prepared: asEntry(raw.prepared), checked: asEntry(raw.checked), approved: asEntry(raw.approved) };
+  return {
+    enabled: raw.enabled,
+    max_per_run: raw.max_per_run,
+    explicit,
+    signers: { prepared: raw.prepared || null, checked: raw.checked || null, approved: raw.approved || null },
+    role_config_candidates: {},
+    updated_by: raw.updated_by,
+    updated_at: raw.updated_at,
+  };
+}
+
 async function getAutoStampConfig(req, res) {
   try {
-    res.json({ success: true, config: await getPbRingAutoStampConfig() });
+    res.json({ success: true, config: wrapAutoStampConfigForUi(await getPbRingAutoStampConfig()) });
   } catch (err) {
     console.error('[pbring:grid:auto-stamp:get]', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to load auto-stamp config' });
@@ -178,155 +271,46 @@ async function getAutoStampConfig(req, res) {
 
 async function putAutoStampConfig(req, res) {
   try {
+    // AutoStampSection.jsx's save() posts its flattened draft directly
+    // ({enabled, max_per_run, prepared_em_id, prepared_name, ...}) — already
+    // exactly the shape savePbRingAutoStampConfig expects, no adapter needed.
     const row = await savePbRingAutoStampConfig(req.body || {}, req.user?.empno);
-    res.json({ success: true, config: row });
+    res.json({ success: true, config: wrapAutoStampConfigForUi(await getPbRingAutoStampConfig()) });
   } catch (err) {
     console.error('[pbring:grid:auto-stamp:put]', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to save auto-stamp config' });
   }
 }
 
-async function getTemplates(req, res) {
+// Manual trigger for the AutoStampSection.jsx "Dry-run"/"Run now" buttons.
+// classifyCoverage is lazy-required (not at module top) — same reason
+// syncPbRingApprovalBoardCard below lazy-requires kanbanIntake: avoids any
+// boot-order coupling between controller modules. Safe to require
+// sdsV2ReportController here (no cycle: it requires pbringCoverageService
+// and pbringAutoStamp, neither of which requires this controller back) —
+// verified by grep before adding this.
+async function postAutoStampRun(req, res) {
   try {
-    res.json(await listTemplates());
+    const { classifyCoverage } = require('../mtc/controllers/sdsV2ReportController');
+    const pbringAutoStamp = require('./pbringAutoStamp');
+    const result = await pbringAutoStamp.runAutoStamp(classifyCoverage, {
+      io: req.app.get('io'),
+      dryRun: !!req.query.dryRun,
+    });
+    res.json(result);
   } catch (err) {
-    console.error('[pbring:grid:admin:templates]', err);
-    res.status(500).json({ success: false, error: err.message || 'Failed to list templates' });
+    console.error('[pbring:grid:auto-stamp:run]', err);
+    res.status(500).json({ ok: false, error: err.message || 'Auto Stamp run failed' });
   }
 }
 
+/** GET: active machine types for the Approval Roles / Auto Stamp / Parameter Config machine picker. */
 async function getMachineTypes(req, res) {
   try {
     res.json(await listMachineTypes());
   } catch (err) {
     console.error('[pbring:grid:admin:machine-types]', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to list machine types' });
-  }
-}
-
-async function putMachineTemplate(req, res) {
-  try {
-    const row = await assignMachineTemplate(req.params.id, req.body?.grid_template_id);
-    if (!row) return res.status(404).json({ success: false, error: 'Machine type not found' });
-    res.json(row);
-  } catch (err) {
-    console.error('[pbring:grid:admin:assign]', err);
-    res.status(500).json({ success: false, error: err.message || 'Failed to assign template' });
-  }
-}
-
-async function putTemplateDefault(req, res) {
-  try {
-    const ok = await setDefaultTemplate(req.params.id);
-    if (!ok) return res.status(404).json({ success: false, error: 'Template not found' });
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[pbring:grid:admin:default]', err);
-    res.status(500).json({ success: false, error: err.message || 'Failed to set default' });
-  }
-}
-
-async function postReimport(req, res) {
-  try {
-    const results = await reimportTemplates(req.body?.templateNames, req.user?.empno);
-    res.json({ success: true, results });
-  } catch (err) {
-    console.error('[pbring:grid:admin:reimport]', err);
-    res.status(500).json({ success: false, error: err.message || 'Re-import failed' });
-  }
-}
-
-// ---- Full template CRUD + xlsx upload (PbRingGridTemplateEditor.jsx) ----
-
-async function getTemplate(req, res) {
-  try {
-    const tpl = await getTemplateById(req.params.id);
-    if (!tpl) return res.status(404).json({ error: 'Template not found' });
-    res.json(tpl);
-  } catch (err) {
-    console.error('[pbring:grid:admin:template:get]', err);
-    res.status(500).json({ error: err.message || 'Failed to load template' });
-  }
-}
-
-async function postTemplate(req, res) {
-  try {
-    const row = await createTemplate(req.body || {}, req.user?.empno);
-    res.json(row);
-  } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'A template with that name already exists' });
-    console.error('[pbring:grid:admin:template:create]', err);
-    res.status(400).json({ error: err.message || 'Failed to create template' });
-  }
-}
-
-async function putTemplate(req, res) {
-  try {
-    const row = await updateTemplate(req.params.id, req.body || {}, req.user?.empno);
-    if (!row) return res.status(404).json({ error: 'Template not found' });
-    res.json(row);
-  } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'A template with that name already exists' });
-    console.error('[pbring:grid:admin:template:update]', err);
-    res.status(400).json({ error: err.message || 'Failed to update template' });
-  }
-}
-
-async function deleteTemplateRoute(req, res) {
-  try {
-    const result = await deleteTemplate(req.params.id);
-    if (!result.ok && result.reason === 'not_found') return res.status(404).json({ error: 'Template not found' });
-    if (!result.ok && result.reason === 'is_default') {
-      return res.status(400).json({ error: 'Cannot delete the default template — set another default first' });
-    }
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[pbring:grid:admin:template:delete]', err);
-    res.status(500).json({ error: err.message || 'Failed to delete template' });
-  }
-}
-
-function getUploadedXlsx(req) {
-  if (!req.files || !req.files.xlsx) return null;
-  const file = Array.isArray(req.files.xlsx) ? req.files.xlsx[0] : req.files.xlsx;
-  if (!/\.xlsx$/i.test(file.name || '')) return null;
-  return file;
-}
-
-async function postXlsxUploadSheets(req, res) {
-  const file = getUploadedXlsx(req);
-  if (!file) return res.status(400).json({ error: 'xlsx file is required (field: xlsx)' });
-  try {
-    res.json({ sheets: await listXlsxSheets(file.data) });
-  } catch (err) {
-    res.status(400).json({ error: `Could not parse workbook: ${err.message}` });
-  }
-}
-
-async function postXlsxUpload(req, res) {
-  const file = getUploadedXlsx(req);
-  if (!file) return res.status(400).json({ error: 'xlsx file is required (field: xlsx)' });
-  try {
-    const grid = await parseXlsxGridFromBuffer(file.data, req.body?.sheet);
-    res.json({ grid });
-  } catch (err) {
-    res.status(400).json({ error: `Could not parse workbook: ${err.message}` });
-  }
-}
-
-/** GET admin: blank preview PDF for one template — no cn/machine/process, placeholders shown literally. */
-async function getTemplateBlankPdf(req, res) {
-  try {
-    const html = await renderBlankTemplateHtml(req.params.id);
-    if (!html) return res.status(404).json({ error: 'Template not found' });
-    const pdf = await renderPdf(html);
-    res.set('Cache-Control', 'no-store'); // same stale-cache risk as getPdf — see its comment
-    res.set('Content-Type', 'application/pdf');
-    res.set('Content-Disposition', 'inline; filename="pbring-template-blank.pdf"');
-    res.send(pdf);
-  } catch (err) {
-    console.error('[pbring:grid:admin:template:blank-pdf]', err);
-    res.status(500).json({ error: err.message || 'Failed to render preview' });
   }
 }
 
@@ -509,10 +493,9 @@ async function deleteGrindingImageRoute(req, res) {
 module.exports = {
   getPdf, getHasData,
   getApproval, postApproval, deleteApproval,
-  getAutoStampConfig, putAutoStampConfig,
-  getTemplates, getMachineTypes, putMachineTemplate, putTemplateDefault, postReimport,
-  getTemplate, postTemplate, putTemplate, deleteTemplate: deleteTemplateRoute,
-  postXlsxUploadSheets, postXlsxUpload, getTemplateBlankPdf,
+  getApprovalRoleConfig, postApprovalRoleConfig, putApprovalRoleConfig, deleteApprovalRoleConfig,
+  getAutoStampConfig, putAutoStampConfig, postAutoStampRun,
+  getMachineTypes,
   getManualParams: getManualParamsRoute, putManualParams: putManualParamsRoute,
   getToolingImage: getToolingImageRoute, getToolingImages: getToolingImagesRoute,
   getToolingFamilies: getToolingFamiliesRoute,

@@ -39,12 +39,29 @@ const draftFromCfg = (c = {}) => ({
  *
  * Saves through its OWN endpoint (MTC_SDS_V2_AUTO_STAMP_CONFIG), independent of the
  * scope modal's "Save & Rebuild". Admin-only — renders nothing for everyone else.
+ *
+ * Reused as-is for PB Ring (2026-10-12): `configUrl`/`runUrl`/`adminPerm` let a
+ * caller point this at a different backend without touching this file — PB Ring's
+ * controller wraps its own pbring_auto_stamp_config into this exact response
+ * shape (see pbringGridController.js's wrapAutoStampConfigForUi), with
+ * `role_config_candidates` always empty since PB Ring has no role-config
+ * fallback table, so the "From role config" badge simply never renders there.
+ * Every prop defaults to the real SDS endpoint/permission, so the existing
+ * `<AutoStampSection />` call in ReportScopeModal.jsx is unaffected.
  */
-export default function AutoStampSection() {
+export default function AutoStampSection({
+  configUrl = server.MTC_SDS_V2_AUTO_STAMP_CONFIG,
+  runUrl = server.MTC_SDS_V2_AUTO_STAMP,
+  adminPerm = 'sds_admin',
+  // False for PB Ring — it has no role-config fallback table, so the two
+  // "...or leave a single em_id row in the SDS approval role config" hints
+  // below would describe a mechanism that doesn't exist for it.
+  hasRoleConfig = true,
+}) {
   const { message } = App.useApp();
   const { userDepartment, userRole, userPerms } = useAuthStore();
   const isAdmin = userDepartment === 'AD' || userRole === 'AD'
-    || (Array.isArray(userPerms) && userPerms.includes('sds_admin'));
+    || (Array.isArray(userPerms) && userPerms.includes(adminPerm));
 
   const [cfg, setCfg] = useState(null);
   const [draft, setDraft] = useState({});
@@ -60,7 +77,7 @@ export default function AutoStampSection() {
     setLoading(true);
     try {
       const [cRes, uRes] = await Promise.all([
-        axios.get(server.MTC_SDS_V2_AUTO_STAMP_CONFIG),
+        axios.get(configUrl),
         axios.get(server.GET_ALL_USERS).catch(() => ({ data: {} })),
       ]);
       applyCfg(cRes.data.config || {});
@@ -103,7 +120,7 @@ export default function AutoStampSection() {
   const save = async (patch) => {
     setSaving(true);
     try {
-      const res = await axios.put(server.MTC_SDS_V2_AUTO_STAMP_CONFIG, patch || draft);
+      const res = await axios.put(configUrl, patch || draft);
       applyCfg(res.data.config || {});
       message.success('Auto Stamp settings saved');
     } catch (err) {
@@ -125,7 +142,7 @@ export default function AutoStampSection() {
   const run = async (dryRun) => {
     setRunning(true);
     try {
-      const res = await axios.post(server.MTC_SDS_V2_AUTO_STAMP, null, { params: dryRun ? { dryRun: 1 } : {} });
+      const res = await axios.post(runUrl, null, { params: dryRun ? { dryRun: 1 } : {} });
       if (dryRun) {
         setPreview(res.data);
       } else {
@@ -165,7 +182,7 @@ export default function AutoStampSection() {
 
       <Text type="secondary" style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
         Signs <b>NO_STAMP</b> sheets (PDF-ready, signature the only gap). Limit anomalies excluded.
-        A blank picker uses the single em_id permitted in the SDS approval role config.
+        {hasRoleConfig && ' A blank picker uses the single em_id permitted in the SDS approval role config.'}
       </Text>
 
       <Row gutter={[16, 10]}>
@@ -207,7 +224,8 @@ export default function AutoStampSection() {
         <Button size="small" type="primary" ghost loading={saving} disabled={!dirty} onClick={() => save()}>Save Auto Stamp</Button>
         {!signersComplete && (
           <Text type="warning" style={{ fontSize: 11 }}>
-            <WarningOutlined /> No signer for {openRoles.map((r) => r.label).join(', ')} — pick one, or leave a single em_id row in the SDS approval role config
+            <WarningOutlined /> No signer for {openRoles.map((r) => r.label).join(', ')}
+            {hasRoleConfig ? ' — pick one, or leave a single em_id row in the SDS approval role config' : ' — pick one for each'}
           </Text>
         )}
         {cfg?.updated_by && (

@@ -94,12 +94,7 @@ export const server = {
   PBRING_GRID_HAS_DATA: `${apiUrl}api/engineer/pbring/grid/has-data`, // ?cn=
   PBRING_GRID_PDF: `${apiUrl}api/engineer/pbring/grid/pdf`, // ?cn=&machine_type_name=&process_code=
   PBRING_GRID_APPROVAL: `${apiUrl}api/engineer/pbring/grid/approval`, // GET ?cn=&machine_type_name=&process_code= · POST {cn,machine_type_name,process_code,role} · DELETE ?...&role=
-  PBRING_GRID_ADMIN_TEMPLATES: `${apiUrl}api/engineer/pbring/grid/admin/templates`, // GET list/POST create; append /:id for GET/PUT/DELETE, /:id/default for PUT, /:id/pdf-blank for GET
-  PBRING_GRID_ADMIN_MACHINE_TYPES: `${apiUrl}api/engineer/pbring/grid/admin/machine-types`, // append /:id (PUT)
-  PBRING_GRID_ADMIN_TEMPLATE_DEFAULT: `${apiUrl}api/engineer/pbring/grid/admin/templates`, // append /:id/default (PUT)
-  PBRING_GRID_ADMIN_REIMPORT: `${apiUrl}api/engineer/pbring/grid/admin/reimport`,
-  PBRING_GRID_ADMIN_TEMPLATE_XLSX_UPLOAD: `${apiUrl}api/engineer/pbring/grid/admin/templates/from-xlsx-upload`,
-  PBRING_GRID_ADMIN_TEMPLATE_XLSX_UPLOAD_SHEETS: `${apiUrl}api/engineer/pbring/grid/admin/templates/from-xlsx-upload/sheets`,
+  PBRING_GRID_ADMIN_MACHINE_TYPES: `${apiUrl}api/engineer/pbring/grid/admin/machine-types`, // GET — active machine list (Approval Roles / Auto Stamp / Parameter Config picker)
   PBRING_GRID_ADMIN_PARAMETERS: `${apiUrl}api/engineer/pbring/grid/admin/parameters`, // ?machine_type_name=&cn=&process_code= (GET)
   PBRING_GRID_ADMIN_PARAMETERS_BULK: `${apiUrl}api/engineer/pbring/grid/admin/parameters/bulk`, // PUT { machine_type_name, cn, process_code, params:[{param_key,param_value}] }
   PBRING_GRID_TOOLING_IMAGE: `${apiUrl}api/engineer/pbring/grid/tooling-image`, // ?machine_type_name=&family= (GET binary)
@@ -110,6 +105,9 @@ export const server = {
   PBRING_GRID_ADMIN_GRINDING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/grinding-images`, // ?machine_type_name= (GET list)
   PBRING_GRID_ADMIN_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/grinding-image`, // POST (multipart) / DELETE ?machine_type_name=&cn=&process_code=
   PBRING_CONDITION: `${apiUrl}api/engineer/pbring/condition`, // ?cn=&machine_type_name=&process_code= (GET); PUT row; append /:id (DELETE)
+  PBRING_GRID_AUTO_STAMP_CONFIG: `${apiUrl}api/engineer/pbring/grid/auto-stamp/config`, // GET / PUT — same shape as MTC_SDS_V2_AUTO_STAMP_CONFIG, fed to the shared AutoStampSection component
+  PBRING_GRID_AUTO_STAMP_RUN: `${apiUrl}api/engineer/pbring/grid/auto-stamp/run`, // POST ?dryRun=1 — same shape as MTC_SDS_V2_AUTO_STAMP
+  PBRING_GRID_APPROVAL_ROLE_CONFIG: `${apiUrl}api/engineer/pbring/grid/approval/role-config`, // GET / POST / PUT :id / DELETE :id — same shape as MTC_SDS_V2_APPROVAL_ROLE_CONFIG, fed to the shared ApprovalRoleConfig component
   PBRING_CONDITION_HISTORY: `${apiUrl}api/engineer/pbring/condition/history`, // ?machine_type_name=&process_code= (GET)
   PBRING_CONDITION_FROM_HISTORY: `${apiUrl}api/engineer/pbring/condition/from-history`, // POST
 
