@@ -437,14 +437,29 @@ function applyHeaderToGrid(grid, headerAddresses, paramMap) {
 
 // Named (non-numbered) PB Ring tool_number values that DO belong in a T-slot
 // (fixtures/jigs), in the fixed order they fill the slots AFTER every
-// numbered T{n} tool for that CN. Deliberately does NOT include the 4
-// grinding/dressing-wheel names (F_DW/Upper_GW/Lower_GW/R_DW) — those are
-// condition-list data, not tools; see pbring_sds_param_config's
-// source='condition' rows and 20261010c/d for why. If a future machine's
-// pbring_sds_condition carries a genuinely different named fixture, add it
-// here, not to the GW/DW set.
+// numbered T{n} tool for that CN. Deliberately does NOT include the
+// grinding/dressing-wheel names below — those are condition-list data, not
+// tools; see pbring_sds_param_config's source='condition' rows and
+// 20261010c/d for why. If a future machine's pbring_sds_condition carries a
+// genuinely different named fixture, add it here, not to the GW/DW set.
+//
+// The original set (F_DW/Upper_GW/Lower_GW/R_DW) only covers KVD300/KVD350's
+// naming — every OTHER grinding machine's own Grinding/Rubber Wheel rows use
+// plain GW/RW (and TSG300W/TSG300ZNC use Left_GW/Right_GW), none of which
+// were excluded, so `orderToolNumbers` fell through to its `rest` branch and
+// filled them into the next open numbered T-slots as if they were ordinary
+// fixtures — reported live (2026-10-15): HIGRIND1D/294065/1011 printed
+// "GRINDING WHEEL"/"RUBBER WHEEL" at T06/T07, which should be empty. Surveyed
+// live across every pbring_sds_condition row: the full non-numeric set in use
+// is exactly GW, RW, Left_GW, Right_GW, F_DW, Upper_GW, Lower_GW, R_DW —
+// affecting 16 machines (HIGRIND1D, GS64PF, KS350R2, KS400B1, KS400B5,
+// KS400B6, KS500RF, KSB22, KSB80, KSH150, KSH22, KSR22S2, KSR80D, OC16A,
+// OC18BR150, OC20BR200, PSG64DX, TSG300W, TSG300ZNC — every one of them, not
+// just HIGRIND1D).
 const NAMED_TOOL_ORDER = [];
-const CONDITION_SOURCED_TOOL_NUMBERS = new Set(['F_DW', 'Upper_GW', 'Lower_GW', 'R_DW']);
+const CONDITION_SOURCED_TOOL_NUMBERS = new Set([
+  'F_DW', 'Upper_GW', 'Lower_GW', 'R_DW', 'GW', 'RW', 'Left_GW', 'Right_GW',
+]);
 
 function orderToolNumbers(keys) {
   const usable = keys.filter((k) => !CONDITION_SOURCED_TOOL_NUMBERS.has(k));
@@ -485,16 +500,31 @@ function leadingToken(s) {
   return String(s || '').trim().split(/\s+/)[0] || '';
 }
 
+/**
+ * Centerless-group fallback (2026-10-15): OC20BR200/OC18BR150/OMIYA
+ * routinely have ZERO `pbring_tooling` rows of their own (confirmed live —
+ * OC20BR200 294065/1012 printed T02-T04 with no name at all, "PUSHER"/
+ * "COLLAR (FRONT)"/"COLLAR (BACK)" existing only under HIGRIND1D for the
+ * identical tool_code_base + cn), because these 4 mc_keys are, by the
+ * user's own floor confirmation (2026-10-15, see CENTERLESS_MACHINE_NAMES),
+ * the SAME physical centerless-grinder equipment under different floor
+ * codes — someone names a fixture once, under whichever code they happened
+ * to be editing, not once per code. `cn` stays fixed (still the same
+ * physical part); only `mc_key` widens, and only across the group a machine
+ * actually belongs to — a non-Centerless machine's lookup is unchanged. A
+ * row under the CALLER's own mc_key still wins over a borrowed one.
+ */
 async function getToolingItemNames(mcKey, cn, toolCodes) {
   if (!toolCodes.length) return {};
   const tokens = [...new Set(toolCodes.map(leadingToken).filter(Boolean))];
   if (!tokens.length) return {};
+  const mcKeys = CENTERLESS_MACHINE_NAMES.has(mcKey) ? [...CENTERLESS_MACHINE_NAMES] : [mcKey];
   const { rows } = await engPool.query(
     `SELECT DISTINCT ON (tool_code_base) tool_code_base, tooling_item
        FROM pbring_tooling
-      WHERE mc_key = $1 AND cn = $2 AND tool_code_base = ANY($3)
-      ORDER BY tool_code_base, id`,
-    [mcKey, cn, tokens]
+      WHERE mc_key = ANY($1) AND cn = $2 AND tool_code_base = ANY($3)
+      ORDER BY tool_code_base, (mc_key = $4) DESC, id`,
+    [mcKeys, cn, tokens, mcKey]
   );
   return Object.fromEntries(rows.map((r) => [r.tool_code_base, r.tooling_item]));
 }
@@ -814,6 +844,29 @@ function applyHeaderOverridesToGrid(grid, headerAddresses, manualParamMap) {
   }
 }
 
+// Grinding Area section title, AN15 — a pre-styled (16pt bold centered) merge
+// in the real "Standard"/"Centerless" grid_json that the Standard template
+// leaves with no `v` at all; never written by any PB Ring code path before
+// this, which is why it rendered blank. The real SDS controller
+// (sdsV2HeadlessController.js ~line 1042) computes it dynamically per CN —
+// NOT from sds_machine_type_code.grinding_area_label despite what that
+// column's sds_excel_mapping row says (that comment is stale; the code is
+// the real behavior) — by taking the leading word of the process name off
+// "… GRIND" (e.g. process "OD GRIND" -> "OD GRINDING AREA"); 424 of 450
+// real machines have no such word and fall through to plain "GRINDING
+// AREA". Mirrored here against paramMap.Process so a PB Ring CN on an "OD
+// GRIND"/"FACE GRIND"-style process gets the same label a real machine
+// would, rather than a hardcoded per-machine string.
+const GRINDING_AREA_LABEL_CELL = 'AN15';
+
+function applyGrindingAreaLabelToGrid(grid, paramMap, manualLabel) {
+  const grindMatch = String(paramMap.Process || '').match(/^(.*?)\s*grind/i);
+  const autoLabel = grindMatch ? `${grindMatch[1].trim().toUpperCase()} GRINDING AREA` : 'GRINDING AREA';
+  const value = (manualLabel && String(manualLabel).trim()) || autoLabel;
+  const key = addrToRC(GRINDING_AREA_LABEL_CELL);
+  grid.cells[key] = { ...(grid.cells[key] || {}), v: value };
+}
+
 /**
  * Tooling + Grinding Area photos — same visual boxes as the real SDS sheet
  * (T01-T20 photo boxes, the Grinding Area picture), own tables
@@ -846,6 +899,23 @@ const PBRING_IMAGE_EXTENTS = {
   // template. No separate table needed: machine_type_name already keeps a
   // turning machine's photos distinct from any grinding machine's.
   turning_layout_image: { tl: 'AL27', br: 'AR50' },
+  // Turning_PB's per-tool cutting-tool photo boxes — one pre-formatted empty
+  // merge per slot, confirmed live in sds_grid_template id=9's own grid_json
+  // (not guessed): each of the 3 column-blocks (H:K / T:W / AF:AI) has a
+  // merge at rows 18:25, 30:37, 42:49, 54:61 — exactly the gap column
+  // between each slot's AP/Nose R row and the next slot's Tool Detail row
+  // (see turningPbSlotAddresses' rowBase=15+12*slotInBlock). Slot->box
+  // mapping follows the same block/slotInBlock split as turningPbSlotAddresses:
+  // block0 (H)=T01-T04, block1 (T)=T05-T08, block2 (AF)=T09-T12. Reuses
+  // pbring_tooling_image (same table/upload UI as the Standard template's
+  // T01-T20 photos) keyed by (machine_type_name, family, tool_name) —
+  // nothing new needed there, just new extents + a placement loop.
+  turning_tool_image_T01: { tl: 'H18', br: 'K25' }, turning_tool_image_T02: { tl: 'H30', br: 'K37' },
+  turning_tool_image_T03: { tl: 'H42', br: 'K49' }, turning_tool_image_T04: { tl: 'H54', br: 'K61' },
+  turning_tool_image_T05: { tl: 'T18', br: 'W25' }, turning_tool_image_T06: { tl: 'T30', br: 'W37' },
+  turning_tool_image_T07: { tl: 'T42', br: 'W49' }, turning_tool_image_T08: { tl: 'T54', br: 'W61' },
+  turning_tool_image_T09: { tl: 'AF18', br: 'AI25' }, turning_tool_image_T10: { tl: 'AF30', br: 'AI37' },
+  turning_tool_image_T11: { tl: 'AF42', br: 'AI49' }, turning_tool_image_T12: { tl: 'AF54', br: 'AI61' },
 };
 
 const toDataUri = (row) => (row ? `data:${row.mime_type || 'image/jpeg'};base64,${row.image_data.toString('base64')}` : null);
@@ -862,6 +932,23 @@ function toolingFamily(toolingNo) {
   const s = String(toolingNo || '').trim();
   const parts = s.split('-');
   return parts.length >= 2 ? `${parts[0]}-${parts[1]}` : s;
+}
+
+/**
+ * Family for a pbring_sds_condition row, covering the common Turning case
+ * `toolingFamily` alone can't: many Turning rows carry no `tooling_no` at
+ * all (no DWG number) and are identified only by `tool_detail`'s plain-text
+ * operation description — e.g. "CUT OFF", "OD FINISH", "FACING FINISH"
+ * (confirmed live, 2026-10-15: QUICKTURN200500U/294065/0081's T2/T3/T5/T12
+ * all have tooling_no NULL). A row like that falls out of every
+ * tooling_no-keyed query (getToolingFamilyOptions' dropdown, the tool-image
+ * placement loop) and can never get a photo. Grinding rows always carry a
+ * real DWG tooling_no in practice, so this only changes behavior for rows
+ * that previously had no usable family at all.
+ */
+function toolingConditionFamily(row) {
+  if (row && row.tooling_no && row.tooling_no.trim()) return toolingFamily(row.tooling_no);
+  return row && row.tool_detail && row.tool_detail.trim() ? row.tool_detail.trim() : null;
 }
 
 /**
@@ -883,28 +970,50 @@ function toolingFamily(toolingNo) {
  */
 async function getToolingFamilyOptions(machineTypeName) {
   const { rows } = await engPool.query(
-    `SELECT tooling_no, count(*)::int AS n FROM pbring_sds_condition
-      WHERE mc_key = $1 AND tooling_no IS NOT NULL AND trim(tooling_no) <> ''
-      GROUP BY tooling_no ORDER BY n DESC`,
+    `SELECT tool_number, tooling_no, tool_detail, count(*)::int AS n FROM pbring_sds_condition
+      WHERE mc_key = $1 AND (
+        (tooling_no IS NOT NULL AND trim(tooling_no) <> '') OR
+        (tool_detail IS NOT NULL AND trim(tool_detail) <> '')
+      )
+      GROUP BY tool_number, tooling_no, tool_detail ORDER BY n DESC`,
     [machineTypeName]
   );
+  // Natural sort for tool_number labels (T2 before T12) — plain string sort
+  // would put "T12" before "T2".
+  const toolNumSort = (a, b) => {
+    const na = parseInt(String(a).replace(/\D/g, ''), 10);
+    const nb = parseInt(String(b).replace(/\D/g, ''), 10);
+    if (Number.isNaN(na) || Number.isNaN(nb)) return String(a).localeCompare(String(b));
+    return na - nb;
+  };
   const byFamily = new Map();
   for (const r of rows) {
-    const no = r.tooling_no.trim();
-    const fam = toolingFamily(no);
-    if (!byFamily.has(fam)) byFamily.set(fam, { family: fam, count: 0, examples: [] });
+    const fam = toolingConditionFamily(r);
+    if (!fam) continue;
+    if (!byFamily.has(fam)) byFamily.set(fam, { family: fam, count: 0, examples: [], toolNumbers: new Set() });
     const g = byFamily.get(fam);
     g.count += r.n;
-    if (g.examples.length < 5 && !g.examples.includes(no)) g.examples.push(no);
+    const no = r.tooling_no && r.tooling_no.trim();
+    if (no && g.examples.length < 5 && !g.examples.includes(no)) g.examples.push(no);
+    if (r.tool_number) g.toolNumbers.add(r.tool_number);
   }
 
-  const tokens = [...new Set(rows.map((r) => leadingToken(r.tooling_no)).filter(Boolean))];
+  // Same Centerless-group fallback as getToolingItemNames — OC20BR200/
+  // OC18BR150/OMIYA routinely have zero pbring_tooling rows of their own,
+  // so without this the "Tool" disambiguation dropdown silently came back
+  // empty (`tools: []`) for a family that genuinely covers more than one
+  // physical item, even though the render-time name lookup already
+  // resolved it via the same group (reported live, 2026-10-15: OC20BR200's
+  // G371-02 showed no "3 tools" / no Tool picker, despite printing PUSHER/
+  // COLLAR (FRONT)/COLLAR (BACK) correctly on the PDF by then).
+  const tokens = [...new Set(rows.map((r) => r.tooling_no && leadingToken(r.tooling_no)).filter(Boolean))];
+  const nameMcKeys = CENTERLESS_MACHINE_NAMES.has(machineTypeName) ? [...CENTERLESS_MACHINE_NAMES] : [machineTypeName];
   const nameRows = tokens.length
     ? (await engPool.query(
         `SELECT tool_code_base, tooling_item, count(*)::int AS n FROM pbring_tooling
-          WHERE mc_key = $1 AND tool_code_base = ANY($2)
+          WHERE mc_key = ANY($1) AND tool_code_base = ANY($2)
           GROUP BY tool_code_base, tooling_item`,
-        [machineTypeName, tokens]
+        [nameMcKeys, tokens]
       )).rows
     : [];
   // A tool_code_base can resolve to more than one name across different CNs
@@ -917,6 +1026,7 @@ async function getToolingFamilyOptions(machineTypeName) {
   }
   const namesByFamily = new Map();
   for (const r of rows) {
+    if (!r.tooling_no) continue; // tool_detail-only families have no DWG code to resolve a pbring_tooling name from
     const token = leadingToken(r.tooling_no);
     const resolved = nameByCode.get(token);
     if (!resolved || !resolved.name) continue;
@@ -926,7 +1036,11 @@ async function getToolingFamilyOptions(machineTypeName) {
   }
 
   return [...byFamily.values()]
-    .map((g) => ({ ...g, tools: [...(namesByFamily.get(g.family) || [])].sort() }))
+    .map((g) => ({
+      ...g,
+      tools: [...(namesByFamily.get(g.family) || [])].sort(),
+      toolNumbers: [...g.toolNumbers].sort(toolNumSort),
+    }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -1072,6 +1186,8 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
 
   const headerOverrideAddresses = await loadHeaderOverrideAddressesLive();
   applyHeaderOverridesToGrid(grid, headerOverrideAddresses, manualParamMap);
+
+  applyGrindingAreaLabelToGrid(grid, paramMap, manualParamMap.grinding_area_label);
 
   // Images last — placeImageAtExtent checks for text collisions against
   // everything already written, and tool images need the final ordering
@@ -1330,6 +1446,40 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
 
   const layoutImg = await getGrindingImageBinary(machineTypeName, cn, processCode);
   placeImageAtExtent(grid, 'turning_layout_image', toDataUri(layoutImg));
+
+  // Per-tool cutting-tool photos — same pbring_tooling_image table/match
+  // rule as the Standard template's T01-T20 (family + resolved name, family-
+  // wide '' fallback), but placed by DIRECT tool_number lookup like
+  // applyTurningToolSlotsToGrid above, not by sorted position — a slot with
+  // no matching T{n} row is left blank rather than absorbing the next row.
+  // Family comes from toolingConditionFamily, not toolingFamily directly:
+  // most Turning rows have no DWG tooling_no at all (confirmed live,
+  // QUICKTURN200500U/294065/0081's T2/T3/T5/T12 — only identified by
+  // tool_detail's plain-text operation name, e.g. "CUT OFF") and need
+  // tool_detail itself as the family, or they'd never match any upload.
+  const toolCodes = [...new Set(Object.values(conditionByToolNumber).map((r) => r.tooling_no).filter(Boolean))];
+  const itemNameByToolCode = await getToolingItemNames(machineTypeName, cn, toolCodes);
+  const families = [...new Set(Object.values(conditionByToolNumber).map((r) => toolingConditionFamily(r)).filter(Boolean))];
+  const toolingImageRows = await engPool.query(
+    `SELECT family, tool_name, image_data, mime_type FROM pbring_tooling_image
+      WHERE machine_type_name = $1 AND family = ANY($2)`,
+    [machineTypeName, families]
+  );
+  const imgByFamilyAndName = new Map(toolingImageRows.rows.map((r) => [`${r.family}||${r.tool_name}`, r]));
+  for (let slot = 1; slot <= TURNING_PB_MAX_SLOTS; slot++) {
+    const row = conditionByToolNumber[`T${slot}`];
+    if (!row) continue;
+    const family = toolingConditionFamily(row);
+    if (!family) continue;
+    // No tooling_no means family already IS the tool_detail description —
+    // nothing left to disambiguate within it, so go straight to the
+    // family-wide ('') entry instead of inventing a "resolved name" from a
+    // DWG code that doesn't exist for this row.
+    const resolvedName = row.tooling_no ? (row.tool_detail || itemNameByToolCode[leadingToken(row.tooling_no)] || '') : '';
+    const img = imgByFamilyAndName.get(`${family}||${resolvedName}`) || imgByFamilyAndName.get(`${family}||`);
+    if (!img) continue;
+    placeImageAtExtent(grid, `turning_tool_image_T${String(slot).padStart(2, '0')}`, toDataUri(img));
+  }
 
   return grid;
 }

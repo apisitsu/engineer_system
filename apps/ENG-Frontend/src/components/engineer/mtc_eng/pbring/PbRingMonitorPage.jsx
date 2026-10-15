@@ -1496,13 +1496,14 @@ function ImagesTab() {
   const [newGrindProcess, setNewGrindProcess] = useState('');
   const [grindingUploading, setGrindingUploading] = useState(false);
 
-  // Every machine (grinding + turning) — the Tooling Images section below
-  // hides itself for a turning machine (that per-slot photo box exists on
-  // Turning_PB but isn't wired up yet), while the layout/area-photo section
-  // applies to both: the Standard template's "Grinding Area" box and
-  // Turning_PB's "TURNING CUTTING LAYOUT" box are the same
+  // Every machine (grinding + turning) — both sections below apply to both
+  // kinds: Tooling Images (per DWG family, pbring_tooling_image) now also
+  // covers Turning_PB's 12 per-tool photo boxes (wired up 2026-10-15 —
+  // turning_tool_image_T01..T12 in pbringGridService.js), and the layout/
+  // area-photo section covers the Standard template's "Grinding Area" box
+  // and Turning_PB's "TURNING CUTTING LAYOUT" box, which are the same
   // pbring_grinding_image mechanism, just a different box on a different
-  // template, so a turning machine belongs in this list.
+  // template.
   useEffect(() => {
     axios.get(server.PBRING_GRID_ADMIN_MACHINE_TYPES)
       .then((r) => setMachines(r.data || []))
@@ -1661,50 +1662,46 @@ function ImagesTab() {
       </Space>
       {selectedMachine && (
         <>
-          {!isTurningMachine && (
-            <>
-              <Text strong style={{ display: 'block', marginBottom: 8 }}>Tooling Images (by DWG Family — pick a specific tool below if the family covers more than one)</Text>
-              <Space style={{ marginBottom: 8, flexWrap: 'wrap' }}>
-                <Select
-                  showSearch
-                  style={{ width: 320 }}
-                  placeholder="Pick a DWG family from history"
-                  value={familyOptions.some((o) => o.family === newToolingNo) ? newToolingNo : undefined}
-                  onChange={(v) => { setNewToolingNo(v); setNewToolName(''); }}
-                  optionFilterProp="label"
-                  options={familyOptions.map((o) => ({
-                    value: o.family,
-                    label: `${o.family} (used ${o.count}×${o.tools.length > 1 ? `, ${o.tools.length} tools` : o.examples.length ? `, e.g. ${o.examples[0]}` : ''})`,
-                  }))}
-                  allowClear
-                />
-                <Text type="secondary">or</Text>
-                <Input placeholder="type a family/name manually" style={{ width: 200 }} value={newToolingNo} onChange={(e) => { setNewToolingNo(e.target.value); setNewToolName(''); }} />
-                {toolsForFamily.length > 0 && (
-                  <Select
-                    style={{ width: 220 }}
-                    placeholder="Whole family (no specific tool)"
-                    value={newToolName || undefined}
-                    onChange={(v) => setNewToolName(v || '')}
-                    allowClear
-                    options={toolsForFamily.map((t) => ({ value: t, label: t }))}
-                  />
-                )}
-                <Upload accept="image/*" showUploadList={false} beforeUpload={uploadToolingImage}>
-                  <Button icon={<UploadOutlined />} loading={toolingUploading} disabled={!newToolingNo.trim()}>Upload Photo</Button>
-                </Upload>
-              </Space>
-              <Table
-                size="small"
-                rowKey="id"
-                dataSource={toolingImages}
-                columns={toolingCols}
-                loading={toolingLoading}
-                pagination={{ pageSize: 10 }}
-                style={{ marginBottom: 24 }}
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>Tooling Images (by DWG Family — pick a specific tool below if the family covers more than one)</Text>
+          <Space style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+            <Select
+              showSearch
+              style={{ width: 320 }}
+              placeholder="Pick a DWG family from history"
+              value={familyOptions.some((o) => o.family === newToolingNo) ? newToolingNo : undefined}
+              onChange={(v) => { setNewToolingNo(v); setNewToolName(''); }}
+              optionFilterProp="label"
+              options={familyOptions.map((o) => ({
+                value: o.family,
+                label: `${o.toolNumbers && o.toolNumbers.length ? `[${o.toolNumbers.join('/')}] ` : ''}${o.family} (used ${o.count}×${o.tools.length > 1 ? `, ${o.tools.length} tools` : o.examples.length ? `, e.g. ${o.examples[0]}` : ''})`,
+              }))}
+              allowClear
+            />
+            <Text type="secondary">or</Text>
+            <Input placeholder="type a family/name manually" style={{ width: 200 }} value={newToolingNo} onChange={(e) => { setNewToolingNo(e.target.value); setNewToolName(''); }} />
+            {toolsForFamily.length > 0 && (
+              <Select
+                style={{ width: 220 }}
+                placeholder="Whole family (no specific tool)"
+                value={newToolName || undefined}
+                onChange={(v) => setNewToolName(v || '')}
+                allowClear
+                options={toolsForFamily.map((t) => ({ value: t, label: t }))}
               />
-            </>
-          )}
+            )}
+            <Upload accept="image/*" showUploadList={false} beforeUpload={uploadToolingImage}>
+              <Button icon={<UploadOutlined />} loading={toolingUploading} disabled={!newToolingNo.trim()}>Upload Photo</Button>
+            </Upload>
+          </Space>
+          <Table
+            size="small"
+            rowKey="id"
+            dataSource={toolingImages}
+            columns={toolingCols}
+            loading={toolingLoading}
+            pagination={{ pageSize: 10 }}
+            style={{ marginBottom: 24 }}
+          />
 
           <Text strong style={{ display: 'block', marginBottom: 8 }}>
             {isTurningMachine ? 'Turning Cutting Layout Images (by CN + Process Code)' : 'Grinding Area Images (by CN + Process Code)'}
