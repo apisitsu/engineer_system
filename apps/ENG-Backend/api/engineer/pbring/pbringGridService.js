@@ -339,6 +339,26 @@ async function loadStandardGridLive() {
   return JSON.parse(rows[0].grid_json);
 }
 
+// Three PB Ring machines are centerless grinders whose exact real-world
+// counterparts (HI-GRIND-1-D, OC-18BR-150, OC-20BR-200 — confirmed live
+// against sds_machine_type_code.grid_template_id) all use the real
+// "Centerless" layout, not "Standard" — user request (2026-10-14). Still
+// READ-ONLY, same safety argument as loadStandardGridLive — a different
+// id, same plain SELECT, no CN, no JOIN. Safe to swap freely: the T01-T20/
+// header cell ADDRESSES applyToolSlotsToGrid/applyHeaderToGrid use come
+// from sds_excel_mapping WHERE machine_type_name IS NULL — shared across
+// every real machine regardless of which grid_template they're assigned,
+// Centerless-using real machines included — so this is a drop-in layout
+// swap, not a second rendering pipeline.
+const SDS_CENTERLESS_TEMPLATE_ID = 4; // sds_grid_template.id, name='Centerless', confirmed live 2026-10-14
+const CENTERLESS_MACHINE_NAMES = new Set(['HIGRIND1D', 'OC18BR150', 'OC20BR200']);
+
+async function loadCenterlessGridLive() {
+  const { rows } = await engPool.query(`SELECT grid_json FROM sds_grid_template WHERE id = $1`, [SDS_CENTERLESS_TEMPLATE_ID]);
+  if (!rows.length) return null;
+  return JSON.parse(rows[0].grid_json);
+}
+
 /**
  * The real T01-T20 "Tooling No:"/"Maker:" value-cell addresses, read live
  * from `sds_excel_mapping` (machine_type_name IS NULL — shared across every
@@ -437,18 +457,37 @@ function orderToolNumbers(keys) {
  * is tool_code_base (confirmed live 2026-10-11: '4036-02-0001' -> 'GUIDE
  * PLATE', '4036-01-0001' -> 'CARRIER' for KVD300/294065 — tool_code_base is
  * tool_code with its "(Rev.NC)" suffix already stripped, and matches
- * pbring_sds_condition.tooling_no exactly). Bulk fetch, not per-row
- * (db-patterns.md); `DISTINCT ON` picks the earliest row when more than
- * one pbring_tooling entry happens to share a tool_code_base for this CN.
+ * pbring_sds_condition.tooling_no exactly for a T1-T20 fixture). Bulk
+ * fetch, not per-row (db-patterns.md); `DISTINCT ON` picks the earliest row
+ * when more than one pbring_tooling entry happens to share a
+ * tool_code_base for this CN.
+ *
+ * The GW/RW rows break the "matches exactly" case (reported live,
+ * 2026-10-14): their `tooling_no` carries a trailing spec string the
+ * condition table's own data always had — `"GC180K7V82S  455x150x228.6"` —
+ * while `tool_code_base` for the very same wheel is just `"GC180K7V82S"`
+ * (confirmed: `pbring_tooling` has a GRINDING WHEEL row keyed exactly that
+ * way). An exact-string match therefore silently drops the name for every
+ * GW/RW slot while T1-T20 fixtures (no spec suffix) kept working — so this
+ * went unnoticed until someone looked at a wheel slot specifically.
+ * `leadingToken` matches on the code only (text up to the first run of
+ * whitespace), which is a no-op for the T1-T20 case (no whitespace in
+ * those codes at all) and fixes the GW/RW case.
  */
+function leadingToken(s) {
+  return String(s || '').trim().split(/\s+/)[0] || '';
+}
+
 async function getToolingItemNames(mcKey, cn, toolCodes) {
   if (!toolCodes.length) return {};
+  const tokens = [...new Set(toolCodes.map(leadingToken).filter(Boolean))];
+  if (!tokens.length) return {};
   const { rows } = await engPool.query(
     `SELECT DISTINCT ON (tool_code_base) tool_code_base, tooling_item
        FROM pbring_tooling
       WHERE mc_key = $1 AND cn = $2 AND tool_code_base = ANY($3)
       ORDER BY tool_code_base, id`,
-    [mcKey, cn, toolCodes]
+    [mcKey, cn, tokens]
   );
   return Object.fromEntries(rows.map((r) => [r.tool_code_base, r.tooling_item]));
 }
@@ -469,8 +508,10 @@ function applyToolSlotsToGrid(grid, conditionByToolNumber, toolAddresses, itemNa
     colorCell(addr.maker, row.maker);
     // tool_detail wins if someone ever does type it directly (e.g. a
     // future turning-style edit path); otherwise fall back to the Tooling
-    // PB Ring list's own Item name for this exact tool_code.
-    colorCell(addr.name, row.tool_detail || (row.tooling_no && itemNameByToolCode[row.tooling_no]));
+    // PB Ring list's own Item name for this tool_code — matched on the
+    // leading token only (see getToolingItemNames), so a GW/RW tooling_no
+    // carrying a trailing spec string still finds its name.
+    colorCell(addr.name, row.tool_detail || (row.tooling_no && itemNameByToolCode[leadingToken(row.tooling_no)]));
   });
 }
 
@@ -817,10 +858,21 @@ function toolingFamily(toolingNo) {
 }
 
 /**
- * Dropdown source for the Tooling Images upload UI — every DWG family
- * (or plain name) this machine has actually used, from `pbring_sds_condition`
+ * Dropdown source for the Tooling Images upload UI — every DWG family (or
+ * plain name) this machine has actually used, from `pbring_sds_condition`
  * history, most-used first, with a few real tooling_no examples per family
  * so the admin can tell which drawings a family covers before uploading.
+ *
+ * Also breaks each family down into its distinct resolved tool NAMES (via
+ * `pbring_tooling.tooling_item`, leading-token matched the same way
+ * `getToolingItemNames` does) — a family covering more than one physical
+ * item (confirmed live, 2026-10-14/15: HIGRIND1D's "G371-02" = PUSHER +
+ * COLLAR (FRONT) + COLLAR (BACK); KSB22's "37281-05" alone covers four)
+ * needs the admin to pick WHICH one before uploading, now that
+ * pbring_tooling_image is keyed by (family, tool_name) rather than family
+ * alone. `tools: []` means the family never resolved a name in
+ * pbring_tooling for any CN — the upload still works, just as the
+ * family-wide ('') entry, same as every image uploaded before this change.
  */
 async function getToolingFamilyOptions(machineTypeName) {
   const { rows } = await engPool.query(
@@ -838,48 +890,86 @@ async function getToolingFamilyOptions(machineTypeName) {
     g.count += r.n;
     if (g.examples.length < 5 && !g.examples.includes(no)) g.examples.push(no);
   }
-  return [...byFamily.values()].sort((a, b) => b.count - a.count);
+
+  const tokens = [...new Set(rows.map((r) => leadingToken(r.tooling_no)).filter(Boolean))];
+  const nameRows = tokens.length
+    ? (await engPool.query(
+        `SELECT tool_code_base, tooling_item, count(*)::int AS n FROM pbring_tooling
+          WHERE mc_key = $1 AND tool_code_base = ANY($2)
+          GROUP BY tool_code_base, tooling_item`,
+        [machineTypeName, tokens]
+      )).rows
+    : [];
+  // A tool_code_base can resolve to more than one name across different CNs
+  // (data entry drift) — most-used name per code wins, same "shop's own
+  // usage decides" principle sds-pipeline.md's pickFamilyName uses.
+  const nameByCode = new Map();
+  for (const r of nameRows) {
+    const prev = nameByCode.get(r.tool_code_base);
+    if (!prev || r.n > prev.n) nameByCode.set(r.tool_code_base, { name: r.tooling_item, n: r.n });
+  }
+  const namesByFamily = new Map();
+  for (const r of rows) {
+    const token = leadingToken(r.tooling_no);
+    const resolved = nameByCode.get(token);
+    if (!resolved || !resolved.name) continue;
+    const fam = toolingFamily(r.tooling_no.trim());
+    if (!namesByFamily.has(fam)) namesByFamily.set(fam, new Set());
+    namesByFamily.get(fam).add(resolved.name);
+  }
+
+  return [...byFamily.values()]
+    .map((g) => ({ ...g, tools: [...(namesByFamily.get(g.family) || [])].sort() }))
+    .sort((a, b) => b.count - a.count);
 }
 
 async function listToolingImages(machineTypeName) {
   const { rows } = await engPool.query(
-    `SELECT id, machine_type_name, family, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
-       FROM pbring_tooling_image WHERE machine_type_name = $1 ORDER BY family`,
+    `SELECT id, machine_type_name, family, tool_name, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
+       FROM pbring_tooling_image WHERE machine_type_name = $1 ORDER BY family, tool_name`,
     [machineTypeName]
   );
   return rows;
 }
 
-async function upsertToolingImage(machineTypeName, toolingNoOrFamily, file, description, empno) {
+// `toolName` disambiguates within a family that covers more than one
+// physical item (e.g. HIGRIND1D's "G371-02" = PUSHER + COLLAR (FRONT) +
+// COLLAR (BACK) — see migration 20261015_ for the live example that forced
+// this). '' (the default) means "whole family, no specific tool" — the
+// pre-2026-10-15 behaviour, still how every image uploaded before this
+// change is stored and still what a render falls back to when no
+// tool-specific entry exists (see the render-time lookup in
+// buildStandardGridForMachine).
+async function upsertToolingImage(machineTypeName, toolingNoOrFamily, toolName, file, description, empno) {
   const family = toolingFamily(toolingNoOrFamily);
   const mime = file.mimetype || 'image/jpeg';
   const { rows } = await engPool.query(
-    `INSERT INTO pbring_tooling_image (machine_type_name, family, image_data, mime_type, file_name, description, created_by, updated_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
-     ON CONFLICT (machine_type_name, family) DO UPDATE SET
+    `INSERT INTO pbring_tooling_image (machine_type_name, family, tool_name, image_data, mime_type, file_name, description, created_by, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+     ON CONFLICT (machine_type_name, family, tool_name) DO UPDATE SET
        image_data = EXCLUDED.image_data, mime_type = EXCLUDED.mime_type, file_name = EXCLUDED.file_name,
        description = EXCLUDED.description, updated_by = EXCLUDED.updated_by, updated_at = NOW()
-     RETURNING id, machine_type_name, family, mime_type, file_name, description, updated_at`,
-    [machineTypeName, family, file.data, mime, file.name, description || null, empno || null]
+     RETURNING id, machine_type_name, family, tool_name, mime_type, file_name, description, updated_at`,
+    [machineTypeName, family, toolName || '', file.data, mime, file.name, description || null, empno || null]
   );
   return rows[0];
 }
 
-async function getToolingImageBinary(machineTypeName, toolingNoOrFamily) {
+async function getToolingImageBinary(machineTypeName, toolingNoOrFamily, toolName) {
   const family = toolingFamily(toolingNoOrFamily);
   const { rows } = await engPool.query(
     `SELECT image_data, mime_type, file_name FROM pbring_tooling_image
-      WHERE machine_type_name = $1 AND family = $2`,
-    [machineTypeName, family]
+      WHERE machine_type_name = $1 AND family = $2 AND tool_name = $3`,
+    [machineTypeName, family, toolName || '']
   );
   return rows[0] || null;
 }
 
-async function deleteToolingImage(machineTypeName, toolingNoOrFamily) {
+async function deleteToolingImage(machineTypeName, toolingNoOrFamily, toolName) {
   const family = toolingFamily(toolingNoOrFamily);
   const { rowCount } = await engPool.query(
-    `DELETE FROM pbring_tooling_image WHERE machine_type_name = $1 AND family = $2`,
-    [machineTypeName, family]
+    `DELETE FROM pbring_tooling_image WHERE machine_type_name = $1 AND family = $2 AND tool_name = $3`,
+    [machineTypeName, family, toolName || '']
   );
   return rowCount > 0;
 }
@@ -955,7 +1045,9 @@ function placeImageAtExtent(grid, extentKey, dataUri, scale = 1) {
 }
 
 async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
-  const grid = await loadStandardGridLive();
+  const grid = CENTERLESS_MACHINE_NAMES.has(machineTypeName)
+    ? await loadCenterlessGridLive()
+    : await loadStandardGridLive();
   if (!grid) return null;
 
   const { paramMap, conditionByToolNumber } = await buildPbRingValueMap(cn, machineTypeName, processCode);
@@ -977,19 +1069,26 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
   // Images last — placeImageAtExtent checks for text collisions against
   // everything already written, and tool images need the final ordering
   // (same as the text slots) to land in the right box. Matched by DWG
-  // family (toolingFamily), not exact tooling_no — one uploaded photo
-  // covers every drawing that shares a family.
+  // family (toolingFamily) AND the slot's own resolved name (same
+  // itemNameByToolCode map the T0N name label uses) — a family-only match
+  // was wrong whenever a family covers more than one physical item (see
+  // migration 20261015_'s header for the live case). A row with no
+  // specific-name image falls back to the family-wide ('') entry, which is
+  // what every image uploaded before that migration still is.
   const families = [...new Set(Object.values(conditionByToolNumber).map((r) => r.tooling_no && toolingFamily(r.tooling_no)).filter(Boolean))];
   const toolingImageRows = await engPool.query(
-    `SELECT family, image_data, mime_type FROM pbring_tooling_image
+    `SELECT family, tool_name, image_data, mime_type FROM pbring_tooling_image
       WHERE machine_type_name = $1 AND family = ANY($2)`,
     [machineTypeName, families]
   );
-  const imgByFamily = new Map(toolingImageRows.rows.map((r) => [r.family, r]));
+  const imgByFamilyAndName = new Map(toolingImageRows.rows.map((r) => [`${r.family}||${r.tool_name}`, r]));
   const ordered = orderToolNumbers(Object.keys(conditionByToolNumber));
   ordered.forEach((toolNumber, i) => {
     const row = conditionByToolNumber[toolNumber];
-    const img = row.tooling_no && imgByFamily.get(toolingFamily(row.tooling_no));
+    if (!row.tooling_no) return;
+    const family = toolingFamily(row.tooling_no);
+    const resolvedName = row.tool_detail || itemNameByToolCode[leadingToken(row.tooling_no)] || '';
+    const img = imgByFamilyAndName.get(`${family}||${resolvedName}`) || imgByFamilyAndName.get(`${family}||`);
     if (!img) return;
     const slot = `T${String(i + 1).padStart(2, '0')}`;
     placeImageAtExtent(grid, `tool_image_${slot}`, toDataUri(img));

@@ -1483,6 +1483,11 @@ function ImagesTab() {
   const [toolingLoading, setToolingLoading] = useState(false);
   const [familyOptions, setFamilyOptions] = useState([]);
   const [newToolingNo, setNewToolingNo] = useState('');
+  // Which physical tool within the family this photo is for — '' means
+  // "whole family" (the only option before 2026-10-15). Only matters when
+  // the picked family's own history shows more than one resolved name
+  // (see familyOptions' `tools` field, from getToolingFamilyOptions).
+  const [newToolName, setNewToolName] = useState('');
   const [toolingUploading, setToolingUploading] = useState(false);
 
   const [grindingImages, setGrindingImages] = useState([]);
@@ -1534,11 +1539,16 @@ function ImagesTab() {
 
   const selectMachine = (val) => {
     setSelectedMachine(val);
-    setNewToolingNo(''); setNewGrindCn(''); setNewGrindProcess('');
+    setNewToolingNo(''); setNewToolName(''); setNewGrindCn(''); setNewGrindProcess('');
     loadToolingImages(val);
     loadFamilyOptions(val);
     loadGrindingImages(val);
   };
+
+  // Tools this family resolves to, per the last-loaded familyOptions — []
+  // when the family never resolved a name (uploads still work, as the
+  // family-wide '' entry, same as before 2026-10-15).
+  const toolsForFamily = familyOptions.find((o) => o.family === newToolingNo)?.tools || [];
 
   const uploadToolingImage = (file) => {
     if (!newToolingNo.trim()) { message.error('Pick or type a DWG family first'); return false; }
@@ -1546,16 +1556,18 @@ function ImagesTab() {
     const fd = new FormData();
     fd.append('machine_type_name', selectedMachine);
     fd.append('family', newToolingNo.trim());
+    fd.append('tool_name', newToolName);
     fd.append('image', file);
+    const label = newToolingNo.trim() + (newToolName ? ` / ${newToolName}` : '');
     axios.post(server.PBRING_GRID_ADMIN_TOOLING_IMAGE, fd)
-      .then(() => { message.success(`Saved photo for family ${newToolingNo.trim()}`); setNewToolingNo(''); loadToolingImages(selectedMachine); })
+      .then(() => { message.success(`Saved photo for ${label}`); setNewToolingNo(''); setNewToolName(''); loadToolingImages(selectedMachine); })
       .catch((err) => message.error(apiErrorMessage(err, 'Upload failed')))
       .finally(() => setToolingUploading(false));
     return false; // prevent antd Upload's own auto-request
   };
 
-  const deleteToolingImage = (family) => {
-    axios.delete(server.PBRING_GRID_ADMIN_TOOLING_IMAGE, { params: { machine_type_name: selectedMachine, family } })
+  const deleteToolingImage = (family, toolName) => {
+    axios.delete(server.PBRING_GRID_ADMIN_TOOLING_IMAGE, { params: { machine_type_name: selectedMachine, family, tool_name: toolName } })
       .then(() => { message.success('Deleted'); loadToolingImages(selectedMachine); })
       .catch((err) => message.error(apiErrorMessage(err, 'Delete failed')));
   };
@@ -1586,19 +1598,23 @@ function ImagesTab() {
       title: 'Preview', key: 'preview', width: 90,
       render: (_, row) => (
         <img
-          src={`${server.PBRING_GRID_TOOLING_IMAGE}?machine_type_name=${encodeURIComponent(selectedMachine)}&family=${encodeURIComponent(row.family)}&token=${localStorage.getItem('token')}`}
+          src={`${server.PBRING_GRID_TOOLING_IMAGE}?machine_type_name=${encodeURIComponent(selectedMachine)}&family=${encodeURIComponent(row.family)}&tool_name=${encodeURIComponent(row.tool_name || '')}&token=${localStorage.getItem('token')}`}
           alt={row.family}
           style={{ width: 70, height: 50, objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
         />
       ),
     },
     { title: 'DWG Family', dataIndex: 'family' },
+    {
+      title: 'Tool', dataIndex: 'tool_name',
+      render: (v) => v || <Text type="secondary">(whole family)</Text>,
+    },
     { title: 'File', dataIndex: 'file_name' },
     { title: 'Updated', dataIndex: 'updated_at', render: (v) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-') },
     {
       title: '', key: 'actions', width: 80,
       render: (_, row) => (
-        <Popconfirm title="Delete this photo?" onConfirm={() => deleteToolingImage(row.family)}>
+        <Popconfirm title="Delete this photo?" onConfirm={() => deleteToolingImage(row.family, row.tool_name)}>
           <Button size="small" danger icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -1647,23 +1663,33 @@ function ImagesTab() {
         <>
           {!isTurningMachine && (
             <>
-              <Text strong style={{ display: 'block', marginBottom: 8 }}>Tooling Images (by DWG Family — one photo covers every tooling_no sharing it)</Text>
+              <Text strong style={{ display: 'block', marginBottom: 8 }}>Tooling Images (by DWG Family — pick a specific tool below if the family covers more than one)</Text>
               <Space style={{ marginBottom: 8, flexWrap: 'wrap' }}>
                 <Select
                   showSearch
                   style={{ width: 320 }}
                   placeholder="Pick a DWG family from history"
                   value={familyOptions.some((o) => o.family === newToolingNo) ? newToolingNo : undefined}
-                  onChange={(v) => setNewToolingNo(v)}
+                  onChange={(v) => { setNewToolingNo(v); setNewToolName(''); }}
                   optionFilterProp="label"
                   options={familyOptions.map((o) => ({
                     value: o.family,
-                    label: `${o.family} (used ${o.count}×${o.examples.length ? `, e.g. ${o.examples[0]}` : ''})`,
+                    label: `${o.family} (used ${o.count}×${o.tools.length > 1 ? `, ${o.tools.length} tools` : o.examples.length ? `, e.g. ${o.examples[0]}` : ''})`,
                   }))}
                   allowClear
                 />
                 <Text type="secondary">or</Text>
-                <Input placeholder="type a family/name manually" style={{ width: 200 }} value={newToolingNo} onChange={(e) => setNewToolingNo(e.target.value)} />
+                <Input placeholder="type a family/name manually" style={{ width: 200 }} value={newToolingNo} onChange={(e) => { setNewToolingNo(e.target.value); setNewToolName(''); }} />
+                {toolsForFamily.length > 0 && (
+                  <Select
+                    style={{ width: 220 }}
+                    placeholder="Whole family (no specific tool)"
+                    value={newToolName || undefined}
+                    onChange={(v) => setNewToolName(v || '')}
+                    allowClear
+                    options={toolsForFamily.map((t) => ({ value: t, label: t }))}
+                  />
+                )}
                 <Upload accept="image/*" showUploadList={false} beforeUpload={uploadToolingImage}>
                   <Button icon={<UploadOutlined />} loading={toolingUploading} disabled={!newToolingNo.trim()}>Upload Photo</Button>
                 </Upload>

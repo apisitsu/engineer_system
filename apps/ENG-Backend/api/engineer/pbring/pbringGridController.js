@@ -354,12 +354,12 @@ function getUploadedImage(req) {
   return file;
 }
 
-/** GET /grid/tooling-image?machine_type_name=&family= — serve image binary (a raw tooling_no also works, normalized server-side) */
+/** GET /grid/tooling-image?machine_type_name=&family=&tool_name= — serve image binary (a raw tooling_no also works, normalized server-side) */
 async function getToolingImageRoute(req, res) {
   try {
-    const { machine_type_name: machineTypeName, family } = req.query;
+    const { machine_type_name: machineTypeName, family, tool_name: toolName } = req.query;
     if (!machineTypeName || !family) return res.status(400).json({ error: 'machine_type_name and family are required' });
-    const img = await getToolingImageBinary(machineTypeName, family);
+    const img = await getToolingImageBinary(machineTypeName, family, toolName);
     if (!img) return res.status(404).json({ error: 'Image not found' });
     res.setHeader('Content-Type', img.mime_type || 'image/jpeg');
     if (img.file_name) res.setHeader('Content-Disposition', `inline; filename="${img.file_name}"`);
@@ -394,16 +394,16 @@ async function getToolingFamiliesRoute(req, res) {
   }
 }
 
-/** POST /grid/admin/tooling-image — multipart: machine_type_name, family, description, file (field: image) */
+/** POST /grid/admin/tooling-image — multipart: machine_type_name, family, tool_name, description, file (field: image) */
 async function postToolingImageRoute(req, res) {
   try {
-    const { machine_type_name: machineTypeName, family, description } = req.body;
+    const { machine_type_name: machineTypeName, family, tool_name: toolName, description } = req.body;
     if (!machineTypeName?.trim() || !family?.trim()) {
       return res.status(400).json({ error: 'machine_type_name and family are required' });
     }
     const file = getUploadedImage(req);
     if (!file) return res.status(400).json({ error: 'image file is required (field: image)' });
-    const row = await upsertToolingImage(machineTypeName.trim(), family.trim(), file, description, req.user?.empno);
+    const row = await upsertToolingImage(machineTypeName.trim(), family.trim(), toolName?.trim(), file, description, req.user?.empno);
     res.json(row);
   } catch (err) {
     console.error('[pbring:grid:admin:tooling-image:post]', err);
@@ -411,12 +411,12 @@ async function postToolingImageRoute(req, res) {
   }
 }
 
-/** DELETE /grid/admin/tooling-image?machine_type_name=&family= */
+/** DELETE /grid/admin/tooling-image?machine_type_name=&family=&tool_name= */
 async function deleteToolingImageRoute(req, res) {
   try {
-    const { machine_type_name: machineTypeName, family } = req.query;
+    const { machine_type_name: machineTypeName, family, tool_name: toolName } = req.query;
     if (!machineTypeName || !family) return res.status(400).json({ error: 'machine_type_name and family are required' });
-    const ok = await deleteToolingImage(machineTypeName, family);
+    const ok = await deleteToolingImage(machineTypeName, family, toolName);
     if (!ok) return res.status(404).json({ error: 'Image not found' });
     res.json({ success: true });
   } catch (err) {
