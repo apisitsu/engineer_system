@@ -915,74 +915,55 @@ export default function SdsCoverageDashboard() {
     },
   };
 
-  // ── Innovator Complete per Month (net additions, not cumulative) ────────────────
-  // `monthlyStatus` carries CUMULATIVE complete_saved — this chart wants the net
-  // change month to month, so each bar is literally "how many were Innovator-completed
-  // in this month". Diffing two adjacent cumulative snapshots is also why a carried-
-  // forward month (no new sign that month) nets to 0 automatically — no separate
-  // "no activity" case needed. Index 0 (the previous-FY `isPrevLast` baseline, when
-  // present) is skipped as a bar — there's nothing to report "added" for a snapshot,
-  // only used as the prior value Apr diffs against.
-  //
-  // A month AFTER the current one has no snapshot yet — `monthlyStatus` fills it
-  // with a hard `{complete:0, pending:0}` placeholder (see that useMemo), which is
-  // NOT "zero completed that month", it's "no data exists for this month". Diffing
-  // against it produced a fake cliff: Nov's placeholder (0) minus Oct's real
-  // cumulative total nets to a multi-thousand negative bar. `net` stays `null` for
-  // those months — same "nothing to show" signal `hasBarData`/`spanGaps` use
-  // elsewhere on this dashboard — so Chart.js renders no bar instead of a lie.
-  const kzwMonthlyNet = useMemo(() => {
-    const curMonth = new Date().toISOString().slice(0, 7);
-    const valOf = (r) => r?.complete_saved ?? r?.complete ?? 0;
-    const rows = [];
-    for (let i = 0; i < monthlyStatus.length; i++) {
-      const r = monthlyStatus[i];
-      if (r.isPrevLast) continue;
-      const prev = monthlyStatus[i - 1];
-      const hasData = r.month <= curMonth;
-      rows.push({ month: r.month, net: hasData ? valOf(r) - (prev ? valOf(prev) : 0) : null });
-    }
-    return rows;
-  }, [monthlyStatus]);
+  // ── Innovator Complete per Month (gross signings, never negative) ──────────────
+  // Reads `data.monthlyInnovatorSigned` — a direct per-calendar-month COUNT of
+  // sheets whose baseline (saved-tool) criterion was met AND fully signed, bucketed
+  // by the month they were actually SIGNED, computed on the backend from
+  // `stamped_full_at`. This replaced an earlier version that diffed `monthlyStatus`'s
+  // cumulative cohort totals (this month's total minus last month's) — informative
+  // for showing reversions, but it produced bars that went negative when more sheets
+  // reverted to pending than newly completed, which read as "how is a COUNT negative?"
+  // A direct count can't be negative: a sheet either was signed that month or it
+  // wasn't, so a bar is always ≥ 0. Windowed to the FYE like the other monthly
+  // charts; a month with no signings defaults to 0 rather than being omitted.
+  const innovatorMonthly = useMemo(() => {
+    const raw = Object.fromEntries((data?.monthlyInnovatorSigned || []).map(r => [r.month, r.count]));
+    return fyMonths(fyeWin).map(key => ({ month: key, count: raw[key] || 0 }));
+  }, [data, fyeWin]);
 
-  const kzwMonthlyChartData = useMemo(() => {
+  const innovatorMonthlyChartData = useMemo(() => {
     const curMonth = new Date().toISOString().slice(0, 7);
     return {
-      labels: kzwMonthlyNet.map(r => fmtMonth(r.month)),
+      labels: innovatorMonthly.map(r => fmtMonth(r.month)),
       datasets: [{
         label: 'Innovator Complete',
-        data: kzwMonthlyNet.map(r => r.net),
-        backgroundColor: kzwMonthlyNet.map(r => hexToRgba(r.net < 0 ? C.red : C.green,
+        data: innovatorMonthly.map(r => r.count),
+        backgroundColor: innovatorMonthly.map(r => hexToRgba(C.green,
           (filterMonth && r.month !== filterMonth) ? 0.25 : (r.month === curMonth ? 0.4 : 0.75))),
-        borderColor: kzwMonthlyNet.map(r => r.net < 0 ? C.red : C.green),
+        borderColor: C.green,
         borderWidth: 1,
       }],
     };
-  }, [kzwMonthlyNet, filterMonth]);
+  }, [innovatorMonthly, filterMonth]);
 
-  const kzwMonthlyChartOpts = {
+  const innovatorMonthlyChartOpts = {
     responsive: true, maintainAspectRatio: false, animation: false,
     onClick: (evt, _els, chart) => {
-      const row = kzwMonthlyNet[columnIndexAt(evt, chart)];
-      if (row?.month && row.net !== null) pickMonth(row.month);
+      const row = innovatorMonthly[columnIndexAt(evt, chart)];
+      if (row?.month) pickMonth(row.month);
     },
     onHover: (evt, _els, chart) => {
-      const row = kzwMonthlyNet[columnIndexAt(evt, chart)];
-      chart.canvas.style.cursor = row?.month && row.net !== null ? 'pointer' : 'default';
+      const row = innovatorMonthly[columnIndexAt(evt, chart)];
+      chart.canvas.style.cursor = row?.month ? 'pointer' : 'default';
     },
     plugins: {
       legend: { display: false },
       tooltip: { callbacks: { label: ctx => `Innovator Complete: ${ctx.parsed.y.toLocaleString()}` } },
       datalabels: {
-        display: (ctx) => {
-          const net = kzwMonthlyNet[ctx.dataIndex]?.net;
-          return net !== null && net !== undefined && net !== 0;
-        },
+        display: (ctx) => (innovatorMonthly[ctx.dataIndex]?.count || 0) > 0,
         formatter: (v) => v.toLocaleString(),
-        color: (ctx) => (kzwMonthlyNet[ctx.dataIndex]?.net < 0 ? C.red : C.textPri),
-        anchor: (ctx) => (kzwMonthlyNet[ctx.dataIndex]?.net < 0 ? 'start' : 'end'),
-        align: (ctx) => (kzwMonthlyNet[ctx.dataIndex]?.net < 0 ? 'bottom' : 'top'),
-        offset: 4,
+        color: C.textPri,
+        anchor: 'end', align: 'top', offset: 4,
         font: { size: 10, weight: 700 },
       },
     },
@@ -1348,14 +1329,14 @@ export default function SdsCoverageDashboard() {
               <Col span={8}>
                 <div style={{ ...cardStyle, height: 350, display: 'flex', flexDirection: 'column' }}>
                   {sectionTitle(
-                    <Tooltip title="How many sheets were Innovator-completed (baseline stamp) IN that month — the net change between adjacent cumulative snapshots, not a running total. A month with no new sign nets to 0; a sheet reverting to pending nets negative.">
+                    <Tooltip title="How many sheets were fully SIGNED as Innovator-complete (baseline stamp) in that calendar month — a direct count, so it's never negative. If a signature is later revoked, that sheet drops out of its original month's count on the next rebuild (the bar can shrink over time), but no month's count is ever computed as a difference from another, so it never goes below zero.">
                       <span style={{ cursor: 'help' }}>Innovator Complete per Month</span>
                     </Tooltip>,
                     C
                   )}
                   <div style={{ flex: 1, minHeight: 0 }}>
-                    {kzwMonthlyNet.length > 0
-                      ? <Bar data={kzwMonthlyChartData} options={kzwMonthlyChartOpts} />
+                    {innovatorMonthly.length > 0
+                      ? <Bar data={innovatorMonthlyChartData} options={innovatorMonthlyChartOpts} />
                       : <div style={{ color: C.textSec, textAlign: 'center', paddingTop: 100 }}>No data</div>
                     }
                   </div>

@@ -1066,6 +1066,28 @@ async function buildCoverage() {
       byType.set(r.part_type, te);
       stMonByType.set(m, byType);
     }
+
+    // Gross "Innovator Complete" signings per calendar month — the count of sheets
+    // whose BASELINE (saved-tool) criterion was met AND fully signed, bucketed by the
+    // month they were actually SIGNED (`stamped_full_at`), not by production cohort.
+    // `monthlyStatus` below is a diff of cumulative cohort snapshots (can go negative
+    // when a sheet reverts to pending — see the "KZW/Innovator Complete per Month"
+    // chart's prior behaviour); this is a direct, non-negative count instead — a sheet
+    // is counted once, in the month it was signed, full stop. Not run through
+    // `freezeMonthlyStatus`: a signature timestamp is a stable historical fact (the
+    // only way a past month's count changes is a revoke, which is the sheet genuinely
+    // no longer being complete — correct to reflect, not a staleness bug to freeze
+    // against).
+    const signedMon = new Map(); // 'YYYY-MM' → count
+    for (const r of evaluated) {
+      if (r.coverage_level_saved !== 'COMPLETE' || !r.stamped_full_at) continue;
+      const m = ym(r.stamped_full_at);
+      signedMon.set(m, (signedMon.get(m) || 0) + 1);
+    }
+    const monthlyInnovatorSigned = [...signedMon.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, count]) => ({ month, count }));
+
     let cumWorkable = 0, cumComplete = 0, cumCompleteSaved = 0;
     const cumByType = {}; // part_type → { workable, complete, completeSaved } (running totals)
     const monthlyStatusLive = [...stMon.keys()].sort().map((month) => {
@@ -1165,6 +1187,7 @@ async function buildCoverage() {
       monthlyTrend,
       monthlyNewParts,
       monthlyStatus,
+      monthlyInnovatorSigned,
       needsAttention,
       // EVERY evaluated sheet (Complete and Pending), slimmed to what the CN table renders,
       // tagged with its first-produced month. It rides in the cached / persisted payload so
