@@ -339,19 +339,26 @@ async function loadStandardGridLive() {
   return JSON.parse(rows[0].grid_json);
 }
 
-// Three PB Ring machines are centerless grinders whose exact real-world
-// counterparts (HI-GRIND-1-D, OC-18BR-150, OC-20BR-200 — confirmed live
-// against sds_machine_type_code.grid_template_id) all use the real
-// "Centerless" layout, not "Standard" — user request (2026-10-14). Still
-// READ-ONLY, same safety argument as loadStandardGridLive — a different
-// id, same plain SELECT, no CN, no JOIN. Safe to swap freely: the T01-T20/
-// header cell ADDRESSES applyToolSlotsToGrid/applyHeaderToGrid use come
-// from sds_excel_mapping WHERE machine_type_name IS NULL — shared across
-// every real machine regardless of which grid_template they're assigned,
-// Centerless-using real machines included — so this is a drop-in layout
-// swap, not a second rendering pipeline.
+// Four PB Ring machines are centerless grinders that use the real
+// "Centerless" layout, not "Standard" — user request (2026-10-14/15).
+// HIGRIND1D/OC18BR150/OC20BR200 confirmed live against
+// sds_machine_type_code.grid_template_id (their exact real-world
+// counterparts HI-GRIND-1-D/OC-18BR-150/OC-20BR-200 are all assigned id 4).
+// OMIYA has no such real registry match (its pbring_sds_param/condition
+// are empty, and its own import source_sheet_name is 'cgm_omiya' — a
+// machine CODE prefix, not a name in sds_machine_type_code) — added on the
+// user's own domain confirmation that OMIYA is the same centerless-grinder
+// equipment family as the other three regardless of which specific
+// machine code it shows up under. Still READ-ONLY, same safety argument as
+// loadStandardGridLive — a different id, same plain SELECT, no CN, no
+// JOIN. Safe to swap freely: the T01-T20/header cell ADDRESSES
+// applyToolSlotsToGrid/applyHeaderToGrid use come from sds_excel_mapping
+// WHERE machine_type_name IS NULL — shared across every real machine
+// regardless of which grid_template they're assigned, Centerless-using
+// real machines included — so this is a drop-in layout swap, not a second
+// rendering pipeline.
 const SDS_CENTERLESS_TEMPLATE_ID = 4; // sds_grid_template.id, name='Centerless', confirmed live 2026-10-14
-const CENTERLESS_MACHINE_NAMES = new Set(['HIGRIND1D', 'OC18BR150', 'OC20BR200']);
+const CENTERLESS_MACHINE_NAMES = new Set(['HIGRIND1D', 'OC18BR150', 'OC20BR200', 'OMIYA']);
 
 async function loadCenterlessGridLive() {
   const { rows } = await engPool.query(`SELECT grid_json FROM sds_grid_template WHERE id = $1`, [SDS_CENTERLESS_TEMPLATE_ID]);
