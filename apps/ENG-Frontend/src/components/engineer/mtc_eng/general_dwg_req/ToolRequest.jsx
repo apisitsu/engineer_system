@@ -6,7 +6,7 @@ import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
     PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
-    StopOutlined, SettingOutlined
+    StopOutlined, SettingOutlined, AuditOutlined, FileTextOutlined, UserOutlined, SendOutlined
 } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -17,10 +17,10 @@ import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
 import RequestDetailsPage from './RequestDetailsPage';
 import { sendGasTemplateEmail } from '../../../../utils/gasTemplateEmail';
-import { 
-    WORKFLOW_STATUS, 
-    STATUS_COLORS, 
-    FILTER_TYPES, 
+import {
+    WORKFLOW_STATUS,
+    STATUS_COLORS,
+    FILTER_TYPES,
     // FILTER_TYPE_LABELS,
     isDoneStatus,
     isDeniedStatus,
@@ -28,6 +28,18 @@ import {
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
+
+// Pending-per-stage filter cards — current_stage carries exactly these labels
+// while a request is active (it becomes "Completed"/"Denied" once it isn't),
+// same icon choice as RequestDetailsPage's own STAGES array.
+const STAGE_CARDS = [
+    { label: 'Eng Check', icon: <AuditOutlined /> },
+    { label: 'Draft Man', icon: <FileTextOutlined /> },
+    { label: 'DWG Check', icon: <AuditOutlined /> },
+    { label: 'Eng Review', icon: <UserOutlined /> },
+    { label: 'Eng Approve', icon: <CheckCircleOutlined /> },
+    { label: 'Eng Inform', icon: <SendOutlined /> },
+];
 
 const ToolRequestContent = () => {
     const { message, modal } = App.useApp();
@@ -50,6 +62,7 @@ const ToolRequestContent = () => {
     const [searchText, setSearchText] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [factoryFilter, setFactoryFilter] = useState('all');
+    const [stageFilter, setStageFilter] = useState(null); // current_stage label, or null = not filtering by stage
 
     // Modal states
     const [modalVisible, setModalVisible] = useState(false);
@@ -190,6 +203,12 @@ const ToolRequestContent = () => {
 
     const handleFilterChange = (type) => {
         setFilterType(type);
+        setStageFilter(null); // the two filters are different axes; keep only one active at a time
+    };
+
+    const handleStageCardClick = (stageLabel) => {
+        setStageFilter(prev => (prev === stageLabel ? null : stageLabel));
+        setFilterType('all');
     };
 
     // Group requests by Year → Month (year ascending, month ascending within year)
@@ -218,9 +237,10 @@ const ToolRequestContent = () => {
             }));
     };
 
-    // Filter data based on search, factory and filter type
+    // Filter data based on search, factory, stage and filter type
     const filteredRequests = requests.filter(item => {
         if (factoryFilter !== 'all' && item.factory !== factoryFilter) return false;
+        if (stageFilter && item.current_stage !== stageFilter) return false;
 
         if (searchText) {
             const lowerSearch = searchText.toLowerCase();
@@ -251,6 +271,15 @@ const ToolRequestContent = () => {
     // Derived from what's loaded rather than hardcoded, so a future third factory
     // shows up here with no code change.
     const factoryOptions = [...new Set(requests.map(r => r.factory).filter(Boolean))].sort();
+
+    // Pending count per stage for the filter cards — respects the Factory filter (so
+    // switching factory updates the counts) but not search/stage/status, so the cards
+    // stay a stable "what's outstanding" overview rather than chasing their own filter.
+    const stageCountBase = factoryFilter === 'all' ? requests : requests.filter(r => r.factory === factoryFilter);
+    const stageCounts = STAGE_CARDS.reduce((acc, s) => {
+        acc[s.label] = stageCountBase.filter(r => r.current_stage === s.label).length;
+        return acc;
+    }, {});
 
     const columns = [
         {
@@ -500,6 +529,38 @@ const ToolRequestContent = () => {
                                     </Col>
                                 </Row>
                             </Card>
+
+                            {/* Stage filter cards — count pending per stage, click to isolate one */}
+                            <Row gutter={[10, 10]} style={{ marginTop: 16 }}>
+                                {STAGE_CARDS.map(s => {
+                                    const active = stageFilter === s.label;
+                                    return (
+                                        <Col key={s.label} xs={12} sm={8} md={4}>
+                                            <Card
+                                                size="small"
+                                                hoverable
+                                                onClick={() => handleStageCardClick(s.label)}
+                                                style={{
+                                                    textAlign: 'center',
+                                                    borderColor: active ? theme.colors.primary : undefined,
+                                                    borderWidth: active ? 2 : 1,
+                                                    background: active ? theme.colors.surfaceHover : undefined,
+                                                }}
+                                            >
+                                                <Space direction="vertical" size={2}>
+                                                    <span style={{ color: active ? theme.colors.primary : theme.colors.textSecondary, fontSize: 20 }}>
+                                                        {s.icon}
+                                                    </span>
+                                                    <Text style={{ fontSize: 12, color: active ? theme.colors.primary : undefined }}>{s.label}</Text>
+                                                    <Text strong style={{ fontSize: 22, color: active ? theme.colors.primary : undefined }}>
+                                                        {stageCounts[s.label]}
+                                                    </Text>
+                                                </Space>
+                                            </Card>
+                                        </Col>
+                                    );
+                                })}
+                            </Row>
 
                             {/* Table Section — grouped by Year → Month (collapsed by default) */}
                             <div style={{ marginTop: 16 }}>
