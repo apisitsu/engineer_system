@@ -64,6 +64,12 @@ const ToolRequestContent = () => {
     const [factoryFilter, setFactoryFilter] = useState('all');
     const [stageFilter, setStageFilter] = useState(null); // current_stage label, or null = not filtering by stage
 
+    // Year/Month Collapse is controlled so a stage-card click can expand straight to
+    // the matching rows — by default everything starts collapsed (the original
+    // behaviour), only a filter action opens panels.
+    const [expandedYears, setExpandedYears] = useState([]);
+    const [expandedMonths, setExpandedMonths] = useState([]);
+
     // Modal states
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
@@ -207,8 +213,17 @@ const ToolRequestContent = () => {
     };
 
     const handleStageCardClick = (stageLabel) => {
-        setStageFilter(prev => (prev === stageLabel ? null : stageLabel));
+        const next = stageFilter === stageLabel ? null : stageLabel;
+        setStageFilter(next);
         setFilterType('all');
+        if (next) {
+            // Expand straight to the matching rows instead of leaving the result
+            // sitting behind a collapsed Year/Month panel the user has to open by hand.
+            const base = factoryFilter === 'all' ? requests : requests.filter(r => r.factory === factoryFilter);
+            const grouped = groupByYearMonth(base.filter(r => r.current_stage === next));
+            setExpandedYears(grouped.map(y => y.year));
+            setExpandedMonths(grouped.flatMap(y => y.months.map(m => m.key)));
+        }
     };
 
     // Group requests by Year → Month (year ascending, month ascending within year)
@@ -566,6 +581,8 @@ const ToolRequestContent = () => {
                             <div style={{ marginTop: 16 }}>
                                 <Collapse
                                     ghost
+                                    activeKey={expandedYears}
+                                    onChange={(keys) => setExpandedYears(keys)}
                                     items={groupByYearMonth(filteredRequests).map(yearGroup => ({
                                         key: yearGroup.year,
                                         label: (
@@ -577,6 +594,11 @@ const ToolRequestContent = () => {
                                         children: (
                                             <Collapse
                                                 ghost
+                                                activeKey={expandedMonths.filter(k => yearGroup.months.some(m => m.key === k))}
+                                                onChange={(keys) => setExpandedMonths(prev => [
+                                                    ...prev.filter(k => !yearGroup.months.some(m => m.key === k)),
+                                                    ...keys,
+                                                ])}
                                                 items={yearGroup.months.map(monthGroup => ({
                                                     key: monthGroup.key,
                                                     label: (
