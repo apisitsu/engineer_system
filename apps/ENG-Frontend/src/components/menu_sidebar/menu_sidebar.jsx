@@ -86,6 +86,7 @@ export const process = createMenu([
     //     ]
     // },
     { label: "Tumble System", path: "/eng/process_eng/tumble", key: "tumble" },
+    { label: "Record New Model", path: "/eng/process_eng/record-form", key: "record-form" },
 ]);
 
 export const newprod = createMenu([

@@ -44,6 +44,7 @@ import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
 import EcntV2Dashboard from './components/engineer/process_eng/ecnt_v2/Dashboard';
 
 import TumbleSystem from './components/engineer/process_eng/tumble/TumbleSystem';
+import RecordFormPage from './components/engineer/process_eng/record_form/RecordFormPage';
 
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
 
@@ -342,6 +343,7 @@ const AppContent = () => {
                   {/* ------ Process Engineer ------ */}
                   <Route path="/eng/process_eng" element={<HomeProcessEng />} />
                   <Route path="/eng/process_eng/tumble" element={<TumbleSystem />} />
+                  <Route path="/eng/process_eng/record-form" element={<RecordFormPage />} />
                   <Route path="/eng/process_eng/ecnt_v2" element={<EcntV2Dashboard />} />
 
                   {/* Restrict legacy ECNT (V1) to AD only */}

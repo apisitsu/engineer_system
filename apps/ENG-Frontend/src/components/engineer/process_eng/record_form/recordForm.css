@@ -1,0 +1,42 @@
+/* Geometry follows "Form record new model.xlsx": thin black lines, Arial, label 8pt,
+   no boxes round header fields (only an underline), stamp boxes 11pt. */
+.rf-sheet { background: #fff; color: #000; font-family: Arial, 'Tahoma', sans-serif; box-sizing: border-box; padding: 4mm; width: 291mm; border: 1px solid #ccc; }
+.rf-portrait { width: 204mm; }
+.rf-top { display: flex; align-items: flex-start; }
+.rf-left { min-width: 0; }
+.rf-title { font-weight: 700; font-size: 10.5pt; line-height: 12pt; }
+.rf-subtitle { font-size: 10.5pt; line-height: 15pt; }
+.rf-header { margin-top: 0; }
+.rf-hrow { display: flex; min-height: 5mm; align-items: flex-end; }
+.rf-hcell { display: flex; align-items: flex-end; min-width: 0; font-size: 8pt; line-height: 10pt; }
+.rf-hlabel { white-space: nowrap; flex: 0 0 auto; padding-right: 1mm; box-sizing: border-box; } /* min-width = the workbook's label cells; grows if the text needs more */
+.rf-hval { flex: 1; min-width: 0; border-bottom: 1px solid #000; min-height: 10pt; padding: 0; text-align: center; white-space: nowrap; }
+.rf-boxes { display: flex; box-sizing: border-box; }
+.rf-box { border: 1px solid #000; margin-left: -1px; min-width: 0; }
+.rf-box:first-child { margin-left: 0; }
+.rf-box-label { text-align: center; font-size: 8pt; line-height: 12pt; white-space: nowrap; overflow: hidden; border-bottom: 1px solid #000; }
+.rf-box-body { height: 13.8mm; padding: 1mm; font-size: 10pt; }
+.rf-table { width: 100%; border-collapse: collapse; margin-top: 1.6mm; table-layout: fixed; }
+.rf-table th, .rf-table td { border: 1px solid #000; padding: 0 1.5mm; height: 7.4mm; font-size: 14pt; overflow: hidden; text-align: left; }
+/* header fill = workbook theme colour 2 (E7E6E6) at tint -10% = D0CECE */
+.rf-table th { font-size: 11pt; font-weight: 400; height: 5.3mm; text-align: center; background: #d0cece; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.rf-table td.rf-c { text-align: center; }
+.rf-input { width: 100%; border: 0; border-bottom: 1px dashed #bbb; background: #fffef2; font: inherit; padding: 0; outline: none; text-align: inherit; }
+.rf-input:focus { background: #e6f4ff; border-bottom-color: #1677ff; }
+/* process code printed ahead of the process name */
+.rf-proc { display: flex; gap: 2.5mm; align-items: baseline; }
+.rf-code { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.rf-text { white-space: pre-wrap; word-break: break-word; }
+
+.rf-print-area { display: none; }
+@media print {
+  /* `body > #root` outranks the global `#root { display:block !important }` that the
+     PFMEA/PFD/PDR/ControlPlan print styles set — without it the whole app prints first. */
+  body > #root,
+  body > *:not(.rf-print-area) { display: none !important; }
+  .rf-print-area { display: block; }
+  .rf-sheet { border: 0; padding: 0; width: 285mm; break-inside: avoid; }
+  .rf-portrait { width: 198mm; }
+  .rf-table tr { break-inside: avoid; }
+  .rf-input { border: 0; background: transparent; }
+}

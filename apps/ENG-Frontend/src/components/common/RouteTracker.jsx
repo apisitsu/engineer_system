@@ -69,6 +69,7 @@ function getFriendlyTitle(routePath) {
     if (routePath.includes('/process_eng/ecnt/tasks')) return 'Process: ECNT Tasks';
     if (routePath.includes('/process_eng/ecnt/history')) return 'Process: ECNT History';
     if (routePath.includes('/process_eng/tumble')) return 'Process: Tumble System';
+    if (routePath.includes('/process_eng/record-form')) return 'Process: Record New Model';
     if (routePath.startsWith('/eng/process_eng')) return 'Process Engineer';
 
     // Kanban

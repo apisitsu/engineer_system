@@ -65,6 +65,7 @@ export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys, selec
         if (type === 'Process') {
             if (p.startsWith('/eng/process_eng/ecnt_v2')) return ['ecnt_v2'];
             if (p.startsWith('/eng/process_eng/tumble')) return ['tumble'];
+            if (p.startsWith('/eng/process_eng/record-form')) return ['record-form'];
             if (p.startsWith('/eng/process_eng/ecnt')) return ['child-1-0'];
             if (p === '/eng/process_eng') return ['1'];
         }
