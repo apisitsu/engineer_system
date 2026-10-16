@@ -5,7 +5,7 @@ import {
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
-    PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
+    PlusOutlined, SyncOutlined, UnorderedListOutlined, CheckCircleOutlined,
     StopOutlined, SettingOutlined, AuditOutlined, FileTextOutlined, UserOutlined, SendOutlined
 } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
@@ -18,7 +18,6 @@ import moment from 'moment';
 import RequestDetailsPage from './RequestDetailsPage';
 import { sendGasTemplateEmail } from '../../../../utils/gasTemplateEmail';
 import {
-    WORKFLOW_STATUS,
     STATUS_COLORS,
     FILTER_TYPES,
     // FILTER_TYPE_LABELS,
@@ -268,11 +267,9 @@ const ToolRequestContent = () => {
             if (!matchesSearch) return false;
         }
 
-        if (filterType === FILTER_TYPES.PENDING) {
-            return item.status === WORKFLOW_STATUS.PENDING_ENG_CHECK;
-        } else if (filterType === FILTER_TYPES.IN_PROGRESS) {
-            return item.status?.startsWith('Pending') && item.status !== WORKFLOW_STATUS.PENDING_ENG_CHECK;
-        } else if (filterType === FILTER_TYPES.COMPLETE) {
+        // PENDING/IN_PROGRESS dropped along with their buttons — the stage cards
+        // cover that ground per-stage instead of lumped together.
+        if (filterType === FILTER_TYPES.COMPLETE) {
             return isDoneStatus(item.status) && !isDeniedStatus(item.status);
         } else if (filterType === FILTER_TYPES.DENIED) {
             return isDeniedStatus(item.status);
@@ -519,17 +516,14 @@ const ToolRequestContent = () => {
                                                 ]}
                                             />
 
+                                            {/* "Eng Check" and "In Progress" dropped — the stage cards below cover that
+                                                ground (and per-stage, not just lumped together). Complete/Denied/All
+                                                stay here since no stage card ever shows a finished request. */}
                                             <Radio.Group
                                                 value={filterType}
                                                 buttonStyle="solid"
                                                 onChange={(e) => handleFilterChange(e.target.value)}
                                             >
-                                                <Radio.Button value={FILTER_TYPES.PENDING}>
-                                                    <ClockCircleOutlined /> Eng Check
-                                                </Radio.Button>
-                                                <Radio.Button value={FILTER_TYPES.IN_PROGRESS}>
-                                                    <SyncOutlined spin /> In Progress
-                                                </Radio.Button>
                                                 <Radio.Button value={FILTER_TYPES.COMPLETE}>
                                                     <CheckCircleOutlined /> Complete
                                                 </Radio.Button>
@@ -555,22 +549,24 @@ const ToolRequestContent = () => {
                                                 size="small"
                                                 hoverable
                                                 onClick={() => handleStageCardClick(s.label)}
+                                                styles={{ body: { padding: '8px 12px' } }}
                                                 style={{
-                                                    textAlign: 'center',
                                                     borderColor: active ? theme.colors.primary : undefined,
                                                     borderWidth: active ? 2 : 1,
                                                     background: active ? theme.colors.surfaceHover : undefined,
                                                 }}
                                             >
-                                                <Space direction="vertical" size={2}>
-                                                    <span style={{ color: active ? theme.colors.primary : theme.colors.textSecondary, fontSize: 20 }}>
-                                                        {s.icon}
-                                                    </span>
-                                                    <Text style={{ fontSize: 12, color: active ? theme.colors.primary : undefined }}>{s.label}</Text>
-                                                    <Text strong style={{ fontSize: 22, color: active ? theme.colors.primary : undefined }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                    <Space size={6}>
+                                                        <span style={{ color: active ? theme.colors.primary : theme.colors.textSecondary, fontSize: 15 }}>
+                                                            {s.icon}
+                                                        </span>
+                                                        <Text style={{ fontSize: 12, color: active ? theme.colors.primary : undefined }}>{s.label}</Text>
+                                                    </Space>
+                                                    <Text strong style={{ fontSize: 16, color: active ? theme.colors.primary : undefined }}>
                                                         {stageCounts[s.label]}
                                                     </Text>
-                                                </Space>
+                                                </div>
                                             </Card>
                                         </Col>
                                     );
