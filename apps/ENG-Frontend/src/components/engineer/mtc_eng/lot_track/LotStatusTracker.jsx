@@ -158,6 +158,8 @@ function Roadmap({ steps, issuedDate }) {
           if (s.startDate) bits.push(`received ${s.startDate}`);
           if (s.incomingQty != null) bits.push(`qty in ${s.incomingQty}`);
         } else {
+          // floor machine code(s) (IDG-xx, SPG-xx…) — a step can run on several
+          if (s.machineCodes?.length) bits.push(s.machineCodes.join(', '));
           if (s.wc) bits.push(`WC ${s.wc}`);
           // No per-step start timestamp exists in pc_production, so show only the
           // recorded completion date — the inter-step gap is carried by the
