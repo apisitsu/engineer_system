@@ -61,18 +61,27 @@ function InspectionReport() {
   const [dwgRequestOpen, setDwgRequestOpen] = useState(false);
   const [updateFormOpen, setUpdateFormOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(moment().format('MM-YYYY'));
+  // Which table the list card shows: the inspection list, or the rows behind a dashboard card.
+  const [view, setView] = useState('inspection');
+  const [sideRows, setSideRows] = useState([]);
+  const [sideLoading, setSideLoading] = useState(false);
+  const [sideReload, setSideReload] = useState(0);
+
+  // By Date drives the dashboard cards too, not just the table below them.
+  const cardDate = filterType === 'date' && selectedDate ? selectedDate.format('YYYY-MM-DD') : null;
 
   const fetchDashboardData = useCallback(async (monthYear) => {
     const month = monthYear || moment().format('MM-YYYY');
     try {
-      const response = await axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${month}`);
+      const dateQs = cardDate ? `&date=${cardDate}` : '';
+      const response = await axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${month}${dateQs}`);
       setDashboardData(response.data);
       if (monthYear) setSelectedMonth(monthYear);
     } catch (error) {
       console.error("Fetch Dashboard Error:", error);
       setDashboardData({});
     }
-  }, []);
+  }, [cardDate]);
 
   const fetchToolingInspectData = useCallback(async () => {
     if (filterType === 'date' && !selectedDate) {
@@ -259,14 +268,48 @@ function InspectionReport() {
     }
   ], [theme.colors, handleUpdateRecord, handleBlacklist]);
 
+  const returnColumns = useMemo(() => [
+    { title: 'Return Date', dataIndex: 'return_date', key: 'return_date', width: 120, render: (t) => t ? moment(String(t).slice(0, 10), 'YYYY-MM-DD').format('DD-MM-YYYY') : '-' },
+    { title: 'W/C', dataIndex: 'wc_code', key: 'wc_code', width: 90 },
+    { title: 'W/C Name', dataIndex: 'wc_name', key: 'wc_name', width: 160 },
+    { title: 'Qty', dataIndex: 'qty', key: 'qty', width: 80, align: 'center' },
+    { title: 'Measuring Tools', dataIndex: 'measuring_tools', key: 'measuring_tools', width: 160 },
+    { title: 'Remark', dataIndex: 'remark', key: 'remark' },
+  ], []);
+
+  const dwgColumns = useMemo(() => [
+    { title: 'Request Date', dataIndex: 'date_req', key: 'date_req', width: 130, render: (t) => t ? moment(t).format('DD-MM-YYYY') : '-' },
+    { title: 'Item', dataIndex: 'item', key: 'item', width: 220 },
+    { title: 'Status', dataIndex: 'status', key: 'status', width: 110, align: 'center', render: (t) => t ? <Tag color={t === 'Complete' ? theme.colors.success : theme.colors.warning}>{t}</Tag> : '' },
+    { title: 'Remark', dataIndex: 'remark', key: 'remark' },
+  ], [theme.colors]);
+
   useEffect(() => {
     const monthOptions = Array.from({ length: 12 }, (_, i) => ({
       label: moment().subtract(i, 'months').format('MMM-YYYY'),
       value: moment().subtract(i, 'months').format('MM-YYYY'),
     }));
     setTimelineDashboard(monthOptions);
-    fetchDashboardData(moment().format('MM-YYYY'));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Runs on mount and whenever the By Date selection changes.
+  useEffect(() => {
+    fetchDashboardData(selectedMonth);
+  }, [cardDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Rows behind the Tooling Return / DWG Request cards: everything, unless By Date has a day picked.
+  const sideDate = cardDate;
+  useEffect(() => {
+    if (view === 'inspection') { setSideRows([]); return undefined; }
+    let cancelled = false;
+    setSideLoading(true);
+    const url = view === 'return' ? server.TOOLING_RETURN_GETLIST : server.TOOLING_DWG_REQUEST_GETLIST;
+    axios.get(sideDate ? `${url}?date=${sideDate}` : url)
+      .then((r) => { if (!cancelled) setSideRows(r.data?.data || []); })
+      .catch((err) => { console.error('Fetch side list error:', err); if (!cancelled) setSideRows([]); })
+      .finally(() => { if (!cancelled) setSideLoading(false); });
+    return () => { cancelled = true; };
+  }, [view, sideDate, sideReload]);
 
   useEffect(() => {
     fetchToolingInspectData();
@@ -294,7 +337,7 @@ function InspectionReport() {
               </div>
               <Dashboard data={dashboarddata} />
               <Card style={{ marginTop: 16 }}>
-                <DashboardCards data={dashboarddata} onOpenReturn={() => setToolingReturn(true)} onOpenDwg={() => setDwgRequestOpen(true)} />
+                <DashboardCards data={dashboarddata} isCustomDate={!!cardDate} activeView={view} onSelectView={setView} onOpenReturn={() => setToolingReturn(true)} onOpenDwg={() => setDwgRequestOpen(true)} />
               </Card>
               <Card style={{ marginTop: 16 }}>
                 <Row gutter={[16, 16]} align="middle">
@@ -304,7 +347,7 @@ function InspectionReport() {
                   <Col xs={24} md={16} style={{ textAlign: 'right' }}>
                     <Space wrap>
                       <Button icon={<SyncOutlined />} onClick={handleSyncCSV}>Update data</Button>
-                      <Radio.Group onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); if (e.target.value !== 'date') setSelectedDate(null); }} value={filterType}>
+                      <Radio.Group onChange={(e) => { setView('inspection'); setFilterType(e.target.value); setCurrentPage(1); if (e.target.value !== 'date') setSelectedDate(null); }} value={filterType}>
                         <Radio.Button value="pending">Pending</Radio.Button>
                         <Radio.Button value="pendingAll">Pending All</Radio.Button>
                         <Radio.Button value="all">All Jobs</Radio.Button>
@@ -334,11 +377,27 @@ function InspectionReport() {
                 </Row>
               </Card>
               <Card
-                title="Inspection List"
-                extra={<Text type="secondary">{totalRecords > 0 ? <><Text strong>{totalRecords}</Text> Item{duplicatePoNos.size > 0 && <Text type="danger" style={{ marginLeft: 8 }}>· Duplicate {duplicatePoNos.size} PO</Text>}</> : 'No records'}</Text>}
+                title={view === 'return' ? 'Tooling Return List' : view === 'dwg' ? 'DWG Request List' : 'Inspection List'}
+                extra={view !== 'inspection'
+                  ? <Space>
+                      <Text type="secondary">{sideDate ? moment(sideDate).format('DD/MM/YYYY') : 'All dates'} · <Text strong>{sideRows.length}</Text> Item</Text>
+                      <Button size="small" onClick={() => setView('inspection')}>Back to Inspection List</Button>
+                    </Space>
+                  : <Text type="secondary">{totalRecords > 0 ? <><Text strong>{totalRecords}</Text> Item{duplicatePoNos.size > 0 && <Text type="danger" style={{ marginLeft: 8 }}>· Duplicate {duplicatePoNos.size} PO</Text>}</> : 'No records'}</Text>}
                 style={{ marginTop: 16 }}
               >
                 <style>{`.dup-row td { color: #f5222d !important; font-weight: 600; }`}</style>
+                {view !== 'inspection' ? (
+                  <Table
+                    dataSource={sideRows}
+                    columns={view === 'return' ? returnColumns : dwgColumns}
+                    rowKey="id"
+                    loading={sideLoading}
+                    pagination={{ pageSize: 10 }}
+                    scroll={{ x: 'max-content' }}
+                    size="small"
+                  />
+                ) : (
                 <Table
                   dataSource={displayData}
                   columns={columns}
@@ -348,13 +407,14 @@ function InspectionReport() {
                   scroll={{ x: 'max-content' }}
                   size="small"
                 />
+                )}
               </Card>
             </div>
           </Content>
         </Spin>
       </Layout>
-      <ToolingReturnForm open={toolingReturn} onCancel={() => setToolingReturn(false)} onSuccess={() => { setToolingReturn(false); fetchToolingInspectData(); fetchDashboardData(selectedMonth); }} />
-      <DWGRequestForm open={dwgRequestOpen} onCancel={() => setDwgRequestOpen(false)} />
+      <ToolingReturnForm open={toolingReturn} onCancel={() => setToolingReturn(false)} onSuccess={() => { setToolingReturn(false); fetchToolingInspectData(); fetchDashboardData(selectedMonth); setSideReload((n) => n + 1); }} />
+      <DWGRequestForm open={dwgRequestOpen} onCancel={() => { setDwgRequestOpen(false); fetchDashboardData(selectedMonth); setSideReload((n) => n + 1); }} />
       <UpdateFormModal open={updateFormOpen} initialData={selectedData} onCancel={() => setUpdateFormOpen(false)} onSuccess={() => { fetchToolingInspectData(); fetchDashboardData(selectedMonth); }} />
     </Layout>
   );

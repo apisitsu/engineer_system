@@ -89,11 +89,17 @@ const ToolingInspectGetlist = async (req, res) => {
     }
 };
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 const ToolDWGRequestGetList = async (req, res) => {
     try {
+        // Optional ?date=YYYY-MM-DD narrows the list to one request day (dashboard card drill-down).
+        const date = ISO_DATE_RE.test(req.query.date || '') ? req.query.date : null;
+        const where = date ? `WHERE date_req::TEXT LIKE $1 || '%'` : '';
+        const qp = date ? [date] : [];
         const [dataRes, countRes] = await Promise.all([
-            engPool.query(`SELECT * FROM ${TABLES.TI_DWG_JOB} ORDER BY date_req DESC`),
-            engPool.query(`SELECT COUNT(*) as total FROM ${TABLES.TI_DWG_JOB}`),
+            engPool.query(`SELECT * FROM ${TABLES.TI_DWG_JOB} ${where} ORDER BY date_req DESC, id DESC`, qp),
+            engPool.query(`SELECT COUNT(*) as total FROM ${TABLES.TI_DWG_JOB} ${where}`, qp),
         ]);
         const total = parseInt(countRes.rows[0].total);
         res.json({
@@ -105,6 +111,23 @@ const ToolDWGRequestGetList = async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 }
+
+const ToolingReturnGetList = async (req, res) => {
+    try {
+        const date = ISO_DATE_RE.test(req.query.date || '') ? req.query.date : null;
+        const where = date
+            ? `WHERE NULLIF(TRIM(return_date::TEXT), '') IS NOT NULL AND LEFT(TRIM(return_date::TEXT), 10) = $1`
+            : '';
+        const result = await engPool.query(
+            `SELECT * FROM ${TABLES.TI_RETURN} ${where} ORDER BY return_date DESC, id DESC`,
+            date ? [date] : []
+        );
+        res.json({ data: result.rows, pagination: { total: result.rows.length } });
+    } catch (err) {
+        console.error('Error fetching tooling return list:', err.message);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
 
 const GetWCCodes = async (req, res) => {
     try {
@@ -239,7 +262,10 @@ const calculateDiffAndStatus = async (receiveDateVal, issueDateVal) => {
 const ToolingDashboadtGetlist = async (req, res) => {
     try {
         const today = moment();
-        const prevWorkingDate = await getPreviousWorkingDay(today);
+        // ?date=YYYY-MM-DD pins the cards to a chosen day instead of the previous working day.
+        const prevWorkingDate = ISO_DATE_RE.test(req.query.date || '')
+            ? req.query.date
+            : await getPreviousWorkingDay(today);
         const targetMonth = req.query.month ? moment(req.query.month, 'MM-YYYY') : moment();
         const startDate = targetMonth.clone().startOf('month').format('YYYY-MM-DD');
 
@@ -784,6 +810,7 @@ const ToolingResultDashboard = async (req, res) => {
 module.exports = {
     ToolingInspectGetlist,
     ToolDWGRequestGetList,
+    ToolingReturnGetList,
     ToolDWGRequestAdd,
     GetWCCodes,
     ToolingDashboadtGetlist,

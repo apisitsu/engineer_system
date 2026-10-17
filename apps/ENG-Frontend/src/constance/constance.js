@@ -101,6 +101,7 @@ export const server = {
   TOOLING_INSPECT_API: `${apiUrl}api/engineer/mtc/tooling-inspect`,
   TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/inspect_update`,
   TOOLING_INSPECT_STATUS_PREVIEW: `${apiUrl}api/tooling_inspect/status_preview`,
+  TOOLING_RETURN_GETLIST: `${apiUrl}api/tooling_inspect/return_getlist`,
   TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
   TOOLING_SYNC_CSV: `${apiUrl}api/tooling_inspect/sync_csv`,
 

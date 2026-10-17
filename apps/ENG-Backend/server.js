@@ -445,6 +445,7 @@ app.route('/api/tooling_inspect/getlist').get(verifyToken, legacyMtcController.T
 app.route('/api/tooling_inspect/dashboard_stats').get(verifyToken, legacyMtcController.ToolingDashboadtGetlist);
 app.route('/api/tooling_inspect/result_dashboard').get(verifyToken, legacyMtcController.ToolingResultDashboard);
 app.route('/api/tooling_inspect/available_fye').get(verifyToken, legacyMtcController.ToolingAvailableFYE);
+app.route('/api/tooling_inspect/return_getlist').get(verifyToken, legacyMtcController.ToolingReturnGetList);
 app.route('/api/tooling_inspect/dwg_require_getlist').get(verifyToken, legacyMtcController.ToolDWGRequestGetList);
 
 // Protected Modification endpoints

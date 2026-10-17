@@ -8,7 +8,7 @@ import moment from 'moment';
 
 const { Title, Text } = Typography;
 
-const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
+const DashboardCards = ({ data, onOpenReturn, onOpenDwg, isCustomDate = false, activeView, onSelectView }) => {
     const { theme } = useTheme();
     const stats = data;
     const loading = !data;
@@ -35,7 +35,8 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
             })) || [],
             hasButton: true,
             btnText: "Add Return",
-            action: onOpenReturn
+            action: onOpenReturn,
+            view: 'return'
         },
         {
             id: 2,
@@ -54,7 +55,8 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
             ],
             hasButton: true,
             btnText: "Add Request",
-            action: onOpenDwg
+            action: onOpenDwg,
+            view: 'dwg'
         },
         {
             id: 3,
@@ -72,7 +74,8 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
                 Number(stats?.rawDataIssuedYesterday) || 0
             ],
             hasButton: false,
-            btnText: "Add Inspection"
+            btnText: "Add Inspection",
+            view: 'inspection'
         }
     ];
 
@@ -136,7 +139,11 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
                     return (
                         <Col span={8} key={card.id}>
                             <Card
+                                hoverable
+                                onClick={() => onSelectView && onSelectView(card.view === activeView ? 'inspection' : card.view)}
                                 style={{
+                                    cursor: onSelectView ? 'pointer' : 'default',
+                                    outline: card.view === activeView && card.view !== 'inspection' ? `2px solid ${card.cardColorDark}` : 'none',
                                     borderTop: `4px solid ${card.cardColorDark}`,
                                     borderRadius: theme.borderRadius.lg,
                                     height: '100%',
@@ -154,7 +161,7 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
                                     <Title level={2} style={{ margin: 0 }}>
                                         {card.mainValue} <small style={{ fontSize: '14px', fontWeight: 'normal' }}>{card.unit}</small>
                                     </Title>
-                                    <Text type="secondary">{card.dateLabel || `${formattedDate} (Prev. Working Day)`}</Text>
+                                    <Text type="secondary">{card.dateLabel || `${formattedDate} (${isCustomDate ? 'Selected Date' : 'Prev. Working Day'})`}</Text>
                                     <IconComponent style={{
                                         position: 'absolute',
                                         right: 0,
@@ -171,7 +178,7 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
                                         block
                                         type="primary"
                                         icon={<IconComponent />}
-                                        onClick={card.action}
+                                        onClick={(e) => { e.stopPropagation(); card.action && card.action(); }}
                                         style={{
                                             backgroundColor: card.cardColorDark,
                                             borderColor: card.cardColorDark,
