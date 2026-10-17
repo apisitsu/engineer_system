@@ -995,6 +995,38 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['params'] = rawParams;
   map['sds_rev'] = rawParams['sds_rev'] || 'NC';
 
+  // Per-CN tool-slot overrides (e.g. 20261017_cn314110_ksb80_new_tooling_override.js —
+  // a brand-new tool not in this machine's sds_machine_tool whitelist, pinned onto one
+  // CN's own sheet via a plain tool_dwg_no_T0N/tool_name_T0N parameter) have NO entry in
+  // `finalTools` by design — that is exactly what stops the whitelist-driven block below
+  // from overwriting them (see "3) Tooling drawing numbers" in applyDataToGrid). But it
+  // also means nothing upstream ever looks for a PHOTO for them: block 4 there only
+  // walks `valueMap.tooling`, so an uploaded `sds_tooling_image` row for the new DWG
+  // number was silently never fetched — reported from the floor (uploaded by name AND
+  // by DWG, nothing showed). Reuses the same table, matched on the override's own DWG
+  // number (simplest, exact — the by-NAME keying `NAME:<family>:<TOOL>` is a whitelist-
+  // scoped convention tied to `cfg_family`, which an override slot has none of), and is
+  // placed through the ordinary `tool_image_T0N` extent in applyDataToGrid — the exact
+  // same box a whitelist-driven photo would use for that slot number.
+  const overrideImgTargets = [];
+  for (let n = 1; n <= 20; n++) {
+    const slot = `T${String(n).padStart(2, '0')}`;
+    const hasWhitelistTool = finalTools[n - 1] && finalTools[n - 1].dwg;
+    const overrideDwg = rawParams[`tool_dwg_no_${slot}`];
+    if (!hasWhitelistTool && overrideDwg) overrideImgTargets.push({ slot, dwg: overrideDwg });
+  }
+  if (overrideImgTargets.length) {
+    const imgRows = await engPool.query(
+      `SELECT tool_dwg_no, image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = ANY($1)`,
+      [overrideImgTargets.map((o) => o.dwg)]
+    );
+    map['_overrideToolImages'] = {};
+    for (const o of overrideImgTargets) {
+      const img = imgRows.rows.find((r) => r.tool_dwg_no === o.dwg);
+      if (img) map['_overrideToolImages'][o.slot] = `data:${img.mime_type};base64,${img.image_data.toString('base64')}`;
+    }
+  }
+
   // Turning-style per-tool photo (2026-09-15, re-pointed 2026-09-17 to the 8-tool
   // layout, key moved off Holder_Info_N the same day) — one picture per cutting-tool
   // position (1-8), keyed by an internal `Tool_Photo_Key_N` param — NOT by a factory DWG
@@ -1643,12 +1675,17 @@ function applyDataToGrid(grid, valueMap, mappings) {
     const master = mergeMaster(r, c);
     const key = `${master.r},${master.c}`;
     if (!scalarBuckets.has(key)) scalarBuckets.set(key, []);
-    scalarBuckets.get(key).push({ c, v: String(val) });
+    // `tool_dwg_no_T0N` is styled red when it reaches the cell the NORMAL way (section
+    // "3", whitelist/T-Select-driven — see setCell(..., true) there). That cell's own
+    // template formatting is black by default, so a per-CN override of this same
+    // param_key (this code path) must force the same red or the override reads as
+    // visually different from every other tool slot for no reason a reader can see.
+    scalarBuckets.get(key).push({ c, v: String(val), red: /^tool_dwg_no_T\d+$/.test(param_key) });
   }
   for (const [key, items] of scalarBuckets) {
     const [r, c] = key.split(',').map(Number);
     items.sort((a, b) => a.c - b.c);
-    setCell(r, c, items.map((it) => it.v).join(' '));
+    setCell(r, c, items.map((it) => it.v).join(' '), items.some((it) => it.red));
   }
   // Clear only masters that no other mapped field wrote into (several params can share a
   // merged region — one unresolved token must not wipe a sibling's value).
@@ -1715,6 +1752,11 @@ function applyDataToGrid(grid, valueMap, mappings) {
     placeImage(key, t.image);
   });
   placeImage('grinding_layout_image', valueMap.grinding_layout_image);
+
+  // 4a) Per-CN tool-slot override photos — see buildValueMap's `_overrideToolImages`.
+  // Same extent a whitelist-driven photo for that slot number would use.
+  const overrideImgs = valueMap._overrideToolImages || {};
+  for (const [slot, dataUri] of Object.entries(overrideImgs)) placeImage(`tool_image_${slot}`, dataUri);
 
   // 4b) Turning-style per-tool photos (Holder_Info_N-keyed) — see buildValueMap.
   const turningImgs = valueMap._turningToolImages || {};
