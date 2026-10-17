@@ -85,13 +85,24 @@ async function detectMissingCost() {
   return { checked: toCheck.length, detected: detections.length };
 }
 
-/** Pending rows, joined with enough tooling context to show them. */
+/**
+ * Pending rows, joined with enough tooling context to show them.
+ *
+ * A pending detection only means something while its tooling row is STILL missing a PO. If the PO
+ * was filled some other way (an import, a hand edit) the detection has nothing left to offer, but
+ * its row stays 'pending' — on 2026-10-17, 36 of the 153 "Cost Update Found" were exactly that
+ * (each detected PO equal to the PO already on the tooling row). They are left out of the
+ * 'pending' list rather than deleted or force-closed: nobody decided them, so the table is
+ * untouched, and one reappears by itself if its PO is ever cleared again.
+ */
 async function listPending(status = 'pending') {
   if (!COST_PENDING_STATUS.includes(status)) throw new PbringError(400, `status must be one of: ${COST_PENDING_STATUS.join(', ')}`);
   const { rows } = await engPool.query(
     `SELECT cp.*, t.part_group, t.part_no, t.tooling_item, t.tool_code, t.cn
        FROM ${TABLES.COST_PENDING} cp JOIN ${TABLES.TOOLING} t ON t.id = cp.tooling_id
-      WHERE cp.status = $1 ORDER BY cp.detected_at DESC`,
+      WHERE cp.status = $1
+        AND ($1 <> 'pending' OR TRIM(COALESCE(t.po_no, '')) = '')
+      ORDER BY cp.detected_at DESC`,
     [status]
   );
   return rows;
