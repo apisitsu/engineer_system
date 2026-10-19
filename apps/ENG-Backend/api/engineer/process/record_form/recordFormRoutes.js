@@ -23,6 +23,7 @@ router.post('/records', c.createRecord);
 router.get('/records/:id', c.getRecord);
 router.put('/records/:id', c.updateRecord);
 router.post('/records/:id/printed', c.markPrinted);
+router.post('/records/:id/stamp', c.stampRecord); // Process Engineer team only — checked in the service
 router.delete('/records/:id', c.deleteRecord);
 
 module.exports = router;

@@ -3,7 +3,7 @@
 const svc = require('./recordFormService');
 const { isAdminUser } = require('../../../../middleware/mtcAuth');
 
-const who = req => ({ empno: req.user?.empno ?? null, name: req.user?.name ?? null });
+const who = req => ({ empno: req.user?.empno ?? null, name: req.user?.name ?? null, group: req.user?.group ?? req.user?.user_group ?? null, isAdmin: isAdminUser(req.user) });
 const id = req => {
   const n = Number(req.params.id);
   if (!Number.isInteger(n) || n < 1) throw Object.assign(new Error('Invalid id'), { status: 400 });
@@ -29,6 +29,7 @@ module.exports = {
   getRecord: wrap(req => svc.getRecord(id(req))),
   createRecord: wrap(req => svc.createRecord(req.body, who(req))),
   updateRecord: wrap(req => svc.updateRecord(id(req), req.body, who(req))),
+  stampRecord: wrap(req => svc.stampRecord(id(req), who(req))),
   markPrinted: wrap(req => svc.markPrinted(id(req), who(req))),
   deleteRecord: wrap(async req => { await svc.deleteRecord(id(req), who(req), isAdminUser(req.user)); return { success: true }; }),
 };

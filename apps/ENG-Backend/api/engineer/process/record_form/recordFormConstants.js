@@ -13,6 +13,11 @@ const FIELD_SOURCES = [
   'established_date', 'record_rev', 'revised_date',  // maintained by the system
 ];
 
+/** user_group (JWT `group`) of the Process Engineer team — the only people who may stamp a record. */
+const STAMP_GROUP = 'PROC';
+/** header keys written only by the stamp action; a client can never set or clear them. */
+const STAMP_KEYS = ['engineer_stamp', 'stamped_by', 'stamped_by_name', 'stamped_at'];
+
 const STATUSES = ['draft', 'printed', 'recorded'];
 
 /**
@@ -53,4 +58,4 @@ const DEFAULT_LAYOUT = {
   ],
 };
 
-module.exports = { TABLES, FIELD_SOURCES, STATUSES, DEFAULT_LAYOUT };
+module.exports = { TABLES, FIELD_SOURCES, STATUSES, STAMP_GROUP, STAMP_KEYS, DEFAULT_LAYOUT };

@@ -16,6 +16,7 @@ export const recordFormApi = {
   getRecord: id => data(httpClient.get(`${BASE}/records/${id}`)),
   createRecord: body => data(httpClient.post(`${BASE}/records`, body)),
   updateRecord: (id, body) => data(httpClient.put(`${BASE}/records/${id}`, body)),
+  stampRecord: id => data(httpClient.post(`${BASE}/records/${id}/stamp`)),
   markPrinted: id => data(httpClient.post(`${BASE}/records/${id}/printed`)),
   deleteRecord: id => data(httpClient.delete(`${BASE}/records/${id}`)),
 };

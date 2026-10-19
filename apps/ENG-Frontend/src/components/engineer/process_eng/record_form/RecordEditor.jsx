@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Button, Input, Space, Tag, Modal, List, message, Alert } from 'antd';
-import { SearchOutlined, SaveOutlined, PrinterOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { Button, Input, Space, Tag, Modal, List, message, Alert, Tooltip } from 'antd';
+import { SearchOutlined, SaveOutlined, PrinterOutlined, ArrowLeftOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import RecordSheet, { revLabel } from './RecordSheet';
 import { PrintPortal, printNow } from './PrintPortal';
 import { recordFormApi, errMsg } from './recordFormApi';
+import { useAuthStore } from '../../../../stores/authStore';
 
 const STATUS = { draft: ['default', 'Draft'], printed: ['blue', 'Printed'], recorded: ['green', 'Recorded'] };
 
@@ -14,7 +15,12 @@ export const emptyRecord = templateId => ({
   header: {}, steps: [], status: 'draft', record_rev: 0, established_date: localToday(), revised_date: null,
 });
 
+// user_group of the Process Engineer team; Admins may stamp too (the backend enforces this — this only decides what is shown)
+const STAMP_GROUP = 'PROC';
+
 export default function RecordEditor({ initial, templates, onBack, onSaved }) {
+  // userSection holds the user's user_group (see sign_in.jsx); Admin = department or role 'AD' (as in menu_template.jsx)
+  const canStamp = useAuthStore(s => s.userSection === STAMP_GROUP || s.userRole === 'AD' || s.userDepartment === 'AD');
   const [rec, setRec] = useState(initial);
   const saved0 = useRef(initial); // what is stored, to tell a date-only edit from a content edit
   const [dirty, setDirty] = useState(!initial.id);
@@ -68,6 +74,22 @@ export default function RecordEditor({ initial, templates, onBack, onSaved }) {
     } catch (e) { message.error(errMsg(e)); } finally { setBusy(false); }
   };
 
+  // A printed form that has come back must be stamped by a Process Engineer before it can be saved.
+  const needsStamp = rec.id && rec.status === 'printed';
+  const stamped = !!rec.header?.stamped_by;
+
+  const stamp = async () => {
+    setBusy(true);
+    try {
+      const r = await recordFormApi.stampRecord(rec.id);
+      // take only the stamp fields: the edits on screen are not saved yet and must not be overwritten
+      const pick = ['engineer_stamp', 'stamped_by', 'stamped_by_name', 'stamped_at'];
+      setRec(cur => ({ ...cur, stamp_seal: r.stamp_seal, header: { ...cur.header, ...Object.fromEntries(pick.map(k => [k, r.header[k]])) } }));
+      saved0.current = { ...saved0.current, header: { ...saved0.current.header, ...Object.fromEntries(pick.map(k => [k, r.header[k]])) } };
+      message.success('Stamped');
+    } catch (e) { message.error(errMsg(e)); } finally { setBusy(false); }
+  };
+
   const print = async () => {
     const saved = (dirty || !rec.id) ? await save() : rec;
     if (!saved) return;
@@ -85,14 +107,31 @@ export default function RecordEditor({ initial, templates, onBack, onSaved }) {
           style={{ width: 300 }} placeholder="Enter Lot No. or C/N, then press Enter" enterButton={<SearchOutlined />}
           value={q} onChange={e => setQ(e.target.value)} onSearch={search} loading={busy} allowClear
         />
-        <Button type="primary" icon={<SaveOutlined />} loading={busy} disabled={!dirty} onClick={() => save()}>Save</Button>
+        {needsStamp && (
+          <Tooltip title={canStamp ? '' : 'Only the Process Engineer team (or an Admin) can stamp'}>
+            <Button icon={<SafetyCertificateOutlined />} loading={busy} disabled={!canStamp || stamped} onClick={stamp}>
+              {stamped ? 'Stamped' : 'Stamp'}
+            </Button>
+          </Tooltip>
+        )}
+        <Tooltip title={needsStamp && !stamped ? 'A Process Engineer must stamp this record before it can be saved' : ''}>
+          <Button type="primary" icon={<SaveOutlined />} loading={busy}
+            disabled={needsStamp ? !stamped : !dirty}
+            onClick={() => save(needsStamp ? { recordBack: true } : {})}>Save</Button>
+        </Tooltip>
         <Button icon={<PrinterOutlined />} onClick={print}>Print</Button>
         {rec.id && <Tag color={STATUS[rec.status][0]}>{STATUS[rec.status][1]} · REV.{revLabel(rec.record_rev)}</Tag>}
         {dirty && <Tag color="orange">Unsaved</Tag>}
       </Space>
-      {rec.id && rec.status !== 'draft' && (
+      {needsStamp && (
+        <Alert style={{ marginBottom: 12 }} type="warning" showIcon
+          message={stamped
+            ? 'Stamped. Fill in the recorded data, then Save — RECORD REV. stays N/C for this first save.'
+            : 'Printed. When the form comes back, a Process Engineer (or an Admin) must stamp it before it can be saved.'} />
+      )}
+      {rec.id && rec.status === 'recorded' && (
         <Alert style={{ marginBottom: 12 }} type="info" showIcon
-          message="This record has been printed. Saving further changes raises RECORD REV. and sets REVISED DATE automatically." />
+          message="This record has been recorded. Saving further changes raises RECORD REV. (A, B, …) and sets REVISED DATE automatically." />
       )}
 
       <div style={{ overflow: 'auto', paddingBottom: 12 }}>

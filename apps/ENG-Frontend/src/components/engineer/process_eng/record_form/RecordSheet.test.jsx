@@ -46,3 +46,23 @@ test('fieldValue falls back to header for manual sources', () => {
 test('revision letters: N/C, then A, B ... Z, AA', () => {
   expect([0, 1, 2, 26, 27, 28].map(revLabel)).toEqual(['N/C', 'A', 'B', 'Z', 'AA', 'AB']);
 });
+
+test('the ENGINEER STAMP box shows the stamp and can never be typed into', () => {
+  const stampLayout = { ...layout, sideBoxes: [{ key: 'customer_pn', label: 'CUSTOMER P/N' }, { key: 'engineer_stamp', label: 'ENGINEER STAMP' }] };
+  const stamped = { ...record, header: { ...record.header, engineer_stamp: 'Nathaporn Yammanu\n2026-10-19', customer_pn: 'C-1' } };
+  render(<RecordSheet layout={stampLayout} record={stamped} editable onChange={() => {}} />);
+  expect(screen.getByText(/Nathaporn Yammanu/)).toBeTruthy();
+  expect(screen.queryByDisplayValue(/Nathaporn/)).toBeNull();   // not an input
+  expect(screen.getByDisplayValue('C-1')).toBeTruthy();          // the other box still is
+});
+
+test('a stamped record shows the seal image in the ENGINEER STAMP box, the text only as a fallback', () => {
+  const stampLayout = { ...layout, sideBoxes: [{ key: 'engineer_stamp', label: 'ENGINEER STAMP' }] };
+  const withSeal = { ...record, header: { engineer_stamp: 'Somebody\n2026-10-19' }, stamp_seal: { dataUri: 'data:image/svg+xml;base64,AAAA' } };
+  const { unmount } = render(<RecordSheet layout={stampLayout} record={withSeal} />);
+  expect(screen.getByAltText('Engineer stamp').getAttribute('src')).toBe('data:image/svg+xml;base64,AAAA');
+  expect(screen.queryByText(/Somebody/)).toBeNull();
+  unmount();
+  render(<RecordSheet layout={stampLayout} record={{ ...record, header: { engineer_stamp: 'Somebody\n2026-10-19' } }} />);
+  expect(screen.getByText(/Somebody/)).toBeTruthy();
+});

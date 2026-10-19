@@ -90,7 +90,14 @@ export default function RecordSheet({ layout, record, editable = false, onChange
           {layout.sideBoxes.map(b => (
             <div className="rf-box" style={{ flex: Number(b.w) || 1 }} key={b.key}>
               <div className="rf-box-label">{b.label}</div>
-              <div className="rf-box-body">{input(record.header?.[b.key], v => setBox(b.key, v))}</div>
+              <div className="rf-box-body">
+                {b.key === 'engineer_stamp'
+                  // never typed: written by the Process Engineer stamp action — the server draws the same seal the SDS uses
+                  ? (record.stamp_seal?.dataUri
+                    ? <img className="rf-stamp-img" src={record.stamp_seal.dataUri} alt="Engineer stamp" />
+                    : <div className="rf-stamp">{record.header?.engineer_stamp}</div>)
+                  : input(record.header?.[b.key], v => setBox(b.key, v))}
+              </div>
             </div>
           ))}
         </div>

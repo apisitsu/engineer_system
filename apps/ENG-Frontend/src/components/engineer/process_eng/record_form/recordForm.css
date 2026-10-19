@@ -26,6 +26,9 @@
 /* process code printed ahead of the process name */
 .rf-proc { display: flex; gap: 2.5mm; align-items: baseline; }
 .rf-code { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+/* ENGINEER STAMP box: the SDS-style seal (image); plain text only for stamps imported from the workbooks */
+.rf-stamp-img { display: block; margin: 0 auto; height: 11.6mm; width: auto; max-width: 100%; object-fit: contain; }
+.rf-stamp { text-align: center; white-space: pre-line; font-weight: 700; font-size: 9pt; line-height: 1.25; color: #0b3d91; }
 .rf-text { white-space: pre-wrap; word-break: break-word; }
 
 .rf-print-area { display: none; }
