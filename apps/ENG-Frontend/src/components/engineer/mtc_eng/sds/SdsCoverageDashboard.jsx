@@ -850,12 +850,16 @@ export default function SdsCoverageDashboard() {
     },
     responsive: true, animation: false,
     maintainAspectRatio: false,
-    // Legend at the BOTTOM so the 'top'-aligned % datalabels on the near-100% Complete-%
-    // line never collide with it; top padding + axis headroom keep the 100% label visible.
-    // Padding is taller than the 100%-label days now that each bar stacks two labels
-    // (count, %) above its point, plus the delta label sitting in the gap to the left —
-    // see `statusChartData`'s `datalabels.labels`.
-    layout: { padding: { top: 54 } },
+    // Legend at the BOTTOM so the datalabels never collide with it. The count/delta/%
+    // stack now anchors to "Label Anchor", plotted exactly AT `yMax` (the left axis's
+    // own max) — unlike the old anchor (the Complete % line, which sat ~85-98% up a
+    // y1 axis with built-in headroom above 100), this one has ZERO built-in headroom:
+    // it's pinned to the very top of its axis on purpose (see that dataset's comment),
+    // so the WHOLE label stack (count + 2-line delta + pct, up to the delta's 40px
+    // offset plus its own text height) has to fit inside this padding alone. 54px was
+    // tuned for the old anchor's partial headroom and clipped the topmost line once
+    // that headroom went away — 90px is measured against the current stack.
+    layout: { padding: { top: 90 } },
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: {
