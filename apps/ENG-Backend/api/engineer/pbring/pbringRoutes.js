@@ -147,9 +147,29 @@ router.get('/grid/admin/tooling-families', isPbringAdmin, pbringGridController.g
 router.post('/grid/admin/tooling-image', isPbringAdmin, pbringGridController.postToolingImage);
 router.delete('/grid/admin/tooling-image', isPbringAdmin, pbringGridController.deleteToolingImage);
 
+// Exact-slot tagging (pbring_tooling_image_slot, 2026-10-19) — tags an
+// uploaded photo with the precise (machine, process_code, tool_number) it
+// belongs to, checked first at render time ahead of the family-matching
+// fallback chain above. See pbringGridService.js's setImageSlots header.
+router.get('/grid/admin/tooling-slots', isPbringAdmin, pbringGridController.getToolingSlots);
+router.put('/grid/admin/tooling-image/:id/slots', isPbringAdmin, pbringGridController.putToolingImageSlots);
+
 router.get('/grid/grinding-image', pbringGridController.getGrindingImage);
 router.get('/grid/admin/grinding-images', isPbringAdmin, pbringGridController.getGrindingImages);
 router.post('/grid/admin/grinding-image', isPbringAdmin, pbringGridController.postGrindingImage);
 router.delete('/grid/admin/grinding-image', isPbringAdmin, pbringGridController.deleteGrindingImage);
+
+// Machine Tool whitelist (pbring_machine_tool) — PB Ring's own analog of the
+// real SDS system's sds_machine_tool (user decision, 2026-10-19). See
+// pbringGridService.js's applyMachineToolWhitelistOverride header for why
+// this exists: pbring_sds_condition is a 2026-10-02 one-time import that
+// nothing keeps current, while pbring_tooling (the Tooling List) is actively
+// synced — this table says which DWG family belongs in which T-slot per
+// (machine, process), so the per-CN VALUE can be refreshed from the Tooling
+// List instead of staying frozen in the stale import.
+router.get('/grid/machine-tool', isPbringAdmin, pbringGridController.getMachineTool);
+router.post('/grid/machine-tool', isPbringAdmin, pbringGridController.postMachineTool);
+router.delete('/grid/machine-tool/:id', isPbringAdmin, pbringGridController.deleteMachineTool);
+router.get('/grid/machine-tool/coverage', isPbringAdmin, pbringGridController.getMachineToolCoverage);
 
 module.exports = router;

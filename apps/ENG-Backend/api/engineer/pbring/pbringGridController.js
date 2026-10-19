@@ -13,11 +13,13 @@ const {
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
   getToolingFamilyOptions,
   getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
+  getToolingSlotOptions, setImageSlots,
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
   PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
   getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
   getPbRingRoleConfig, pbringUserCanSign, isPbringAdminUser,
   addPbringRoleConfig, updatePbringRoleConfig, deletePbringRoleConfig,
+  listMachineTool, upsertMachineTool, deleteMachineTool, getMachineToolCoverage,
 } = require('./pbringGridService');
 const { renderPdf } = require('./pdfRender');
 const cnFormat = require('../mtc/utils/cnFormat');
@@ -411,6 +413,39 @@ async function postToolingImageRoute(req, res) {
   }
 }
 
+/** GET /grid/admin/tooling-slots?machine_type_name= — (process_code, tool_number) options for the slot-tagging picker, from pbring_sds_condition history */
+async function getToolingSlotsRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName } = req.query;
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    res.json(await getToolingSlotOptions(machineTypeName));
+  } catch (err) {
+    console.error('[pbring:grid:admin:tooling-slots:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load tooling slots' });
+  }
+}
+
+/** PUT /grid/admin/tooling-image/:id/slots — body: { machine_type_name, slots: [{process_code, tool_number}] } */
+async function putToolingImageSlotsRoute(req, res) {
+  try {
+    const { id } = req.params;
+    const { machine_type_name: machineTypeName, slots } = req.body;
+    if (!machineTypeName || !Array.isArray(slots)) {
+      return res.status(400).json({ error: 'machine_type_name and slots (array) are required' });
+    }
+    for (const s of slots) {
+      if (!s?.process_code || !s?.tool_number) {
+        return res.status(400).json({ error: 'each slot needs process_code and tool_number' });
+      }
+    }
+    await setImageSlots(Number(id), machineTypeName, slots);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[pbring:grid:admin:tooling-image:slots:put]', err);
+    res.status(400).json({ error: err.message || 'Failed to save slots' });
+  }
+}
+
 /** DELETE /grid/admin/tooling-image?machine_type_name=&family=&tool_name= */
 async function deleteToolingImageRoute(req, res) {
   try {
@@ -490,6 +525,59 @@ async function deleteGrindingImageRoute(req, res) {
   }
 }
 
+/** GET /grid/machine-tool?machine_type_name= */
+async function getMachineToolRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName } = req.query;
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    res.json(await listMachineTool(machineTypeName));
+  } catch (err) {
+    console.error('[pbring:grid:machine-tool:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load machine tool whitelist' });
+  }
+}
+
+/** POST /grid/machine-tool — body { id?, machine_type_name, process_code, tool_number, family } — upsert (id present = edit, else create/replace by unique key) */
+async function postMachineToolRoute(req, res) {
+  try {
+    const { id, machine_type_name: machineTypeName, process_code: processCode, tool_number: toolNumber, family } = req.body || {};
+    if (!machineTypeName || !processCode || !toolNumber || !family) {
+      return res.status(400).json({ error: 'machine_type_name, process_code, tool_number and family are required' });
+    }
+    const row = await upsertMachineTool({
+      id: id || null, machine_type_name: machineTypeName, process_code: processCode,
+      tool_number: toolNumber, family, empno: req.user?.empno,
+    });
+    res.json({ success: true, row });
+  } catch (err) {
+    console.error('[pbring:grid:machine-tool:post]', err);
+    res.status(500).json({ error: err.message || 'Failed to save machine tool whitelist row' });
+  }
+}
+
+/** DELETE /grid/machine-tool/:id */
+async function deleteMachineToolRoute(req, res) {
+  try {
+    await deleteMachineTool(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[pbring:grid:machine-tool:delete]', err);
+    res.status(500).json({ error: err.message || 'Failed to delete machine tool whitelist row' });
+  }
+}
+
+/** GET /grid/machine-tool/coverage?machine_type_name= */
+async function getMachineToolCoverageRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName } = req.query;
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    res.json(await getMachineToolCoverage(machineTypeName));
+  } catch (err) {
+    console.error('[pbring:grid:machine-tool:coverage]', err);
+    res.status(500).json({ error: err.message || 'Failed to load coverage' });
+  }
+}
+
 module.exports = {
   getPdf, getHasData,
   getApproval, postApproval, deleteApproval,
@@ -500,6 +588,9 @@ module.exports = {
   getToolingImage: getToolingImageRoute, getToolingImages: getToolingImagesRoute,
   getToolingFamilies: getToolingFamiliesRoute,
   postToolingImage: postToolingImageRoute, deleteToolingImage: deleteToolingImageRoute,
+  getToolingSlots: getToolingSlotsRoute, putToolingImageSlots: putToolingImageSlotsRoute,
   getGrindingImage: getGrindingImageRoute, getGrindingImages: getGrindingImagesRoute,
   postGrindingImage: postGrindingImageRoute, deleteGrindingImage: deleteGrindingImageRoute,
+  getMachineTool: getMachineToolRoute, postMachineTool: postMachineToolRoute,
+  deleteMachineTool: deleteMachineToolRoute, getMachineToolCoverage: getMachineToolCoverageRoute,
 };

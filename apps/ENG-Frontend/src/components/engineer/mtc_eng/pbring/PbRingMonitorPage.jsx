@@ -1490,6 +1490,16 @@ function ImagesTab() {
   const [newToolName, setNewToolName] = useState('');
   const [toolingUploading, setToolingUploading] = useState(false);
 
+  // Exact-slot tagging (pbring_tooling_image_slot, 2026-10-19) — optional
+  // (process_code, tool_number) pairs this photo should resolve for
+  // directly at render time, bypassing the family-matching fallback chain
+  // entirely for those slots. slotOptions comes from real pbring_sds_condition
+  // history (same source ConditionTab reads), so it covers grinding AND
+  // turning machines, and named slots like GW/RW/F_DW alongside T1..T20.
+  const [slotOptions, setSlotOptions] = useState([]);
+  const [newSlots, setNewSlots] = useState([]);
+  const [slotSavingId, setSlotSavingId] = useState(null);
+
   const [grindingImages, setGrindingImages] = useState([]);
   const [grindingLoading, setGrindingLoading] = useState(false);
   const [newGrindCn, setNewGrindCn] = useState('');
@@ -1529,6 +1539,13 @@ function ImagesTab() {
       .catch((err) => message.error(apiErrorMessage(err, 'Failed to load tooling history')));
   }, [message]);
 
+  const loadSlotOptions = useCallback((machine) => {
+    if (!machine) return;
+    axios.get(server.PBRING_GRID_ADMIN_TOOLING_SLOTS, { params: { machine_type_name: machine } })
+      .then((r) => setSlotOptions(r.data || []))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load slot options')));
+  }, [message]);
+
   const loadGrindingImages = useCallback((machine) => {
     if (!machine) return;
     setGrindingLoading(true);
@@ -1540,9 +1557,10 @@ function ImagesTab() {
 
   const selectMachine = (val) => {
     setSelectedMachine(val);
-    setNewToolingNo(''); setNewToolName(''); setNewGrindCn(''); setNewGrindProcess('');
+    setNewToolingNo(''); setNewToolName(''); setNewGrindCn(''); setNewGrindProcess(''); setNewSlots([]);
     loadToolingImages(val);
     loadFamilyOptions(val);
+    loadSlotOptions(val);
     loadGrindingImages(val);
   };
 
@@ -1550,6 +1568,13 @@ function ImagesTab() {
   // when the family never resolved a name (uploads still work, as the
   // family-wide '' entry, same as before 2026-10-15).
   const toolsForFamily = familyOptions.find((o) => o.family === newToolingNo)?.tools || [];
+
+  // slots: array of "process_code|tool_number" strings (how the multi-select
+  // options are valued, since antd Select needs a flat string per option).
+  const saveSlotsForImage = (imageId, slots) => axios.put(`${server.PBRING_GRID_ADMIN_TOOLING_IMAGE}/${imageId}/slots`, {
+    machine_type_name: selectedMachine,
+    slots: slots.map((s) => { const [process_code, tool_number] = s.split('|'); return { process_code, tool_number }; }),
+  });
 
   const uploadToolingImage = (file) => {
     if (!newToolingNo.trim()) { message.error('Pick or type a DWG family first'); return false; }
@@ -1560,8 +1585,18 @@ function ImagesTab() {
     fd.append('tool_name', newToolName);
     fd.append('image', file);
     const label = newToolingNo.trim() + (newToolName ? ` / ${newToolName}` : '');
+    const slotsToTag = newSlots;
     axios.post(server.PBRING_GRID_ADMIN_TOOLING_IMAGE, fd)
-      .then(() => { message.success(`Saved photo for ${label}`); setNewToolingNo(''); setNewToolName(''); loadToolingImages(selectedMachine); })
+      .then((r) => {
+        message.success(`Saved photo for ${label}`);
+        setNewToolingNo(''); setNewToolName(''); setNewSlots([]);
+        if (slotsToTag.length) {
+          return saveSlotsForImage(r.data.id, slotsToTag)
+            .catch((err) => message.error(apiErrorMessage(err, 'Photo saved, but tagging slots failed')));
+        }
+        return null;
+      })
+      .then(() => loadToolingImages(selectedMachine))
       .catch((err) => message.error(apiErrorMessage(err, 'Upload failed')))
       .finally(() => setToolingUploading(false));
     return false; // prevent antd Upload's own auto-request
@@ -1611,6 +1646,39 @@ function ImagesTab() {
       render: (v) => v || <Text type="secondary">(whole family)</Text>,
     },
     { title: 'File', dataIndex: 'file_name' },
+    // Exact-slot tags — grinding only. A Turning T-slot is a plain position
+    // on the sheet with no guarantee it holds the same operation across
+    // CNs (confirmed live, 2026-10-19 — see getToolingSlotOptions' header
+    // in pbringGridService.js), so slotOptions is always [] for a Turning
+    // machine and this column would just offer a picker with nothing in it.
+    ...(isTurningMachine ? [] : [{
+      // Editable in place so the ~30 images already on file can be tagged
+      // without re-uploading. [] means "family-match only, as before"
+      // (unchanged behaviour for every untagged image).
+      title: 'Slots (exact match)', dataIndex: 'slots', key: 'slots', width: 260,
+      render: (slots, row) => (
+        <Select
+          mode="multiple"
+          size="small"
+          style={{ minWidth: 220 }}
+          placeholder="none — family match only"
+          value={(slots || []).map((s) => `${s.process_code}|${s.tool_number}`)}
+          loading={slotSavingId === row.id}
+          optionFilterProp="label"
+          options={slotOptions.map((o) => ({
+            value: `${o.process_code}|${o.tool_number}`,
+            label: `${o.process_code} / ${o.tool_number}`,
+          }))}
+          onChange={(vals) => {
+            setSlotSavingId(row.id);
+            saveSlotsForImage(row.id, vals)
+              .then(() => loadToolingImages(selectedMachine))
+              .catch((err) => message.error(apiErrorMessage(err, 'Failed to save slots')))
+              .finally(() => setSlotSavingId(null));
+          }}
+        />
+      ),
+    }]),
     { title: 'Updated', dataIndex: 'updated_at', render: (v) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-') },
     {
       title: '', key: 'actions', width: 80,
@@ -1687,6 +1755,20 @@ function ImagesTab() {
                 onChange={(v) => setNewToolName(v || '')}
                 allowClear
                 options={toolsForFamily.map((t) => ({ value: t, label: t }))}
+              />
+            )}
+            {!isTurningMachine && (
+              <Select
+                mode="multiple"
+                style={{ minWidth: 220 }}
+                placeholder="Also tag exact slot(s) — optional"
+                value={newSlots}
+                onChange={setNewSlots}
+                optionFilterProp="label"
+                options={slotOptions.map((o) => ({
+                  value: `${o.process_code}|${o.tool_number}`,
+                  label: `${o.process_code} / ${o.tool_number}`,
+                }))}
               />
             )}
             <Upload accept="image/*" showUploadList={false} beforeUpload={uploadToolingImage}>

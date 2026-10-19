@@ -108,7 +108,91 @@ async function buildPbRingValueMap(cn, machineTypeName, processCode) {
   const conditionByToolNumber = {};
   for (const row of condRows) conditionByToolNumber[row.tool_number] = row;
 
+  await applyMachineToolWhitelistOverride(conditionByToolNumber, cn, machineTypeName, processCode);
+
   return { paramMap, conditionByToolNumber };
+}
+
+/**
+ * `pbring_machine_tool` whitelist override (user decision, 2026-10-19).
+ *
+ * `pbring_sds_condition` was a one-time 2026-10-02 import from a separate,
+ * now-unmaintained SDS source file — unlike `pbring_tooling` (the Tooling
+ * List this session actively syncs), nothing keeps it current, and the two
+ * can disagree per CN (confirmed live: HIGRIND1D's BLADE). Mirrors how the
+ * real SDS system separates "which family belongs in this T-slot"
+ * (`sds_machine_tool`, keyed by machine+process only) from "what the
+ * factory's live plan says for this CN" — `pbring_machine_tool` plays the
+ * first role, `pbring_tooling` the second.
+ *
+ * For every numbered T-slot THIS CN already has a condition row for, look up
+ * the whitelist's family for (machine, process, tool_number); if
+ * `pbring_tooling` has a row for this exact CN whose own family (same
+ * `toolingFamily()` rule the whitelist was seeded with) matches, that row's
+ * tool_code_base/maker REPLACE the condition table's tooling_no/maker.
+ * Every other field on the row (vc/f/ap/nose_r/insert_info/…, needed by
+ * Turning and not present on `pbring_tooling` at all) is untouched.
+ *
+ * Fails open at every step: no whitelist rows, no Tooling List rows, or no
+ * family match for this CN all leave the condition table's own value exactly
+ * as it was — this only ever overrides when it has somewhere better to get
+ * the value from, never blanks a slot.
+ */
+async function applyMachineToolWhitelistOverride(conditionByToolNumber, cn, machineTypeName, processCode) {
+  const numberedSlots = Object.keys(conditionByToolNumber).filter((k) => /^T\d+$/.test(k));
+  if (!numberedSlots.length) return;
+
+  const { rows: whitelist } = await engPool.query(
+    `SELECT tool_number, family FROM pbring_machine_tool
+      WHERE machine_type_name = $1 AND process_code = $2 AND tool_number = ANY($3)`,
+    [machineTypeName, processCode, numberedSlots]
+  );
+  if (!whitelist.length) return;
+
+  const { rows: toolingRows } = await engPool.query(
+    `SELECT id, tool_code_base, maker, rank FROM pbring_tooling WHERE mc_key = $1 AND cn = $2 AND tool_code_base IS NOT NULL`,
+    [machineTypeName, cn]
+  );
+  if (!toolingRows.length) return;
+
+  const byFamily = new Map();
+  for (const r of toolingRows) {
+    const fam = toolingFamily(r.tool_code_base);
+    if (!fam) continue;
+    if (!byFamily.has(fam)) byFamily.set(fam, []);
+    byFamily.get(fam).push(r);
+  }
+
+  for (const { tool_number, family } of whitelist) {
+    const candidates = byFamily.get(family);
+    if (!candidates || !candidates.length) continue;
+    const existing = conditionByToolNumber[tool_number];
+    let best;
+    if (candidates.length === 1) {
+      best = candidates[0];
+    } else {
+      // A family covering several real items (e.g. G371-02 = PUSHER + COLLAR
+      // (FRONT) + COLLAR (BACK) — the same ambiguity the tooling-image match
+      // was widened to handle earlier this session) is NOT safe to resolve
+      // by rank/id alone: that picked one winner and silently overwrote
+      // every other same-family slot with it (reported live, 2026-10-19 —
+      // T2/T3/T4 all became "PUSHER"). Only override here when one candidate's
+      // own tool_code_base exactly matches what the condition table already
+      // had for this slot — pins the refresh to the SAME physical item
+      // instead of guessing among several different ones. No exact match
+      // means genuinely ambiguous: skip, keep the condition table's value.
+      best = existing && existing.tooling_no
+        ? candidates.find((c) => c.tool_code_base === existing.tooling_no)
+        : undefined;
+      if (!best) continue;
+    }
+    conditionByToolNumber[tool_number] = {
+      ...existing,
+      tool_number,
+      tooling_no: best.tool_code_base,
+      maker: best.maker || existing.maker,
+    };
+  }
 }
 
 /** Duplicated from sdsV2HeadlessController.js:1281+, image machinery stripped. */
@@ -1046,11 +1130,99 @@ async function getToolingFamilyOptions(machineTypeName) {
 
 async function listToolingImages(machineTypeName) {
   const { rows } = await engPool.query(
-    `SELECT id, machine_type_name, family, tool_name, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
-       FROM pbring_tooling_image WHERE machine_type_name = $1 ORDER BY family, tool_name`,
+    `SELECT ti.id, ti.machine_type_name, ti.family, ti.tool_name, ti.mime_type, ti.file_name,
+            ti.description, ti.created_by, ti.updated_by, ti.created_at, ti.updated_at,
+            COALESCE(
+              (SELECT json_agg(json_build_object('process_code', s.process_code, 'tool_number', s.tool_number) ORDER BY s.process_code, s.tool_number)
+                 FROM pbring_tooling_image_slot s WHERE s.image_id = ti.id),
+              '[]'
+            ) AS slots
+       FROM pbring_tooling_image ti
+      WHERE ti.machine_type_name = $1
+      ORDER BY ti.family, ti.tool_name`,
     [machineTypeName]
   );
   return rows;
+}
+
+/**
+ * Dropdown source for the Images tab's slot-tagging picker — every
+ * (process_code, tool_number) pair this GRINDING machine actually has in
+ * `pbring_sds_condition` history, with a usage count.
+ *
+ * Returns [] for the 2 Turning machines (user caught this live, 2026-10-19,
+ * on QTSMART200M): unlike grinding, where `pbring_machine_tool` proves a
+ * numbered T-slot resolves to the SAME DWG family for every CN at a given
+ * (machine, process_code) — confirmed live via that table's coverage report
+ * — Turning's T-slots are a plain POSITION on the sheet with no such
+ * guarantee. Checked live: QTSMART200M/0081's T3 is "OD FINISH" for CN
+ * 294065/294067 but "FACING & OD FINISH" for CN 394137/394143 — a photo
+ * tagged to (QTSMART200M, 0081, T3) would print the wrong tool for half
+ * those CNs. Turning's existing family/tool_detail exact-match (see
+ * buildTurningGridForMachine) is already the correct exact match for
+ * Turning — it keys on the actual operation text, not its position — so
+ * Turning never needed this feature in the first place.
+ *
+ * Excludes CONDITION_SOURCED_TOOL_NUMBERS (GW/RW/F_DW/Upper_GW/Lower_GW/
+ * R_DW/Left_GW/Right_GW) — those rows are GRIND/DRESS CONDITION text data,
+ * not a tooling fixture, and `orderToolNumbers` filters them out of the
+ * T01-T20 image-box positions entirely (see its header), so a photo tagged
+ * to one of them would never be looked up at render time. Offering them
+ * here would silently do nothing.
+ */
+async function getToolingSlotOptions(machineTypeName) {
+  if (TURNING_MACHINE_NAMES.includes(machineTypeName)) return [];
+  const { rows } = await engPool.query(
+    `SELECT process_code, tool_number, count(*)::int AS n
+       FROM pbring_sds_condition
+      WHERE mc_key = $1 AND tool_number IS NOT NULL AND trim(tool_number) <> ''
+        AND tool_number <> ALL($2::text[])
+      GROUP BY process_code, tool_number
+      ORDER BY process_code, tool_number`,
+    [machineTypeName, [...CONDITION_SOURCED_TOOL_NUMBERS]]
+  );
+  return rows;
+}
+
+/**
+ * Replaces the full set of exact-slot tags on one image. Rejects (no partial
+ * apply) if any requested slot is already claimed by a DIFFERENT image on
+ * this machine — a slot can only point at one photo, so re-tagging it here
+ * must be an explicit choice (untag the old image first), not a silent steal.
+ */
+async function setImageSlots(imageId, machineTypeName, slots) {
+  const client = await engPool.connect();
+  try {
+    await client.query('BEGIN');
+    const owns = await client.query(`SELECT 1 FROM pbring_tooling_image WHERE id = $1 AND machine_type_name = $2`, [imageId, machineTypeName]);
+    if (!owns.rows.length) throw new Error('Image not found for this machine');
+
+    if (slots.length) {
+      const { rows: conflicts } = await client.query(
+        `SELECT process_code, tool_number FROM pbring_tooling_image_slot
+          WHERE machine_type_name = $1 AND image_id <> $2
+            AND (process_code, tool_number) IN (SELECT * FROM unnest($3::text[], $4::text[]))`,
+        [machineTypeName, imageId, slots.map((s) => s.process_code), slots.map((s) => s.tool_number)]
+      );
+      if (conflicts.length) {
+        throw new Error(`Slot already tagged on another image: ${conflicts.map((c) => `${c.process_code}/${c.tool_number}`).join(', ')}`);
+      }
+    }
+
+    await client.query(`DELETE FROM pbring_tooling_image_slot WHERE image_id = $1`, [imageId]);
+    for (const s of slots) {
+      await client.query(
+        `INSERT INTO pbring_tooling_image_slot (image_id, machine_type_name, process_code, tool_number) VALUES ($1, $2, $3, $4)`,
+        [imageId, machineTypeName, s.process_code, s.tool_number]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // `toolName` disambiguates within a family that covers more than one
@@ -1198,20 +1370,96 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
   // migration 20261015_'s header for the live case). A row with no
   // specific-name image falls back to the family-wide ('') entry, which is
   // what every image uploaded before that migration still is.
-  const families = [...new Set(Object.values(conditionByToolNumber).map((r) => r.tooling_no && toolingFamily(r.tooling_no)).filter(Boolean))];
-  const toolingImageRows = await engPool.query(
-    `SELECT family, tool_name, image_data, mime_type FROM pbring_tooling_image
-      WHERE machine_type_name = $1 AND family = ANY($2)`,
-    [machineTypeName, families]
+  //
+  // KSB80-style "NNN.N.NNN-YYY" codes (772.5.000-157 etc.) break both of
+  // those rules at once — confirmed live with the user, 2026-10-19: the
+  // trailing "-YYY" is a per-CN revision/batch of the SAME physical fixture,
+  // so toolingFamily()'s "first two dash segments" (correct for G371-02-0002
+  // style 3-segment codes, which drop a real instance suffix) keeps the
+  // whole string here and never groups revisions together at all — 294065's
+  // own T1-T4 (…-157/…-157/…-157/…-005) never matched images uploaded
+  // against a different CN's revision of the same part (…-075/…-075/…-075/
+  // …-097), despite the tooling_item NAME agreeing exactly. A second,
+  // independent gap: T12's image is tagged "ADAPTER DRIVER" against
+  // pbring_tooling's own "DRIVER" — exact family match, name mismatch.
+  //
+  // Both are solved the same way: when the primary (family, name) key misses,
+  // fall back to "the only image under this family" (name ignored) — safe
+  // specifically because it's ONLY used when exactly one candidate exists;
+  // a family that covers several real items (G371-02 = PUSHER + COLLAR
+  // (FRONT) + COLLAR (BACK), the case the name-key was added for) still has
+  // 3 candidates and still requires the name to disambiguate, unchanged. The
+  // revision case additionally needs a BROADER family key (last dash-segment
+  // dropped) to even find the candidate, since the two sides' exact family
+  // strings never agree — applied with the same one-candidate safety rule.
+  // No family filter on the query: per-machine image counts are small
+  // (tens), and the broader-family fallback needs every row regardless of
+  // which exact family string it was tagged under.
+  const dropLastSegment = (s) => { const i = s.lastIndexOf('-'); return i > 0 ? s.slice(0, i) : null; };
+  // Same Centerless-group widening as getToolingItemNames above, applied to
+  // images too (user decision, 2026-10-19): BLADE's family is shared
+  // equipment across the group (4521-01, 4911-01, …) but a photo is only
+  // ever uploaded once, under whichever specific machine happened to be
+  // selected at the time — confirmed live, the one BLADE photo on file sits
+  // under OC20BR200's family "4911-01" alone. Without this, rendering
+  // HIGRIND1D or OC18BR150 could never find it even though the family
+  // matches exactly, because the query was scoped to the current machine.
+  const imageMcKeys = CENTERLESS_MACHINE_NAMES.has(machineTypeName) ? [...CENTERLESS_MACHINE_NAMES] : [machineTypeName];
+  // Exact-slot tags (pbring_tooling_image_slot, 2026-10-19) — an admin can
+  // tag a photo with the precise (machine, process_code, tool_number) it
+  // belongs to, bypassing every family-matching heuristic below entirely.
+  // Checked FIRST, by the row's own tool_number key (not the rendering
+  // position `slot` computed further down) — purely additive, so an
+  // untagged image still resolves exactly as it did before this change.
+  const slotImageRows = await engPool.query(
+    `SELECT s.tool_number, ti.family, ti.tool_name, ti.image_data, ti.mime_type
+       FROM pbring_tooling_image_slot s
+       JOIN pbring_tooling_image ti ON ti.id = s.image_id
+      WHERE s.machine_type_name = ANY($1) AND s.process_code = $2`,
+    [imageMcKeys, processCode]
   );
-  const imgByFamilyAndName = new Map(toolingImageRows.rows.map((r) => [`${r.family}||${r.tool_name}`, r]));
+  const imgByExactSlot = new Map(slotImageRows.rows.map((r) => [r.tool_number, r]));
+  const toolingImageRows = await engPool.query(
+    `SELECT family, tool_name, image_data, mime_type FROM pbring_tooling_image WHERE machine_type_name = ANY($1)`,
+    [imageMcKeys]
+  );
+  const imgByFamilyAndName = new Map();
+  const imgByFamily = new Map();
+  const imgByBroaderFamily = new Map();
+  for (const r of toolingImageRows.rows) {
+    imgByFamilyAndName.set(`${r.family}||${r.tool_name}`, r);
+    if (!imgByFamily.has(r.family)) imgByFamily.set(r.family, []);
+    imgByFamily.get(r.family).push(r);
+    const broader = dropLastSegment(r.family);
+    if (broader) {
+      if (!imgByBroaderFamily.has(broader)) imgByBroaderFamily.set(broader, []);
+      imgByBroaderFamily.get(broader).push(r);
+    }
+  }
+  const resolveToolImage = (family, resolvedName) => {
+    const exact = imgByFamilyAndName.get(`${family}||${resolvedName}`) || imgByFamilyAndName.get(`${family}||`);
+    if (exact) return exact;
+    const exactRows = imgByFamily.get(family) || [];
+    if (exactRows.length === 1) return exactRows[0];
+    const broader = dropLastSegment(family);
+    if (broader) {
+      const broaderExact = imgByFamilyAndName.get(`${broader}||${resolvedName}`) || imgByFamilyAndName.get(`${broader}||`);
+      if (broaderExact) return broaderExact;
+      const broaderRows = imgByBroaderFamily.get(broader) || [];
+      if (broaderRows.length === 1) return broaderRows[0];
+    }
+    return null;
+  };
   const ordered = orderToolNumbers(Object.keys(conditionByToolNumber));
   ordered.forEach((toolNumber, i) => {
     const row = conditionByToolNumber[toolNumber];
-    if (!row.tooling_no) return;
-    const family = toolingFamily(row.tooling_no);
-    const resolvedName = row.tool_detail || itemNameByToolCode[leadingToken(row.tooling_no)] || '';
-    const img = imgByFamilyAndName.get(`${family}||${resolvedName}`) || imgByFamilyAndName.get(`${family}||`);
+    let img = imgByExactSlot.get(toolNumber);
+    if (!img) {
+      if (!row.tooling_no) return;
+      const family = toolingFamily(row.tooling_no);
+      const resolvedName = row.tool_detail || itemNameByToolCode[leadingToken(row.tooling_no)] || '';
+      img = resolveToolImage(family, resolvedName);
+    }
     if (!img) return;
     const slot = `T${String(i + 1).padStart(2, '0')}`;
     placeImageAtExtent(grid, `tool_image_${slot}`, toDataUri(img));
@@ -1457,15 +1705,45 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
   // QUICKTURN200500U/294065/0081's T2/T3/T5/T12 — only identified by
   // tool_detail's plain-text operation name, e.g. "CUT OFF") and need
   // tool_detail itself as the family, or they'd never match any upload.
+  //
+  // A leading-word fallback (user decision, 2026-10-19): "U-DRILL Ø 34.0"
+  // never matches an uploaded "U-DRILL Ø 48.0" exactly — Turning families
+  // are free-text, not DWG codes, so there is no dash-suffix to drop the way
+  // the Standard template's resolveToolImage does. When the exact family
+  // misses, fall back to "every uploaded image whose family starts with the
+  // same first word" — used ONLY when that set has exactly one member, same
+  // single-candidate safety rule as the Standard template. This is
+  // deliberately NOT a blanket "ignore the rest of the family" rule: e.g.
+  // "FACING & OD FINISH" (T03) shares the word "FACING" with both "FACING &
+  // OD ROUGH" and "FACING FINISH" uploads, so that case has two candidates
+  // and correctly stays unmatched rather than guessing between ROUGH/FINISH.
+  const firstWord = (s) => String(s || '').trim().split(/\s+/)[0] || '';
   const toolCodes = [...new Set(Object.values(conditionByToolNumber).map((r) => r.tooling_no).filter(Boolean))];
   const itemNameByToolCode = await getToolingItemNames(machineTypeName, cn, toolCodes);
-  const families = [...new Set(Object.values(conditionByToolNumber).map((r) => toolingConditionFamily(r)).filter(Boolean))];
+  // No exact-slot (pbring_tooling_image_slot) lookup here, unlike the
+  // Standard template above — deliberately. Turning's T-slot is a plain
+  // POSITION on the sheet with no guarantee it holds the same operation
+  // across CNs (confirmed live, 2026-10-19: QTSMART200M/0081's T3 is "OD
+  // FINISH" for some CNs, "FACING & OD FINISH" for others), unlike
+  // grinding's numbered slots, which `pbring_machine_tool` proves ARE
+  // stable per (machine, process_code). getToolingSlotOptions returns []
+  // for Turning machines for the same reason — the exact-match below,
+  // keyed on the actual resolved family/tool_detail TEXT rather than
+  // position, is already the correct exact match for Turning.
   const toolingImageRows = await engPool.query(
-    `SELECT family, tool_name, image_data, mime_type FROM pbring_tooling_image
-      WHERE machine_type_name = $1 AND family = ANY($2)`,
-    [machineTypeName, families]
+    `SELECT family, tool_name, image_data, mime_type FROM pbring_tooling_image WHERE machine_type_name = $1`,
+    [machineTypeName]
   );
-  const imgByFamilyAndName = new Map(toolingImageRows.rows.map((r) => [`${r.family}||${r.tool_name}`, r]));
+  const imgByFamilyAndName = new Map();
+  const imgByFirstWord = new Map();
+  for (const r of toolingImageRows.rows) {
+    imgByFamilyAndName.set(`${r.family}||${r.tool_name}`, r);
+    const w = firstWord(r.family);
+    if (w) {
+      if (!imgByFirstWord.has(w)) imgByFirstWord.set(w, []);
+      imgByFirstWord.get(w).push(r);
+    }
+  }
   for (let slot = 1; slot <= TURNING_PB_MAX_SLOTS; slot++) {
     const row = conditionByToolNumber[`T${slot}`];
     if (!row) continue;
@@ -1476,7 +1754,11 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
     // family-wide ('') entry instead of inventing a "resolved name" from a
     // DWG code that doesn't exist for this row.
     const resolvedName = row.tooling_no ? (row.tool_detail || itemNameByToolCode[leadingToken(row.tooling_no)] || '') : '';
-    const img = imgByFamilyAndName.get(`${family}||${resolvedName}`) || imgByFamilyAndName.get(`${family}||`);
+    let img = imgByFamilyAndName.get(`${family}||${resolvedName}`) || imgByFamilyAndName.get(`${family}||`);
+    if (!img) {
+      const candidates = imgByFirstWord.get(firstWord(family)) || [];
+      if (candidates.length === 1) img = candidates[0];
+    }
     if (!img) continue;
     placeImageAtExtent(grid, `turning_tool_image_T${String(slot).padStart(2, '0')}`, toDataUri(img));
   }
@@ -1715,6 +1997,92 @@ async function deletePbringRoleConfig(id) {
   await engPool.query(`DELETE FROM pbring_approval_role_config WHERE id = $1`, [id]);
 }
 
+// ── Machine Tool whitelist admin (pbring_machine_tool) ──────────────────────
+// Backs applyMachineToolWhitelistOverride above. Plain CRUD + a coverage
+// report so an admin can see WHICH CNs actually get the Tooling List
+// override for a given (machine, process, T-slot) vs which silently keep
+// the SDS-source value (no pbring_tooling row for that CN/family) — the
+// fail-open path has no other visibility, by design (see that function's
+// header), so this is where it becomes inspectable rather than silent.
+
+async function listMachineTool(machineTypeName) {
+  const { rows } = await engPool.query(
+    `SELECT * FROM pbring_machine_tool WHERE machine_type_name = $1 ORDER BY process_code, tool_number`,
+    [machineTypeName]
+  );
+  return rows;
+}
+
+async function upsertMachineTool({ id, machine_type_name, process_code, tool_number, family, empno }) {
+  if (id) {
+    const { rows } = await engPool.query(
+      `UPDATE pbring_machine_tool SET family = $1, updated_by = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
+      [family, empno || null, id]
+    );
+    return rows[0];
+  }
+  const { rows } = await engPool.query(
+    `INSERT INTO pbring_machine_tool (machine_type_name, process_code, tool_number, family, created_by, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $5)
+     ON CONFLICT (machine_type_name, process_code, tool_number) DO UPDATE SET
+       family = EXCLUDED.family, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+     RETURNING *`,
+    [machine_type_name, process_code, tool_number, family, empno || null]
+  );
+  return rows[0];
+}
+
+async function deleteMachineTool(id) {
+  await engPool.query(`DELETE FROM pbring_machine_tool WHERE id = $1`, [id]);
+}
+
+/**
+ * Per whitelist row for this machine: how many CNs have a condition row for
+ * that (process_code, tool_number) at all (`cn_total`), and of those, how
+ * many have a pbring_tooling row for the SAME CN whose own family matches
+ * (`cn_hit`) — `cn_total - cn_hit` is exactly the silent fail-open count.
+ * Computed in JS, not SQL, so the family rule is the one true
+ * `toolingFamily()` everywhere else uses — no second implementation to drift.
+ */
+async function getMachineToolCoverage(machineTypeName) {
+  const whitelist = await listMachineTool(machineTypeName);
+  if (!whitelist.length) return [];
+
+  const processCodes = [...new Set(whitelist.map((w) => w.process_code))];
+  const { rows: condRows } = await engPool.query(
+    `SELECT cn, process_code, tool_number FROM pbring_sds_condition
+      WHERE mc_key = $1 AND process_code = ANY($2) AND tool_number ~ '^T[0-9]+$'`,
+    [machineTypeName, processCodes]
+  );
+  const { rows: toolingRows } = await engPool.query(
+    `SELECT cn, tool_code_base FROM pbring_tooling WHERE mc_key = $1 AND tool_code_base IS NOT NULL`,
+    [machineTypeName]
+  );
+
+  const cnSetByFamily = new Map();
+  for (const r of toolingRows) {
+    const fam = toolingFamily(r.tool_code_base);
+    if (!fam) continue;
+    if (!cnSetByFamily.has(fam)) cnSetByFamily.set(fam, new Set());
+    cnSetByFamily.get(fam).add(r.cn);
+  }
+
+  const cnSetBySlot = new Map();
+  for (const r of condRows) {
+    const key = `${r.process_code}\u0001${r.tool_number}`;
+    if (!cnSetBySlot.has(key)) cnSetBySlot.set(key, new Set());
+    cnSetBySlot.get(key).add(r.cn);
+  }
+
+  return whitelist.map((w) => {
+    const cns = cnSetBySlot.get(`${w.process_code}\u0001${w.tool_number}`) || new Set();
+    const familyCns = cnSetByFamily.get(w.family) || new Set();
+    let hit = 0;
+    for (const cn of cns) if (familyCns.has(cn)) hit++;
+    return { ...w, cn_total: cns.size, cn_hit: hit, cn_miss: cns.size - hit };
+  });
+}
+
 module.exports = {
   buildPbRingValueMap, buildGridPdfHtml, hasDataForCn,
   listMachineTypes,
@@ -1728,9 +2096,11 @@ module.exports = {
   PBRING_HEADER_OVERRIDE_FIELDS, loadHeaderOverrideAddressesLive, applyHeaderOverridesToGrid,
   toolingFamily, getToolingFamilyOptions,
   getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
+  getToolingSlotOptions, setImageSlots,
   getGrindingImageBinary, listGrindingImages, upsertGrindingImage, deleteGrindingImage,
   PBRING_APPROVAL_ROLE_ORDER, getPbRingApproval, signPbRingApproval, revokePbRingApproval,
   getPbRingAutoStampConfig, savePbRingAutoStampConfig, syncPbRingApprovalBoardCard,
   getPbRingRoleConfig, pbringUserCanSign, isPbringAdminUser,
   addPbringRoleConfig, updatePbringRoleConfig, deletePbringRoleConfig,
+  listMachineTool, upsertMachineTool, deleteMachineTool, getMachineToolCoverage,
 };

@@ -165,7 +165,8 @@ export const server = {
   PBRING_GRID_TOOLING_IMAGE: `${apiUrl}api/engineer/pbring/grid/tooling-image`, // ?machine_type_name=&family= (GET binary)
   PBRING_GRID_ADMIN_TOOLING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/tooling-images`, // ?machine_type_name= (GET list)
   PBRING_GRID_ADMIN_TOOLING_FAMILIES: `${apiUrl}api/engineer/pbring/grid/admin/tooling-families`, // ?machine_type_name= (GET dropdown source, from history)
-  PBRING_GRID_ADMIN_TOOLING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/tooling-image`, // POST (multipart: family) / DELETE ?machine_type_name=&family=
+  PBRING_GRID_ADMIN_TOOLING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/tooling-image`, // POST (multipart: family) / DELETE ?machine_type_name=&family= · append /:id/slots for PUT {machine_type_name,slots:[{process_code,tool_number}]}
+  PBRING_GRID_ADMIN_TOOLING_SLOTS: `${apiUrl}api/engineer/pbring/grid/admin/tooling-slots`, // ?machine_type_name= (GET — {process_code,tool_number,n}[] from pbring_sds_condition history)
   PBRING_GRID_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/grinding-image`, // ?machine_type_name=&cn=&process_code= (GET binary)
   PBRING_GRID_ADMIN_GRINDING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/grinding-images`, // ?machine_type_name= (GET list)
   PBRING_GRID_ADMIN_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/grinding-image`, // POST (multipart) / DELETE ?machine_type_name=&cn=&process_code=
@@ -175,6 +176,8 @@ export const server = {
   PBRING_GRID_APPROVAL_ROLE_CONFIG: `${apiUrl}api/engineer/pbring/grid/approval/role-config`, // GET / POST / PUT :id / DELETE :id — same shape as MTC_SDS_V2_APPROVAL_ROLE_CONFIG, fed to the shared ApprovalRoleConfig component
   PBRING_CONDITION_HISTORY: `${apiUrl}api/engineer/pbring/condition/history`, // ?machine_type_name=&process_code= (GET)
   PBRING_CONDITION_FROM_HISTORY: `${apiUrl}api/engineer/pbring/condition/from-history`, // POST
+  PBRING_GRID_MACHINE_TOOL: `${apiUrl}api/engineer/pbring/grid/machine-tool`, // GET ?machine_type_name= · POST {id?,machine_type_name,process_code,tool_number,family} · append /:id (DELETE)
+  PBRING_GRID_MACHINE_TOOL_COVERAGE: `${apiUrl}api/engineer/pbring/grid/machine-tool/coverage`, // ?machine_type_name= (GET — per-row cn_total/cn_hit/cn_miss)
 
   // Permissions Config — grant/revoke feature_perms (tooling_admin/sds_admin/
   // general_dwg_admin). Access restricted to AD + an explicit empno allowlist.
