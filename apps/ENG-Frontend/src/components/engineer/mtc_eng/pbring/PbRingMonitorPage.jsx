@@ -1061,6 +1061,8 @@ function ParamConfigTab() {
   const [selectedProcess, setSelectedProcess] = useState('');
   const [cnOverrideData, setCnOverrideData] = useState({});
   const [cnGwOverrideData, setCnGwOverrideData] = useState({});
+  const [cnProcessOptions, setCnProcessOptions] = useState([]);
+  const [hasAllProcessesOverride, setHasAllProcessesOverride] = useState(false);
 
   const loadList = useCallback(() => {
     setListLoading(true);
@@ -1135,12 +1137,16 @@ function ParamConfigTab() {
       })
       .catch((err) => { message.error(apiErrorMessage(err, 'Load CN failed')); setSelectedCn(null); })
       .finally(() => setConfigLoading(false));
+    axios.get(server.PBRING_GRID_ADMIN_PARAMETERS_CN_PROCESSES, { params: { machine_type_name: selectedMachine, cn: trimmed } })
+      .then((r) => { setCnProcessOptions(r.data?.processCodes || []); setHasAllProcessesOverride(!!r.data?.hasAllProcessesOverride); })
+      .catch(() => { setCnProcessOptions([]); setHasAllProcessesOverride(false); });
   }, [selectedMachine, selectedProcess, message]);
 
   const exitCnMode = () => {
     setSelectedCn(null); setCnInput('');
     setCnOverrideData({}); setCnGwOverrideData({});
     setSelectedProcess('');
+    setCnProcessOptions([]); setHasAllProcessesOverride(false);
     setDirty(false);
   };
 
@@ -1346,10 +1352,15 @@ function ParamConfigTab() {
           <Col>
             <Space size={4}>
               <Text type="secondary" style={{ fontSize: 12 }}>Process:</Text>
-              <Input
-                size="small" style={{ width: 120 }} value={selectedProcess} placeholder="All processes"
-                onChange={(e) => setSelectedProcess(e.target.value)}
-                onPressEnter={() => loadCnConfig(selectedCn, selectedProcess)}
+              <Select
+                size="small"
+                style={{ width: 200 }}
+                value={selectedProcess || ''}
+                onChange={(v) => loadCnConfig(selectedCn, v)}
+                options={[
+                  { value: '', label: hasAllProcessesOverride ? 'All processes (has override)' : 'All processes' },
+                  ...cnProcessOptions.map((p) => ({ value: p, label: `Process ${p}` })),
+                ]}
               />
               <Button size="small" onClick={() => loadCnConfig(selectedCn, selectedProcess)}>Reload</Button>
             </Space>
@@ -1505,6 +1516,7 @@ function ImagesTab() {
   const [newGrindCn, setNewGrindCn] = useState('');
   const [newGrindProcess, setNewGrindProcess] = useState('');
   const [grindingUploading, setGrindingUploading] = useState(false);
+  const [grindProcessOptions, setGrindProcessOptions] = useState([]);
 
   // Every machine (grinding + turning) — both sections below apply to both
   // kinds: Tooling Images (per DWG family, pbring_tooling_image) now also
@@ -1555,6 +1567,13 @@ function ImagesTab() {
       .finally(() => setGrindingLoading(false));
   }, [message]);
 
+  const loadGrindProcessOptions = useCallback((machine) => {
+    if (!machine) return;
+    axios.get(server.PBRING_GRID_ADMIN_MACHINE_PROCESS_CODES, { params: { machine_type_name: machine } })
+      .then((r) => setGrindProcessOptions(r.data || []))
+      .catch((err) => message.error(apiErrorMessage(err, 'Failed to load process codes')));
+  }, [message]);
+
   const selectMachine = (val) => {
     setSelectedMachine(val);
     setNewToolingNo(''); setNewToolName(''); setNewGrindCn(''); setNewGrindProcess(''); setNewSlots([]);
@@ -1562,6 +1581,7 @@ function ImagesTab() {
     loadFamilyOptions(val);
     loadSlotOptions(val);
     loadGrindingImages(val);
+    loadGrindProcessOptions(val);
   };
 
   // Tools this family resolves to, per the last-loaded familyOptions — []
@@ -1790,7 +1810,17 @@ function ImagesTab() {
           </Text>
           <Space style={{ marginBottom: 8 }}>
             <Input placeholder="CN e.g. 294065" style={{ width: 160 }} value={newGrindCn} onChange={(e) => setNewGrindCn(e.target.value)} />
-            <Input placeholder="Process Code e.g. 1021" style={{ width: 160 }} value={newGrindProcess} onChange={(e) => setNewGrindProcess(e.target.value)} />
+            <Select
+              showSearch
+              style={{ width: 160 }}
+              placeholder="Process code"
+              value={grindProcessOptions.includes(newGrindProcess) ? newGrindProcess : undefined}
+              onChange={(v) => setNewGrindProcess(v)}
+              options={grindProcessOptions.map((p) => ({ value: p, label: p }))}
+              allowClear
+            />
+            <Text type="secondary">or</Text>
+            <Input placeholder="type a process code manually" style={{ width: 160 }} value={newGrindProcess} onChange={(e) => setNewGrindProcess(e.target.value)} />
             <Upload accept="image/*" showUploadList={false} beforeUpload={uploadGrindingImage}>
               <Button icon={<UploadOutlined />} loading={grindingUploading} disabled={!newGrindCn.trim() || !newGrindProcess.trim()}>Upload Photo</Button>
             </Upload>

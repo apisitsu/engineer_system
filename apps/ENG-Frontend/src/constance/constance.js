@@ -161,6 +161,7 @@ export const server = {
   PBRING_GRID_APPROVAL: `${apiUrl}api/engineer/pbring/grid/approval`, // GET ?cn=&machine_type_name=&process_code= · POST {cn,machine_type_name,process_code,role} · DELETE ?...&role=
   PBRING_GRID_ADMIN_MACHINE_TYPES: `${apiUrl}api/engineer/pbring/grid/admin/machine-types`, // GET — active machine list (Approval Roles / Auto Stamp / Parameter Config picker)
   PBRING_GRID_ADMIN_PARAMETERS: `${apiUrl}api/engineer/pbring/grid/admin/parameters`, // ?machine_type_name=&cn=&process_code= (GET)
+  PBRING_GRID_ADMIN_PARAMETERS_CN_PROCESSES: `${apiUrl}api/engineer/pbring/grid/admin/parameters/cn-processes`, // ?machine_type_name=&cn= (GET -> {processCodes, hasAllProcessesOverride})
   PBRING_GRID_ADMIN_PARAMETERS_BULK: `${apiUrl}api/engineer/pbring/grid/admin/parameters/bulk`, // PUT { machine_type_name, cn, process_code, params:[{param_key,param_value}] }
   PBRING_GRID_TOOLING_IMAGE: `${apiUrl}api/engineer/pbring/grid/tooling-image`, // ?machine_type_name=&family= (GET binary)
   PBRING_GRID_ADMIN_TOOLING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/tooling-images`, // ?machine_type_name= (GET list)
@@ -169,6 +170,7 @@ export const server = {
   PBRING_GRID_ADMIN_TOOLING_SLOTS: `${apiUrl}api/engineer/pbring/grid/admin/tooling-slots`, // ?machine_type_name= (GET — {process_code,tool_number,n}[] from pbring_sds_condition history)
   PBRING_GRID_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/grinding-image`, // ?machine_type_name=&cn=&process_code= (GET binary)
   PBRING_GRID_ADMIN_GRINDING_IMAGES: `${apiUrl}api/engineer/pbring/grid/admin/grinding-images`, // ?machine_type_name= (GET list)
+  PBRING_GRID_ADMIN_MACHINE_PROCESS_CODES: `${apiUrl}api/engineer/pbring/grid/admin/machine-process-codes`, // ?machine_type_name= (GET string[] — from pbring_sds_condition)
   PBRING_GRID_ADMIN_GRINDING_IMAGE: `${apiUrl}api/engineer/pbring/grid/admin/grinding-image`, // POST (multipart) / DELETE ?machine_type_name=&cn=&process_code=
   PBRING_CONDITION: `${apiUrl}api/engineer/pbring/condition`, // ?cn=&machine_type_name=&process_code= (GET); PUT row; append /:id (DELETE)
   PBRING_GRID_AUTO_STAMP_CONFIG: `${apiUrl}api/engineer/pbring/grid/auto-stamp/config`, // GET / PUT — same shape as MTC_SDS_V2_AUTO_STAMP_CONFIG, fed to the shared AutoStampSection component

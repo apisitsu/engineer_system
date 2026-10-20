@@ -9,7 +9,8 @@
 const {
   buildGridPdfHtml, hasDataForCn,
   listMachineTypes,
-  getManualParams, saveManualParams, buildStandardGridForMachine,
+  getManualParams, saveManualParams, buildStandardGridForMachine, getCnProcessOptions,
+  getMachineProcessCodes,
   TURNING_MACHINE_NAMES, buildTurningGridForMachine,
   getToolingFamilyOptions,
   getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,
@@ -334,6 +335,18 @@ async function getManualParamsRoute(req, res) {
   }
 }
 
+/** GET /grid/admin/parameters/cn-processes?machine_type_name=&cn= — process-code options for the CN-override picker */
+async function getCnProcessOptionsRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName, cn } = req.query;
+    if (!machineTypeName || !cn) return res.status(400).json({ error: 'machine_type_name and cn are required' });
+    res.json(await getCnProcessOptions(machineTypeName, normalizeCn(cn)));
+  } catch (err) {
+    console.error('[pbring:grid:admin:parameters:cn-processes:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load process options' });
+  }
+}
+
 /**
  * PUT /grid/admin/parameters/bulk - body { machine_type_name, cn, process_code, params: [{ param_key, param_value }] }
  * cn omitted/null -> machine-default save; cn set -> CN override (optionally process-scoped).
@@ -491,6 +504,18 @@ async function getGrindingImagesRoute(req, res) {
   }
 }
 
+/** GET /grid/admin/machine-process-codes?machine_type_name= — process-code options for the Grinding Area / Turning Cutting Layout upload form */
+async function getMachineProcessCodesRoute(req, res) {
+  try {
+    const { machine_type_name: machineTypeName } = req.query;
+    if (!machineTypeName) return res.status(400).json({ error: 'machine_type_name is required' });
+    res.json(await getMachineProcessCodes(machineTypeName));
+  } catch (err) {
+    console.error('[pbring:grid:admin:machine-process-codes:get]', err);
+    res.status(500).json({ error: err.message || 'Failed to load process codes' });
+  }
+}
+
 /** POST /grid/admin/grinding-image — multipart: machine_type_name, cn, process_code, description, file (field: image) */
 async function postGrindingImageRoute(req, res) {
   try {
@@ -585,11 +610,13 @@ module.exports = {
   getAutoStampConfig, putAutoStampConfig, postAutoStampRun,
   getMachineTypes,
   getManualParams: getManualParamsRoute, putManualParams: putManualParamsRoute,
+  getCnProcessOptions: getCnProcessOptionsRoute,
   getToolingImage: getToolingImageRoute, getToolingImages: getToolingImagesRoute,
   getToolingFamilies: getToolingFamiliesRoute,
   postToolingImage: postToolingImageRoute, deleteToolingImage: deleteToolingImageRoute,
   getToolingSlots: getToolingSlotsRoute, putToolingImageSlots: putToolingImageSlotsRoute,
   getGrindingImage: getGrindingImageRoute, getGrindingImages: getGrindingImagesRoute,
+  getMachineProcessCodes: getMachineProcessCodesRoute,
   postGrindingImage: postGrindingImageRoute, deleteGrindingImage: deleteGrindingImageRoute,
   getMachineTool: getMachineToolRoute, postMachineTool: postMachineToolRoute,
   deleteMachineTool: deleteMachineToolRoute, getMachineToolCoverage: getMachineToolCoverageRoute,

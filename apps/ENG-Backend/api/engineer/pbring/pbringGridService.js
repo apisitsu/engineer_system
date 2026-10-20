@@ -24,6 +24,10 @@ const { engPool } = require('../../../instance/eng_db');
 const { maqPool } = require('../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../instance/instance');
 const sdsV2SearchService = require('../mtc/services/sdsV2SearchService');
+// Generic, stateless vector-seal renderer (name/date -> SVG) — no SDS data
+// coupling at all (takes plain strings, touches no table), so it's safe to
+// reuse directly rather than duplicate, unlike anything that reads sds_*.
+const { buildSealDataUri, toSealName } = require('../mtc/utils/stampSeal');
 
 function escHtml(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -209,9 +213,16 @@ function buildGridPdfHtml(grid) {
   const rowH = fit(grid.rowH, rows, 22);
   const sumW = colW.reduce((a, b) => a + b, 0) || 1;
   const sumH = rowH.reduce((a, b) => a + b, 0) || 1;
-  // A4 landscape (297x210mm) minus the 5mm @page margin on every side.
-  const PAGE_W_MM = 287;
-  const PAGE_H_MM = 200;
+  // A4 landscape (297x210mm) minus the 5mm @page margin on every side, minus
+  // a small safety margin (2026-10-20): the approval-stamp images added
+  // below render the page a measured 2px taller than with no images at all
+  // (758px vs 756px — a rounding/layout quirk of the <img> inside its
+  // overflow:hidden box, not a row actually growing), which was enough to
+  // silently spill a 1-page sheet onto a 2nd, almost-entirely-blank page
+  // when the scale had already fit it to the pixel. 198/285 leaves a few mm
+  // of slack so a few px of rendering variance never crosses the boundary.
+  const PAGE_W_MM = 285;
+  const PAGE_H_MM = 198;
   // Scale to whichever dimension is tighter, not width alone — a template
   // taller than what the width-derived scale leaves room for (Turning_PB:
   // 64 rows, vs the ~59-row templates this was tuned against) silently
@@ -668,6 +679,49 @@ const PBRING_ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16); // rows 1
 const PBRING_COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 const PBRING_GW_ROW_RANGE = [53, 54, 55, 56, 57, 58];
 const PBRING_GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
+
+/**
+ * Process-code options for the Images tab's Grinding Area / Turning Cutting
+ * Layout upload form — every process_code this machine has a row for in
+ * pbring_sds_condition. Deliberately NOT pbring_tooling: that table's own
+ * process_code column is sometimes a combined display string for a tooling
+ * item spanning two processes (e.g. "1021 & 1022" for one KVD300 row,
+ * confirmed live), which would offer that whole string as one bogus
+ * dropdown option instead of the two real codes. pbring_sds_condition's
+ * process_code is always a single atomic code, same source already proven
+ * clean for getCnProcessOptions/getToolingSlotOptions above.
+ *
+ * CN is deliberately left free-text in that form, unlike this one — a
+ * photo is often uploaded for a brand-new CN with no row anywhere yet, so
+ * a CN dropdown would block the common case.
+ */
+async function getMachineProcessCodes(machineTypeName) {
+  const { rows } = await engPool.query(
+    `SELECT DISTINCT process_code FROM pbring_sds_condition WHERE mc_key = $1 AND process_code IS NOT NULL AND trim(process_code) <> '' ORDER BY process_code`,
+    [machineTypeName]
+  );
+  return rows.map((r) => r.process_code);
+}
+
+/**
+ * Process-code options for the Parameter Config tab's CN-override picker —
+ * every process this (machine, CN) actually has real data for in
+ * pbring_sds_param, so an admin can pick one from a list instead of typing
+ * a code blind. Plus whether a process-agnostic override (process_code
+ * IS NULL — "All processes") already exists, so the UI can label that
+ * option meaningfully instead of implying it always has something.
+ */
+async function getCnProcessOptions(machineTypeName, cn) {
+  const { rows } = await engPool.query(
+    `SELECT DISTINCT process_code FROM pbring_sds_param WHERE mc_key = $1 AND cn = $2 ORDER BY process_code`,
+    [machineTypeName, cn]
+  );
+  const { rows: allRows } = await engPool.query(
+    `SELECT 1 FROM pbring_sds_parameter WHERE machine_type_name = $1 AND cn = $2 AND process_code IS NULL LIMIT 1`,
+    [machineTypeName, cn]
+  );
+  return { processCodes: rows.map((r) => r.process_code), hasAllProcessesOverride: allRows.length > 0 };
+}
 
 /** GET admin: machine-default rows (cn=null) or a CN-override's rows (cn set, optionally process_code-scoped). */
 async function getManualParams(machineTypeName, cn, processCode) {
@@ -1468,6 +1522,13 @@ async function buildStandardGridForMachine(cn, machineTypeName, processCode) {
   const grindingImg = await getGrindingImageBinary(machineTypeName, cn, processCode);
   placeImageAtExtent(grid, 'grinding_layout_image', toDataUri(grindingImg));
 
+  // Approval seals — last, same reasoning as the tool/grinding images above
+  // (placed after everything else so they land cleanly on top of the final
+  // layout). See getPbRingApprovalSeals' header for why this was missing.
+  const stampAddresses = await loadStampAddressesLive();
+  const seals = await getPbRingApprovalSeals(cn, machineTypeName, processCode);
+  applyApprovalSealsToGrid(grid, stampAddresses, seals);
+
   return grid;
 }
 
@@ -1763,6 +1824,13 @@ async function buildTurningGridForMachine(cn, machineTypeName, processCode) {
     placeImageAtExtent(grid, `turning_tool_image_T${String(slot).padStart(2, '0')}`, toDataUri(img));
   }
 
+  // Approval seals — same shared stamp-cell addresses as the Standard
+  // template (confirmed live: AN4/AQ4/AT4 fall inside the Turning
+  // template's own PREPARED/CHECKED/APPROVED merge boxes too).
+  const stampAddresses = await loadStampAddressesLive();
+  const seals = await getPbRingApprovalSeals(cn, machineTypeName, processCode);
+  applyApprovalSealsToGrid(grid, stampAddresses, seals);
+
   return grid;
 }
 
@@ -1787,6 +1855,84 @@ async function getPbRingApproval(cn, machineTypeName, processCode) {
     [cn, machineTypeName, processCode]
   );
   return rows[0] || null;
+}
+
+// ── Approval seals on the PDF (2026-10-20) ───────────────────────────────────
+// Reported live: both 294065 and 394137 had full Prepared/Checked/Approved
+// records in pbring_sds_approval, yet no stamp ever printed. Root cause: the
+// approval table only ever stored TEXT (who/when), and getPdf never read it
+// at all — unlike the real SDS system (sdsV2HeadlessController.js, STAMP_
+// PARAM_KEYS/getApprovalSeals), which fetches each signed role's seal image
+// and places it at the mapped stamp cell. PB Ring had the sign/revoke UI and
+// the auto-stamp engine, both of which were writing real records, but no
+// render-time step ever turned a record into a mark on the page.
+//
+// Cell addresses: stamp_prepared/checked/approved are shared rows in the
+// real, read-only sds_excel_mapping (machine_type_name IS NULL — AN4/AQ4/
+// AT4 on the live Standard template, confirmed live), the exact same rows
+// the header/tool-slot addresses already come from elsewhere in this file.
+// Read-only, no CN involved, so this is the same safety argument as those.
+const STAMP_CELL_PARAM_KEYS = { stamp_prepared: 'prepared', stamp_checked: 'checked', stamp_approved: 'approved' };
+
+async function loadStampAddressesLive() {
+  const { rows } = await engPool.query(
+    `SELECT cell_address, param_key FROM sds_excel_mapping
+      WHERE machine_type_name IS NULL AND param_key LIKE 'stamp_%'`
+  );
+  const addr = {};
+  for (const r of rows) {
+    const role = STAMP_CELL_PARAM_KEYS[r.param_key];
+    if (role) addr[role] = r.cell_address;
+  }
+  return addr; // { prepared: 'AN4', checked: 'AQ4', approved: 'AT4' }
+}
+
+const _SEAL_MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+function _fmtSealDate(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return '';
+  return `${String(dt.getDate()).padStart(2, '0')} ${_SEAL_MON[dt.getMonth()]} ${dt.getFullYear()}`;
+}
+
+/**
+ * Builds { prepared, checked, approved } seal data-URIs for one sheet, from
+ * PB Ring's own pbring_sds_approval row — mirrors the real system's
+ * getApprovalSeals, but against pbring's table instead of sds_approval, and
+ * always the auto-generated vector seal (PB Ring parts are not registered
+ * in Innovator, so there is no tt_user_stamps uploaded-image path to check —
+ * that hybrid only makes sense once a real empno/signature is on file for
+ * the thing being signed). An unsigned role comes back null -> blank box.
+ */
+async function getPbRingApprovalSeals(cn, machineTypeName, processCode) {
+  const out = { prepared: null, checked: null, approved: null };
+  const row = await getPbRingApproval(cn, machineTypeName, processCode);
+  if (!row) return out;
+  for (const role of PBRING_APPROVAL_ROLE_ORDER) {
+    const rec = pbRingRoleRec(row, role);
+    if (!rec) continue;
+    const dataUri = buildSealDataUri({ name: toSealName(rec.signer_name), date: _fmtSealDate(rec.signed_at), seed: 'pbring_stamp_' + role });
+    if (dataUri) out[role] = { dataUri };
+  }
+  return out;
+}
+
+/**
+ * Places each signed role's seal at its mapped cell's MERGE MASTER (the
+ * designed stamp box) — same resolution the real system's mergeMaster does,
+ * needed because AN4/AQ4/AT4 each sit inside a merged region and only the
+ * master cell of a merge actually renders.
+ */
+function applyApprovalSealsToGrid(grid, stampAddresses, seals) {
+  for (const [role, cellAddr] of Object.entries(stampAddresses)) {
+    const uri = seals[role]?.dataUri;
+    if (!uri) continue;
+    const [r, c] = addrToRC(cellAddr).split(',').map(Number);
+    const mg = (grid.merges || []).find((m) => r >= m.r1 && r <= m.r2 && c >= m.c1 && c <= m.c2);
+    const master = mg ? { r: mg.r1, c: mg.c1 } : { r, c };
+    const key = `${master.r},${master.c}`;
+    grid.cells[key] = { ...(grid.cells[key] || {}), img: uri };
+  }
 }
 
 // ── Who may sign each role — pbring_approval_role_config (2026-10-12) ───────
@@ -2092,7 +2238,8 @@ module.exports = {
   loadTurningGridLive, applyTurningHeaderToGrid, applyTurningHeaderOverridesToGrid,
   applyTurningToolSlotsToGrid, turningPbSlotAddresses, TURNING_PB_HEADER_OVERRIDE_FIELDS,
   PBRING_ROW_RANGE, PBRING_COL_LETTERS, PBRING_GW_ROW_RANGE, PBRING_GW_COL_LETTERS,
-  getManualParams, saveManualParams, resolveManualParamMap, applyManualParamsToGrid,
+  getManualParams, saveManualParams, resolveManualParamMap, applyManualParamsToGrid, getCnProcessOptions,
+  getMachineProcessCodes,
   PBRING_HEADER_OVERRIDE_FIELDS, loadHeaderOverrideAddressesLive, applyHeaderOverridesToGrid,
   toolingFamily, getToolingFamilyOptions,
   getToolingImageBinary, listToolingImages, upsertToolingImage, deleteToolingImage,

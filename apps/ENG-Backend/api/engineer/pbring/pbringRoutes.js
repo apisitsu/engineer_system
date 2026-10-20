@@ -135,6 +135,7 @@ router.get('/grid/admin/machine-types', isPbringAdmin, pbringGridController.getM
 // editable here. Independent of sds_parameter — see pbringGridService.js's
 // Phase 6 header note for why (PB Ring's CN is a real factory CN).
 router.get('/grid/admin/parameters', isPbringAdmin, pbringGridController.getManualParams);
+router.get('/grid/admin/parameters/cn-processes', isPbringAdmin, pbringGridController.getCnProcessOptions);
 router.put('/grid/admin/parameters/bulk', isPbringAdmin, pbringGridController.putManualParams);
 
 // Tooling + Grinding Area photos — own tables (pbring_tooling_image/
@@ -156,6 +157,7 @@ router.put('/grid/admin/tooling-image/:id/slots', isPbringAdmin, pbringGridContr
 
 router.get('/grid/grinding-image', pbringGridController.getGrindingImage);
 router.get('/grid/admin/grinding-images', isPbringAdmin, pbringGridController.getGrindingImages);
+router.get('/grid/admin/machine-process-codes', isPbringAdmin, pbringGridController.getMachineProcessCodes);
 router.post('/grid/admin/grinding-image', isPbringAdmin, pbringGridController.postGrindingImage);
 router.delete('/grid/admin/grinding-image', isPbringAdmin, pbringGridController.deleteGrindingImage);
 
