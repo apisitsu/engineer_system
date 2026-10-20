@@ -161,7 +161,10 @@ function usedRange(ws) {
 function readSheetObjects(filePath, headerRowIdx = 0) {
   // cellNF is required: without the number format there is no way to tell a date
   // cell from an ordinary number.
-  const wb = XLSX.readFile(filePath, { cellDates: false, cellText: false, cellNF: true });
+  // `sheets: 0` parses only the first worksheet — the only one used below. The INSP
+  // REC workbooks carry two more ("PO balance", "Sheet1") that made each file 3–8x
+  // slower to read (10-OCT.xlsx: 22 s → 2.9 s) with the first sheet's cells identical.
+  const wb = XLSX.readFile(filePath, { cellDates: false, cellText: false, cellNF: true, sheets: 0 });
   const sheetName = wb.SheetNames[0];
   if (!sheetName) return { columns: [], rows: [] };
 
