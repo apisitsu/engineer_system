@@ -12,6 +12,7 @@ import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import { server, GAS_TI_CSV_URL } from '../../../../constance/constance';
 import { uploadTiCsvViaGas } from '../../../../utils/uploadTiCsvViaGas';
+import { buildAllTrackCsvFiles } from '../../../../utils/lotTrackCsv';
 import { useTheme } from '../../../../theme';
 import ScrollbarStyle from '../../../common/scrollbar';
 
@@ -27,18 +28,32 @@ const { Option } = Select;
 
 const escHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
-// Renders the GAS upload result ({ success, results:[{fileName, ok, action, bytes, error}] })
-// or a thrown Error. `title` distinguishes the "Update data" upload from the probe.
-function renderGasResult(res, { title = 'Drive upload', error } = {}) {
-  const lines = error
-    ? [String(error.message || error)]
-    : (res?.results || []).map((r) =>
-        r.ok ? `${r.fileName}: OK (${r.action}, ${r.bytes} bytes)` : `${r.fileName}: FAIL — ${r.error || '?'}`);
-  const ok = !error && res?.success;
-  Swal.fire({
-    icon: ok ? 'success' : 'error',
-    title: ok ? `${title} — done` : `${title} — failed`,
-    html: `<pre style="text-align:left;white-space:pre-wrap;font-size:12px;margin:0">${escHtml(lines.join('\n') || '(no detail)')}</pre>`,
+const SYNC_STEP_LABEL = { importPCtooling: 'Tooling inspection', importDwgPrint: 'Drawing print' };
+
+// One line per import step, from the sync_csv `steps[]` (present on success and on a
+// partial 500 alike). `detail` is { inserted, scanned, exported } / { rows }.
+function describeSyncSteps(steps) {
+  return (steps || []).map((s) => {
+    const label = SYNC_STEP_LABEL[s.name] || s.name;
+    if (!s.ok) return { ok: false, text: `${label}: FAILED — ${s.error || s.stderr || '?'}` };
+    const d = s.detail || {};
+    const facts = [];
+    if (d.inserted != null) facts.push(`${d.inserted} new record(s)`);
+    if (d.rows != null) facts.push(`${d.rows} rows`);
+    return { ok: true, text: `${label}: OK${facts.length ? ` — ${facts.join(', ')}` : ''}` };
+  });
+}
+
+// The final word on an "Update data" run. A toast that fades on its own left people
+// unsure whether it worked, so this stays until OK is pressed — and a stray click
+// outside must not dismiss it either.
+function showSyncSummary({ title, icon, lines }) {
+  return Swal.fire({
+    icon,
+    title,
+    html: `<pre style="text-align:left;white-space:pre-wrap;font-size:13px;margin:0">${escHtml(lines.join('\n') || '(no detail)')}</pre>`,
+    confirmButtonText: 'OK',
+    allowOutsideClick: false,
   });
 }
 
@@ -122,23 +137,65 @@ function InspectionReport() {
 
   // The backend returns the CSVs (it cannot reach the GAS web app — anonymous
   // access is blocked); the browser POSTs them from the signed-in session.
+  // Returns { ok, lines } for the final summary instead of toasting — the caller
+  // reports the whole run in one place.
   const uploadCsvsToDrive = useCallback(async (csvs) => {
-    if (!csvs?.length) return;
+    if (!csvs?.length) return { ok: true, lines: [] };
     if (!GAS_TI_CSV_URL) {
-      message.warning({ content: 'Data synced, but Drive upload is not configured (GAS_TI_CSV_URL).', duration: 8 });
-      return;
+      return { ok: false, lines: ['Drive upload: SKIPPED — not configured (GAS_TI_CSV_URL)'] };
     }
     const close = message.loading('Uploading CSVs to Drive...', 0);
     try {
       const res = await uploadTiCsvViaGas(csvs, { timeout: 3 * 60 * 1000 });
-      const bad = (res.results || []).filter(r => !r.ok);
-      if (bad.length) renderGasResult(res, { title: 'Drive upload' });
-      else message.success(`Uploaded ${res.results.length} file(s) to Drive`);
+      const results = res.results || [];
+      const bad = results.filter(r => !r.ok);
+      if (bad.length) {
+        return {
+          ok: false,
+          lines: results.map((r) => (r.ok
+            ? `Drive upload: ${r.fileName} OK (${r.action}, ${r.bytes} bytes)`
+            : `Drive upload: ${r.fileName} FAILED — ${r.error || '?'}`)),
+        };
+      }
+      return { ok: true, lines: [`Drive upload: OK — ${results.length} file(s)`] };
     } catch (err) {
       console.error('TI CSV Drive upload failed:', err);
-      message.warning({ content: `Data synced, but Drive upload failed: ${err.message}`, duration: 10 });
+      return { ok: false, lines: [`Drive upload: FAILED — ${err.message}`] };
     } finally {
       close();
+    }
+  }, []);
+
+  // The signed-in user's saved Lot Status Tracker tracks (their own + ones shared
+  // with them) as CSV files, so they ride along in the same Drive upload as the two
+  // Tooling Inspection CSVs. Never throws: a failure here must not stop the
+  // Tooling Inspection files from uploading, it just shows up in the summary.
+  const collectLotTrackCsvs = useCallback(async () => {
+    if (!GAS_TI_CSV_URL) return { files: [], lines: [] }; // nothing to upload to — don't fetch for nothing
+    const key = 'ti-lot-track-export';
+    try {
+      message.loading({ content: 'Exporting lot tracks...', key, duration: 0 });
+      const { data } = await axios.get(server.MTC_LOT_TRACK_SAVED);
+      const tracks = data?.tracks || [];
+      if (!tracks.length) return { files: [], lines: ['Lot tracks: no saved tracks'] };
+      const { files, emptyCount, skippedTotal } = await buildAllTrackCsvFiles(tracks, {
+        onProgress: (done, total) => message.loading({ content: `Exporting lot tracks (${done}/${total} lots)...`, key, duration: 0 }),
+      });
+      const notes = [
+        emptyCount ? `${emptyCount} track(s) had no data` : null,
+        skippedTotal ? `${skippedTotal} lot(s) skipped — not found/ambiguous` : null,
+      ].filter(Boolean);
+      return {
+        files,
+        lines: [files.length
+          ? `Lot tracks: ${files.length} track(s) built${notes.length ? ` (${notes.join('; ')})` : ''}`
+          : `Lot tracks: no process data to export${notes.length ? ` (${notes.join('; ')})` : ''}`],
+      };
+    } catch (err) {
+      console.error('Lot track CSV export failed:', err);
+      return { files: [], lines: [`Lot tracks: FAILED — ${err.response?.data?.error || err.message}`] };
+    } finally {
+      message.destroy(key);
     }
   }, []);
 
@@ -148,6 +205,7 @@ function InspectionReport() {
     // user staring at a spinner with no explanation.
     const closeHint = message.loading('Updating data (running imports)...', 0);
     const startedAt = Date.now();
+    let summary = null; // shown once, after the hint closes — see showSyncSummary
     try {
       // HttpClient forces a 10s default timeout, but this endpoint runs two
       // imports back to back (many .xlsx off a UNC share + a 16k-row .xlsm),
@@ -155,10 +213,16 @@ function InspectionReport() {
       // client-side while the backend keeps going — the imports succeed but the
       // UI reports a connection failure.
       const { data } = await axios.post(server.TOOLING_SYNC_CSV, null, { timeout: 15 * 60 * 1000 });
-      message.success('Data updated successfully');
       fetchToolingInspectData();
       fetchDashboardData(selectedMonth);
-      await uploadCsvsToDrive(data?.csvs);
+      const lot = await collectLotTrackCsvs();
+      const upload = await uploadCsvsToDrive([...(data?.csvs || []), ...lot.files]);
+      const lotOk = !lot.lines.some(l => l.includes('FAILED'));
+      summary = {
+        icon: upload.ok && lotOk ? 'success' : 'warning',
+        title: upload.ok && lotOk ? 'Update data — completed' : 'Data updated, but part of the export had a problem',
+        lines: [...describeSyncSteps(data?.steps).map(l => l.text), ...lot.lines, ...upload.lines],
+      };
     } catch (e) {
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       // Surface the real backend failure (network share unreachable, CSV target
@@ -170,23 +234,37 @@ function InspectionReport() {
       // other succeeded, so don't claim nothing was updated when part of it was.
       const okSteps = (d.steps || []).filter(s => s.ok).map(s => s.name);
       if (okSteps.length) {
-        message.warning({ content: `Partly updated (${okSteps.join(', ')} OK). ${detail}`, duration: 10 });
         fetchToolingInspectData();
         fetchDashboardData(selectedMonth);
-        await uploadCsvsToDrive(d.csvs);
+        const lot = await collectLotTrackCsvs();
+        const upload = await uploadCsvsToDrive([...(d.csvs || []), ...lot.files]);
+        summary = {
+          icon: 'warning',
+          title: 'Update data — partly updated',
+          lines: [...describeSyncSteps(d.steps).map(l => l.text), ...lot.lines, ...upload.lines],
+        };
       } else if (!e.response) {
         // No response at all is a DIFFERENT failure from a 500 and needs saying so: the
         // request never reached a reply, so the import is probably still running on the
         // server and may well finish. Causes seen: the backend restarting mid-import
         // (nodemon watches everything outside output/ and files/), a reverse proxy
         // cutting the connection at its own read timeout, or the network dropping.
-        message.warning({
-          content: `No reply from the server after ${elapsed}s — the import is probably still running. `
-            + `Wait a minute, then refresh before pressing again. (${e.code || detail})`,
-          duration: 12,
-        });
+        summary = {
+          icon: 'warning',
+          title: 'Update data — no reply from the server',
+          lines: [
+            `No reply after ${elapsed}s — the import is probably still running.`,
+            'Wait a minute, then refresh before pressing again.',
+            `(${e.code || detail})`,
+          ],
+        };
       } else {
-        message.error({ content: `Failed to update data: ${detail}`, duration: 8 });
+        const stepLines = describeSyncSteps(d.steps).map(l => l.text);
+        summary = {
+          icon: 'error',
+          title: 'Update data — failed',
+          lines: stepLines.length ? stepLines : [detail],
+        };
       }
       // Log the transport facts too. `e.response.data` alone is {} for a connection
       // failure, which is exactly the case that most needs diagnosing — an empty object
@@ -202,8 +280,9 @@ function InspectionReport() {
     } finally {
       closeHint();
       setLoading(false);
+      if (summary) showSyncSummary(summary);
     }
-  }, [fetchToolingInspectData, fetchDashboardData, selectedMonth, uploadCsvsToDrive]);
+  }, [fetchToolingInspectData, fetchDashboardData, selectedMonth, uploadCsvsToDrive, collectLotTrackCsvs]);
 
   const handleUpdateRecord = useCallback((record) => {
     setSelectedData(record);
