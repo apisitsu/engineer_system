@@ -77,6 +77,8 @@ export default function RecordEditor({ initial, templates, onBack, onSaved }) {
   // A printed form that has come back must be stamped by a Process Engineer before it can be saved.
   const needsStamp = rec.id && rec.status === 'printed';
   const stamped = !!rec.header?.stamped_by;
+  // Printed records must be stamped before Save; a recorded one that has no stamp (e.g. imported) can be stamped afterwards.
+  const showStamp = rec.id && (rec.status === 'printed' || (rec.status === 'recorded' && !stamped));
 
   const stamp = async () => {
     setBusy(true);
@@ -107,7 +109,7 @@ export default function RecordEditor({ initial, templates, onBack, onSaved }) {
           style={{ width: 300 }} placeholder="Enter Lot No. or C/N, then press Enter" enterButton={<SearchOutlined />}
           value={q} onChange={e => setQ(e.target.value)} onSearch={search} loading={busy} allowClear
         />
-        {needsStamp && (
+        {showStamp && (
           <Tooltip title={canStamp ? '' : 'Only the Process Engineer team (or an Admin) can stamp'}>
             <Button icon={<SafetyCertificateOutlined />} loading={busy} disabled={!canStamp || stamped} onClick={stamp}>
               {stamped ? 'Stamped' : 'Stamp'}

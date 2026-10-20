@@ -308,7 +308,9 @@ async function updateRecord(id, body, user) {
 
 /**
  * Process Engineer stamp. Only members of user_group PROC (JWT `group`) or an Admin (department/role AD), and only on a printed
- * record — the stamp is the sign-off on the form coming back. The text in the ENGINEER STAMP box is
+ * (or recorded) record that has no stamp yet — the stamp is the sign-off on the form coming back, and
+ * a record recorded without one (e.g. imported from the workbooks) can be stamped afterwards. It changes
+ * neither the status nor the revision. The text in the ENGINEER STAMP box is
  * built here from the token (name + today), so it cannot be typed or forged from the client.
  */
 async function stampRecord(id, user) {
@@ -318,7 +320,10 @@ async function stampRecord(id, user) {
     await c.query('BEGIN');
     const cur = (await c.query(`SELECT status, header FROM ${T.RECORD} WHERE id=$1 FOR UPDATE`, [id])).rows[0];
     if (!cur) throw bad('Record not found', 404);
-    if (cur.status !== 'printed') throw bad('Only a printed record is stamped when it is recorded back', 409);
+    // A draft has not been printed, so there is nothing to sign off — and a stamp placed on it would
+    // pre-satisfy the "stamp before Save" rule of the printed → recorded step.
+    if (cur.status === 'draft') throw bad('A draft cannot be stamped — print it first', 409);
+    if (cur.header?.stamped_by) throw bad('This record is already stamped', 409);
     const now = new Date();
     const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const header = { ...(cur.header || {}), engineer_stamp: `${user.name}\n${day}`, stamped_by: user.empno, stamped_by_name: user.name, stamped_at: now.toISOString() };
