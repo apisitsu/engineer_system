@@ -393,3 +393,48 @@ describe('writeCsv retry budget', () => {
     expect(fs.readFileSync(path.join(OUT, FILE), 'utf8')).toContain('1');
   });
 });
+
+describe('selectWorkbooksInWindow — skip workbooks that cannot hold an in-window row', () => {
+  const NOW = new Date(Date.UTC(2026, 9, 20)); // window opens 2026-09-01
+  const day = 24 * 3600 * 1000;
+  const stamps = {
+    'jan.xlsx': Date.UTC(2026, 0, 31),
+    'aug.xlsx': Date.UTC(2026, 7, 20),
+    'sep.xlsx': Date.UTC(2026, 8, 15),
+    'oct.xlsx': Date.UTC(2026, 9, 19),
+  };
+  const statFn = async (f) => ({ mtimeMs: stamps[f] });
+  const files = Object.keys(stamps);
+
+  it('drops files untouched since before the window and keeps the rest', async () => {
+    expect(await svc.selectWorkbooksInWindow(files, NOW, { statFn, fullScan: false }))
+      .toEqual(['sep.xlsx', 'oct.xlsx']);
+  });
+
+  it('keeps an old-named workbook that was edited recently (late backdated entry)', async () => {
+    const s = { ...stamps, 'aug.xlsx': Date.UTC(2026, 9, 18) };
+    expect(await svc.selectWorkbooksInWindow(files, NOW, { statFn: async (f) => ({ mtimeMs: s[f] }), fullScan: false }))
+      .toContain('aug.xlsx');
+  });
+
+  it('keeps a file stamped a few hours before the cutoff (clock skew slack)', async () => {
+    const s = { 'edge.xlsx': Date.UTC(2026, 8, 1) - day / 2 };
+    expect(await svc.selectWorkbooksInWindow(['edge.xlsx'], NOW, { statFn: async (f) => ({ mtimeMs: s[f] }), fullScan: false }))
+      .toEqual(['edge.xlsx']);
+  });
+
+  it('keeps a file whose stamp cannot be read', async () => {
+    const bad = async (f) => { if (f === 'jan.xlsx') throw new Error('EPERM'); return { mtimeMs: stamps[f] }; };
+    expect(await svc.selectWorkbooksInWindow(files, NOW, { statFn: bad, fullScan: false }))
+      .toEqual(['jan.xlsx', 'sep.xlsx', 'oct.xlsx']);
+  });
+
+  it('falls back to every file when none qualifies (all timestamps stale)', async () => {
+    const stale = async () => ({ mtimeMs: Date.UTC(2020, 0, 1) });
+    expect(await svc.selectWorkbooksInWindow(files, NOW, { statFn: stale, fullScan: false })).toEqual(files);
+  });
+
+  it('TI_FULL_SCAN forces reading everything', async () => {
+    expect(await svc.selectWorkbooksInWindow(files, NOW, { statFn, fullScan: true })).toEqual(files);
+  });
+});

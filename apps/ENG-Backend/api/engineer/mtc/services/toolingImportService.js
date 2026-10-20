@@ -297,6 +297,41 @@ async function findWorkbooks(dir) {
   return found.sort();
 }
 
+/** First day of the previous month (UTC) — the start of the reconciliation window. */
+function windowCutoffDate(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+}
+
+// Slack on the mtime comparison so clock skew between this host and the file
+// server, or a timezone-shifted stamp, can never push a live workbook out.
+const MTIME_SLACK_MS = 24 * 3600 * 1000;
+
+/**
+ * Of every workbook on the share, keep only those that can hold a row inside the
+ * reconciliation window: the ones modified since the window opened. A workbook
+ * untouched since before then cannot have gained an in-window row, and parsing the
+ * old months is most of the run (~50 s of ~78 s measured, two thirds of it
+ * Jan–Aug files whose rows are all discarded by the cutoff filter below).
+ *
+ * Fails safe in both directions: a file whose mtime cannot be read is kept, and if
+ * nothing at all qualifies every file is kept — so a share whose timestamps are
+ * all wrong (restored from backup, copied in bulk) costs time, never data.
+ * `TI_FULL_SCAN=1` forces the old read-everything behaviour.
+ */
+async function selectWorkbooksInWindow(files, now = new Date(), { statFn = fs.stat, fullScan = process.env.TI_FULL_SCAN === '1' } = {}) {
+  if (fullScan) return files;
+  const since = windowCutoffDate(now).getTime() - MTIME_SLACK_MS;
+  const stamped = await Promise.all(files.map(async (file) => {
+    try {
+      return { file, mtimeMs: (await statFn(file)).mtimeMs };
+    } catch (_) {
+      return { file, mtimeMs: null }; // unreadable stamp → keep
+    }
+  }));
+  const kept = stamped.filter((s) => s.mtimeMs === null || s.mtimeMs >= since).map((s) => s.file);
+  return kept.length ? kept : files;
+}
+
 // ---------------------------------------------------------------------------
 // Step 1 — INSP REC workbooks → ti_list + ToolingInspection.csv
 // ---------------------------------------------------------------------------
@@ -328,6 +363,12 @@ async function importPcTooling(log = new StepLog()) {
     throw new Error(
       `Cannot find any excel files under: ${sourceDir}. Check the network share is mounted and readable by the account running this process.`
     );
+  }
+
+  const found = files.length;
+  files = await selectWorkbooksInWindow(files);
+  if (files.length < found) {
+    log.log(`=== Reading ${files.length} of ${found} files — the rest were not modified since the reconciliation window opened (TI_FULL_SCAN=1 reads all) ===`);
   }
 
   log.log('=== Starting to merge all Excel files ===');
@@ -391,8 +432,7 @@ async function importPcTooling(log = new StepLog()) {
   }
 
   // Only the last two full months are reconciled.
-  const now = new Date();
-  const cutoff = formatDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
+  const cutoff = formatDate(windowCutoffDate());
   log.log(`=== Filtering data from: ${cutoff} to present ===`);
 
   // `ti_list` stores all of these as text, so coerce here rather than letting a
@@ -593,6 +633,8 @@ module.exports = {
   importPcTooling,
   importDwgPrint,
   // exported for tests
+  selectWorkbooksInWindow,
+  windowCutoffDate,
   buildUid,
   calculateFye,
   formatQty,

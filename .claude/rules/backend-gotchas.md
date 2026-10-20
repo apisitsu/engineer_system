@@ -43,6 +43,8 @@ Host-specific *paths* are the half git still cannot carry. See the mapped-drive 
 | 1 | `importPcTooling` | `TI_INSP_REC_DIR` (`\\sanlb01\MPA-DIV\...\INSP REC`) | `ti_list` via `engPool` + `ToolingInspection.csv` |
 | 2 | `importDwgPrint` | `TI_DWG_PRINT_FILE` (`\\10.121.34.19\data_rod\...` `.xlsm`) | `RecordForDrawingPrinted.csv` (no DB) |
 
+**Step 1 reads only the workbooks that can matter.** Only the last two months reconcile into `ti_list`, so `selectWorkbooksInWindow` skips INSP REC files not modified since the window opened (mtime, with 1 day of slack) — 3 of 10 files, ~27 s instead of ~63–78 s measured on plbmp118. Unreadable stamps keep the file; if nothing qualifies every file is read. **`TI_FULL_SCAN=1` forces the old read-everything behaviour** — use it after restoring the share from backup or if a row is ever missing from a month other than the last two.
+
 One step failing does not stop the other; the response is 500 when **any** step fails, and the frontend downgrades to a warning (and still refreshes) when `steps[]` shows a partial success.
 
 **`TI_CSV_OUTPUT_DIR` defaults to `G:\Shared drives\ROD-Engineer\ToolingInspection`, and `G:` is Google Drive for Desktop — not a mapped network drive.** `Win32_LogicalDisk` reports it `DriveType 3` with an empty `ProviderName`, so **there is no UNC equivalent to point at**; earlier advice here to "set the env var to the UNC path" was wrong and would send you looking for a path that does not exist.
