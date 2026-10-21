@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Layout, Select, Spin, Typography, Row, Col, Table, Tag, Space, Button, App, Tooltip } from 'antd';
-import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined, SettingOutlined, WarningOutlined } from '@ant-design/icons';
+import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined, SettingOutlined, WarningOutlined, FileSearchOutlined } from '@ant-design/icons';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { useTheme } from '../../../../theme';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
+import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import ReportScopeModal from './ReportScopeModal';
 import {
@@ -1152,6 +1154,11 @@ export default function SdsCoverageDashboard() {
                 <Text style={{ color: C.textSec, fontSize: 12 }}>Month</Text>
                 <Select size="small" value={filterMonth} onChange={setFilterMonth} style={{ width: 130 }}
                   options={monthFilterOptions} popupMatchSelectWidth={false} />
+                <Link to={MTC_PATHS.SDS_COMPLETENESS_TEST}>
+                  <Button icon={<FileSearchOutlined />} size="small"
+                    title="Worklist of pending sheets, with a one-click launch into the real SDS page (test page)"
+                    style={{ background: C.card, borderColor: C.border, color: C.textPri }}>Worklist</Button>
+                </Link>
                 <Button icon={<SettingOutlined />} onClick={() => setScopeOpen(true)} size="small"
                   title="Edit report scope (part types, process codes, work centers) — admin"
                   style={{ background: C.card, borderColor: C.border, color: C.textPri }}>Scope</Button>

@@ -21,6 +21,7 @@
  */
 
 const { engPool } = require('../../../instance/eng_db');
+const { TABLES } = require('../mtc/mtcConstants');
 const { maqPool } = require('../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../instance/instance');
 const sdsV2SearchService = require('../mtc/services/sdsV2SearchService');
@@ -1935,20 +1936,22 @@ function applyApprovalSealsToGrid(grid, stampAddresses, seals) {
   }
 }
 
-// ── Who may sign each role — pbring_approval_role_config (2026-10-12) ───────
-// Mirrors sdsApprovalController.js's getRoleConfig/userCanSign exactly
-// (same match_type vocabulary: any/department/role/feature_perm/em_id), own
-// table — never sds_approval_role_config, same separation reason as
-// pbring_sds_approval vs sds_approval. "Admin" here is pbring's own
-// definition (AD dept/role, OR the pbring_admin/all_mtc permission —
-// matches hasFeature('pbring_admin'), the route guard this replaces at the
-// handler level for POST/DELETE /grid/approval) rather than the real
-// system's AD-only override, since that is what "pbring admin" has always
-// meant everywhere else in this domain (isPbringAdmin in pbringRoutes.js,
-// PbRingMonitorPage.jsx's own isPbringAdmin check).
+// ── Who may sign each role — shared with General Parts (2026-10-21) ─────────
+// Was its own table (pbring_approval_role_config, added 2026-10-12) on
+// purpose, mirroring sdsApprovalController.js's getRoleConfig/userCanSign
+// exactly but kept separate like pbring_sds_approval vs sds_approval. Changed
+// by request: PB Ring's sign/revoke now reads `sds_approval_role_config`
+// directly, so one set of rules governs who may sign BOTH part families —
+// there is no longer a PB-Ring-only rule an admin could configure here.
+// `pbring_approval_role_config` itself is untouched (still queryable, still
+// has its CRUD routes) — only this read switched tables — in case old rows
+// there are ever needed for reference.
+// "Admin" here is still pbring's own, broader definition (AD dept/role, OR
+// the pbring_admin/all_mtc permission) — unrelated to which rule table is
+// read, and this request didn't ask to narrow it to AD-only.
 async function getPbRingRoleConfig() {
   const { rows } = await engPool.query(
-    `SELECT id, role, match_type, match_value, enabled, note FROM pbring_approval_role_config ORDER BY role, id`
+    `SELECT id, role, match_type, match_value, enabled, note FROM ${TABLES.SDS_APPROVAL_ROLE_CONFIG} ORDER BY role, id`
   );
   return rows;
 }

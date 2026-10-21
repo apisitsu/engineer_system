@@ -22,6 +22,8 @@ export const MTC_PATHS = {
   SDS_HISTORY: '/eng/mtc_eng/sds-v2/history',
   SDS_TEMPLATE_B: '/eng/mtc_eng/sds-v2/template-b',
   SDS_SELECTION_COND: '/eng/mtc_eng/sds-v2/selection-condition',
+  SDS_COMPLETENESS_TEST: '/eng/mtc_eng/sds-v2/completeness-test',
+  SDS_CN_EDITOR: '/eng/mtc_eng/sds-v2/cn-editor',
   LOT_TRACK: '/eng/mtc_eng/lot-track',
   PB_RING: '/eng/mtc_eng/pb-ring',
   PERMISSIONS_CONFIG: '/eng/mtc_eng/permissions-config',

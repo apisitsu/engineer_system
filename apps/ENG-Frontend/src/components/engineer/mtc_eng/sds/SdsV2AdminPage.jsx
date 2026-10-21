@@ -18,6 +18,11 @@ import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import MachineCodes from './MachineCodes';
 import MachineTypes from './MachineTypes';
 import ApprovalRoleConfig from './ApprovalRoleConfig';
+import AutoStampSection from './AutoStampSection';
+// PB Ring's Setup Data Sheet management tabs — defined in PbRingMonitorPage.jsx
+// (exported from there) and rendered here under the "PB Ring Parts" scope, so
+// there is one admin surface for both part families instead of two pages.
+import { ParamConfigTab as PbRingParamConfigTab, ConditionTab as PbRingConditionTab, ImagesTab as PbRingImagesTab } from '../pbring/PbRingMonitorPage';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -2542,6 +2547,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
             })}
           </Row>
           <style>{`.sds-config-grid .sds-hdr-row td { background-color: #d9d9d9 !important; }`}</style>
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>Parameter Config</Text>
           <Table
             className="sds-config-grid"
             dataSource={ROW_RANGE.map(rowNum => ({ key: rowNum, rowNum }))}
@@ -2550,21 +2556,10 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
             size="small"
             scroll={{ x: 'max-content', y: 560 }}
             bordered
-            style={{ fontFamily: 'monospace' }}
+            style={{ fontFamily: 'monospace', marginBottom: 24 }}
             rowClassName={record => rowHeaders[record.rowNum] ? 'sds-hdr-row' : ''}
           />
-        </Spin>
-      )}
-    </div>
-  );
-
-  const gwConfigContent = (
-    <div>
-      {machineListBlock}
-      {selectedMachine && (
-        <Spin spinning={configLoading}>
-          {cnModeBar}
-          {saveBar}
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>Grinding Wheel Config</Text>
           <Table
             className="sds-config-grid"
             dataSource={GW_ROW_RANGE.map(rowNum => ({ key: rowNum, rowNum }))}
@@ -2581,28 +2576,10 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
     </div>
   );
 
-  return (
-    <Tabs
-      size="small"
-      items={[
-        {
-          key: 'grid',
-          label: 'Excel Parameter Config',
-          children: cellGridContent,
-        },
-        {
-          key: 'gw-config',
-          label: 'Excel Grinding Wheel Config',
-          children: gwConfigContent,
-        },
-        {
-          key: 'mapping',
-          label: 'Excel Column Mapping',
-          children: <ExcelMappingManager theme={theme} />,
-        },
-      ]}
-    />
-  );
+  // "Excel Column Mapping" (ExcelMappingManager) used to be a second inner tab
+  // here; moved out to its own top-level tab (after Configure Settings) —
+  // this one now just returns the grid content directly.
+  return cellGridContent;
 };
 
 // ── Tab 4: Audit (Data Integrity) ─────────────────────────────────────────────
@@ -3032,9 +3009,9 @@ const SdsV2AdminPage = () => {
       .catch(() => {});
   }, []);
 
-  const tabItems = [
-    // Per-record Params tab removed — Program No (Z4) / Program Name (Z5) now live in Excel Config.
-    { key: 'machine-config', label: 'Excel Config', children: <MachineConfigTab theme={theme} visibleMachineNames={visibleMachineNames} /> },
+  const generalTabItems = [
+    // Per-record Params tab removed — Program No (Z4) / Program Name (Z5) now live here.
+    { key: 'machine-config', label: 'Parameter Config', children: <MachineConfigTab theme={theme} visibleMachineNames={visibleMachineNames} /> },
     {
       key: 'images',
       label: 'Images',
@@ -3049,12 +3026,50 @@ const SdsV2AdminPage = () => {
         />
       ),
     },
+    { key: 'machine-tool', label: 'Machine Tool Config', children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} /> },
+  ];
+
+  // Not tied to a part family — Machine Codes/Types are one shared registry,
+  // Configure Settings/Excel Column Mapping are global config, and Approval
+  // Roles already governs signing for BOTH General and PB Ring (2026-10-21).
+  // So these sit as top-level tabs alongside "General Parts" / "PB Ring
+  // Parts" (2026-10-21) rather than living inside General Parts' own list.
+  const sharedTabItems = [
     { key: 'machine-codes', label: 'Machine Codes', children: <MachineCodes theme={theme} /> },
     { key: 'machine-types', label: 'Machine Types', children: <MachineTypes theme={theme} /> },
     { key: 'config', label: 'Configure Settings', children: <ConfigureSettingsTab theme={theme} visibleMachineNames={visibleMachineNames} setVisibleMachineNames={setVisibleMachineNames} /> },
-    { key: 'machine-tool', label: 'Machine Tool Config', children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} /> },
+    { key: 'mapping', label: 'Excel Column Mapping', children: <ExcelMappingManager theme={theme} /> },
     { key: 'approval-roles', label: 'Approval Roles', children: <ApprovalRoleConfig theme={theme} /> },
     // 'CN Enable' (AuditTab) moved to its own sidebar page — see CnEnablePage / MTC_PATHS.CN_ENABLE
+  ];
+
+  // Same tabs PbRingMonitorPage.jsx used to gate behind `isPbringAdmin` —
+  // that page's own route is now read-only procurement tracking (Search / +New
+  // HW / Summary) and has no admin gate of its own any more.
+  //
+  // No separate "Approval Roles" or "Auto Stamp" tab here (2026-10-21): PB
+  // Ring's sign/revoke reads `sds_approval_role_config` directly (see
+  // pbringGridService.js's getPbRingRoleConfig), and its auto-stamp engine
+  // now resolves its enabled flag / responsible signers from the real
+  // `sds_auto_stamp_config` too (see pbringAutoStamp.js) — General Parts'
+  // own Approval Roles and Auto Stamp tabs are the one place that configure
+  // both of these for BOTH part families. PB Ring still writes its
+  // auto-stamped signatures to its own `pbring_sds_approval` table, never
+  // the real `sds_approval` — only the CONFIG is shared, not the sheet data.
+  const pbringTabItems = [
+    { key: 'param-config', label: 'Parameter Config', children: <PbRingParamConfigTab /> },
+    { key: 'images', label: 'Images', children: <PbRingImagesTab /> },
+    { key: 'condition', label: 'Machine Tool Config', children: <PbRingConditionTab /> },
+  ];
+
+  // One row: "General Parts" / "PB Ring Parts" (each a nested Tabs of that part
+  // family's own Parameter Config / Images / Machine Tool Config) sit alongside
+  // the shared, not-part-family-specific tools instead of a separate picker above
+  // a separate tab row.
+  const topLevelTabItems = [
+    { key: 'general', label: 'General Parts', children: <Tabs items={generalTabItems} /> },
+    { key: 'pbring', label: 'PB Ring Parts', children: <Tabs items={pbringTabItems} /> },
+    ...sharedTabItems,
   ];
 
   return (
@@ -3074,7 +3089,7 @@ const SdsV2AdminPage = () => {
             </Button>
           </div>
           <Card style={{ background: theme.colors.cardBackground }}>
-            <Tabs items={tabItems} />
+            <Tabs items={topLevelTabItems} />
           </Card>
         </Content>
       </Layout>

@@ -1323,8 +1323,25 @@ function buildGridPdfHtml(grid) {
   const colW = fit(grid.colW, cols, 30);
   const rowH = fit(grid.rowH, rows, 22);
   const sumW = colW.reduce((a, b) => a + b, 0) || 1;
-  const PAGE_W_MM = 287;            // A4 landscape printable width (297 − 2×5mm margin)
-  const scale = PAGE_W_MM / sumW;   // mm per editor-px (preserves aspect for rows + fonts)
+  const sumH = rowH.reduce((a, b) => a + b, 0) || 1;
+  const PAGE_W_MM = 287;             // A4 landscape printable width  (297 − 2×5mm margin)
+  // 198, not the true 200mm budget (210 − 2×5mm margin): `rowH[r] * scale` is only
+  // the CONTENT height of each row — accumulated cell borders across ~59 rows add
+  // real height on top of that sum which this formula can't see. Measured live: the
+  // Standard template's blank table (no CN data at all) already rendered at
+  // ~200.0mm against the true 200mm page — effectively zero slack — so signing a
+  // sheet (three ~16mm seal images, correctly height-pinned to their own row — see
+  // the img-cell comment below) was enough to tip it to a near-blank second page.
+  // Reported live on C31-04110, reproduced on an unrelated CN (C31-00164) on the
+  // same (KS-B80, 1061) combo, while every UNSIGNED sheet on it rendered fine — the
+  // seals were the trigger, not the cause; the template never actually had headroom.
+  // 2mm covers the measured border overhead with margin to spare.
+  const PAGE_H_MM = 198;
+  // Taking the smaller of the width- and height-based scale shrinks the whole grid
+  // (preserving its own aspect ratio) only on templates that need it to guarantee
+  // one page; a template already comfortably under budget is untouched, since its
+  // width-based scale is already the smaller (and still-selected) one.
+  const scale = Math.min(PAGE_W_MM / sumW, PAGE_H_MM / sumH);   // mm per editor-px
 
   // Merge lookup: covered cells are skipped; base cell gets row/col span.
   const covered = new Set();

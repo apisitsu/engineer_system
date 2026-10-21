@@ -13,9 +13,6 @@ import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { useTheme } from '../../../../theme';
-import { useAuthStore } from '../../../../stores/authStore';
-import AutoStampSection from '../sds/AutoStampSection';
-import ApprovalRoleConfig from '../sds/ApprovalRoleConfig';
 
 // Same status list as the backend's pbringConstants.STATUS — kept in sync by hand,
 // same way the prototype's own STATUS array was a plain shared constant.
@@ -1035,7 +1032,10 @@ const PBRING_HEADER_OVERRIDE_FIELDS = [
 ];
 const PBRING_HEADER_OVERRIDE_KEYS = new Set(PBRING_HEADER_OVERRIDE_FIELDS.map((f) => f.key));
 
-function ParamConfigTab() {
+// Exported so SdsV2AdminPage.jsx (the "PB Ring Parts" scope) can render it — Setup
+// Data Sheet management for PB Ring now lives there, see SdsV2AdminPage's `scope`
+// toggle. No props: fully self-contained, same as it was as a local tab here.
+export function ParamConfigTab() {
   const { message } = App.useApp();
   const [allMachines, setAllMachines] = useState([]);
   const [search, setSearch] = useState('');
@@ -1485,7 +1485,7 @@ function ParamConfigTab() {
 // Grinding-area photos stay exact-match on (cn, process_code) — only the
 // grinding machines use this layout; the 2 turning machines render through
 // a different template with no photo boxes PB Ring has built yet.
-function ImagesTab() {
+export function ImagesTab() {
   const { message } = App.useApp();
   const [machines, setMachines] = useState([]);
   const [selectedMachine, setSelectedMachine] = useState(null);
@@ -1881,7 +1881,7 @@ const PBRING_TURNING_PROCESS_CODE = '0081';
 // collapsed until the admin clicks "+ New Tool Condition" — by user
 // decision (2026-10-10), it shouldn't just sit open on the page.
 
-function ConditionTab() {
+export function ConditionTab() {
   const { message } = App.useApp();
   const [machines, setMachines] = useState([]);
   const [selectedMachine, setSelectedMachine] = useState(null);
@@ -2075,60 +2075,16 @@ function ConditionTab() {
 
 export default function PbRingMonitorPage() {
   const C = useColors();
-  const userRole = useAuthStore((s) => s.userRole);
-  const userDepartment = useAuthStore((s) => s.userDepartment);
-  const userPerms = useAuthStore((s) => s.userPerms);
-  const isPbringAdmin = userRole === 'AD' || userDepartment === 'AD'
-    || (userPerms || []).includes('pbring_admin') || (userPerms || []).includes('all_mtc');
 
+  // Setup Data Sheet management (Parameter Config / Tool Condition / Images /
+  // Approval Roles / Auto Stamp) moved to SdsV2AdminPage.jsx's "PB Ring Parts"
+  // scope (2026-10-21) — this page keeps only the tooling procurement/inventory
+  // tracking tabs (Search, +New HW, Summary), which are a different concern.
   const tabItems = [
     { key: 'search', label: 'Search (HW / Process / Machine)', children: <SearchTab C={C} /> },
     { key: 'add-hw', label: '+ New HW', children: <AddHwTab /> },
     { key: 'summary', label: 'Summary', children: <SummaryTab /> },
   ];
-  if (isPbringAdmin) {
-    // "Grid Templates (PDF)" (machine<->template assignment + re-import,
-    // the Phase 5 admin surface) was removed once Phase 6 gave every PB Ring
-    // machine — grinding AND turning — live-layout coverage: nothing reads
-    // pbring_grid_template/pbring_machine_type.grid_template_id at render
-    // time anymore, so there was nothing left for that tab to configure.
-    tabItems.push({ key: 'param-config', label: 'Parameter Config', children: <ParamConfigTab /> });
-    tabItems.push({ key: 'condition', label: 'Tool Condition', children: <ConditionTab /> });
-    tabItems.push({ key: 'images', label: 'Images', children: <ImagesTab /> });
-    // Reuses the real SDS Approval Roles UI as-is, pointed at PB Ring's own
-    // pbring_approval_role_config — user request (2026-10-12). Sign/revoke
-    // on /grid/approval now consult this table (see pbringGridController.js);
-    // an empty table (the default) still means "admin only", same as before.
-    tabItems.push({
-      key: 'approval-roles', label: 'Approval Roles',
-      children: (
-        <Card style={{ maxWidth: 820 }}>
-          <ApprovalRoleConfig
-            apiBase={server.PBRING_GRID_APPROVAL_ROLE_CONFIG}
-            alertMessage="Configure PB Ring signing permissions (Prepared / Checked / Approved)"
-            adminHint="Admins (department/role = AD, or the pbring_admin / all_mtc permission) can already sign every role without a rule."
-          />
-        </Card>
-      ),
-    });
-    // Reuses the real SDS Auto Stamp UI as-is, pointed at PB Ring's own
-    // pbring_auto_stamp_config/pbringAutoStamp.js — user request (2026-10-12).
-    // See AutoStampSection.jsx's header and pbringGridController.js's
-    // wrapAutoStampConfigForUi for how the two backends line up.
-    tabItems.push({
-      key: 'auto-stamp', label: 'Auto Stamp',
-      children: (
-        <Card style={{ maxWidth: 820 }}>
-          <AutoStampSection
-            configUrl={server.PBRING_GRID_AUTO_STAMP_CONFIG}
-            runUrl={server.PBRING_GRID_AUTO_STAMP_RUN}
-            adminPerm="pbring_admin"
-            hasRoleConfig={false}
-          />
-        </Card>
-      ),
-    });
-  }
 
   const bodyContent = (
     <Tabs defaultActiveKey="search" items={tabItems} />

@@ -3,17 +3,21 @@
 /**
  * pbringAutoStamp.js — Auto Stamp for PB Ring sheets.
  *
- * Mirrors the real sdsAutoStamp.js (sds_auto_stamp_config, run off the back
- * of every coverage build, same NO_STAMP selection, same fail-open
- * discipline, same MAX_PER_RUN guardrail) but writes ONLY to
- * pbring_sds_approval, gated by pbring_auto_stamp_config — never the real
- * sds_approval / sds_auto_stamp_config. Same reason pbring_sds_approval
- * exists as its own table at all: several PB Ring machine codes share
- * their real display name with an already-registered SDS machine, and an
- * auto-signer must never stamp a real production sheet nobody reviewed.
+ * Mirrors the real sdsAutoStamp.js (run off the back of every coverage
+ * build, same NO_STAMP selection, same fail-open discipline, same
+ * MAX_PER_RUN guardrail) but writes ONLY to pbring_sds_approval — never the
+ * real sds_approval. Several PB Ring machine codes share their real display
+ * name with an already-registered SDS machine, and an auto-signer must
+ * never stamp a real production sheet nobody reviewed — that write-target
+ * separation stays.
  *
- * ONE global toggle gates the whole thing: pbring_auto_stamp_config.enabled
- * (default false). With it off, runAutoStamp is a no-op.
+ * The CONFIG is now shared with General Parts (2026-10-21, same change as
+ * Approval Roles): enabled/max_per_run/who-signs-each-role come from
+ * `sdsAutoStamp.resolveConfig()` — the real `sds_auto_stamp_config` row,
+ * falling back to the (also now-shared, see pbringGridService's
+ * getPbRingRoleConfig) `sds_approval_role_config` — so one toggle and one
+ * set of responsible people governs auto-stamping for both part families.
+ * `pbring_auto_stamp_config` is untouched but no longer read here.
  *
  * Called from sdsV2ReportController.kickCoverageBuild() alongside the real
  * sdsAutoStamp — same cadence, same trigger point — but entirely
@@ -22,8 +26,9 @@
  */
 
 const { buildPbRingCoverageRows } = require('./pbringCoverageService');
+const { resolveConfig } = require('../mtc/services/sdsAutoStamp');
 const {
-  getPbRingAutoStampConfig, getPbRingApproval, signPbRingApproval, syncPbRingApprovalBoardCard,
+  getPbRingApproval, signPbRingApproval, syncPbRingApprovalBoardCard,
 } = require('./pbringGridService');
 
 const ROLE_ORDER = ['prepared', 'checked', 'approved'];
@@ -42,7 +47,7 @@ async function runAutoStamp(classifyCoverage, opts = {}) {
   const summary = { ok: true, enabled: false, dryRun, candidates: 0, sheetsChanged: 0, rolesWritten: 0, stamped: [], skipped: [], errors: [] };
 
   try {
-    const cfg = await getPbRingAutoStampConfig();
+    const cfg = await resolveConfig();
     summary.enabled = cfg.enabled;
     if (!cfg.enabled) return { ...summary, reason: 'disabled' };
 
@@ -78,7 +83,7 @@ async function runAutoStamp(classifyCoverage, opts = {}) {
         let lastRole = null;
         for (const role of ROLE_ORDER) {
           if (sheet && sheet[`${role}_em_id`]) continue; // already signed (any source) — keep going
-          const person = cfg[role];
+          const person = cfg.signers[role];
           if (!person) break; // no responsible person configured → stop here, never skip ahead
           if (!dryRun) {
             await signPbRingApproval(cn, mcKey, processCode, role, person.em_id, person.name, 'auto');
@@ -98,7 +103,7 @@ async function runAutoStamp(classifyCoverage, opts = {}) {
         summary.stamped.push({ cn, machine_type_name: mcKey, process_code: processCode, roles: wrote });
 
         if (!dryRun && lastRole) {
-          const person = cfg[lastRole];
+          const person = cfg.signers[lastRole];
           await syncPbRingApprovalBoardCard({ io, cn, machineTypeName: mcKey, processCode, role: lastRole, signerName: person.name });
         }
       } catch (e) {
