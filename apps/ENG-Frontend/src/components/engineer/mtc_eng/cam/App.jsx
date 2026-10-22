@@ -8,15 +8,15 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   Layout, Button, Statistic, Alert, Space, Typography, theme,
-  InputNumber, Segmented, Switch, Divider, Slider, Upload, Tag, Tooltip, Drawer,
+  InputNumber, Segmented, Switch, Divider, Slider, Tag, Tooltip, Drawer,
   App as AntdApp,
 } from 'antd';
 import {
-  ThunderboltOutlined, BulbOutlined,
-  PlayCircleFilled, PauseCircleFilled, UploadOutlined, StepBackwardOutlined,
+  ThunderboltOutlined,
+  PlayCircleFilled, PauseCircleFilled, StepBackwardOutlined,
   StepForwardOutlined, FastBackwardOutlined, RollbackOutlined,
-  ExpandOutlined, DownloadOutlined,
-  PlusOutlined, ColumnWidthOutlined, DatabaseOutlined, SettingOutlined,
+  ExpandOutlined,
+  PlusOutlined, ColumnWidthOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import CommandButton from './components/CommandButton.jsx';
 import {
@@ -54,7 +54,6 @@ import { STANDARD_TURN_TOOLS } from './engine/sim/turning.js';
 import {
   billetBox, billetWarnings, billetExtents, previewSolid, suggestBillet,
 } from './engine/sim/billet.js';
-import { SAMPLE_GCODE, SAMPLE_TURNING } from './SAMPLE_GCODE.js';
 import Viewport from './components/Viewport.jsx';
 import PositionReadout from './components/PositionReadout.jsx';
 import SketchToolbar from './components/SketchToolbar.jsx';
@@ -1078,8 +1077,13 @@ export default function App() {
           <MenuBar
             onExportGcode={onExportGcode}
             libraryOpen={libraryOpen}
-            onToggleLibrary={() => setLibraryOpen((v) => !v)}
-            onOpenSetup={() => setSettingsOpen(true)}
+            // Setup and Library are two separate drawers on the same edge —
+            // letting both be open at once is how two antd Drawers on one
+            // placement end up fighting over the same portal slot. One closes
+            // the other, the way `data-open-setup` below already did before
+            // Library had a drawer of its own to collide with.
+            onToggleLibrary={() => { setSettingsOpen(false); setLibraryOpen((v) => !v); }}
+            onOpenSetup={() => { setLibraryOpen(false); setSettingsOpen(true); }}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0 8px' }}>
             <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 22 }} />
@@ -1135,95 +1139,41 @@ export default function App() {
           </Sider>
 
           <Drawer
-            title="Setup"
+            // Setup and Library are two different jobs — machine/tooling/stock
+            // vs. document management — so the title says plainly which one is
+            // open, and they share this one Drawer rather than sitting side by
+            // side as two. Separate Drawers were tried first and looked broken:
+            // switching from one to the other via a toolbar button went blank,
+            // because antd's default mask sits at z-index 1000 over the whole
+            // page — including the very button that was supposed to open the
+            // next one, which a click could never actually reach. `mask={false}`
+            // is the fix, not a stacking order between two Drawers (there's
+            // only one now) — the panel itself never needed the dimmed
+            // backdrop a modal does; it's a persistent side panel, not a dialog.
+            title={libraryOpen ? 'Library' : 'Setup'}
             placement="left"
             width={470}
-            open={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
+            open={settingsOpen || libraryOpen}
+            onClose={() => { setSettingsOpen(false); setLibraryOpen(false); }}
             destroyOnHidden={false}
+            mask={false}
             styles={{ body: { background: CAD.panelBg, padding: 16 } }}
           >
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              {/* One rail, two groups, the way a CAD command bar is built:
-                  what brings a program IN (parse, open, sample), a separator,
-                  then what keeps one or hands it on (the library, export).
-                  Icon-only, like every other rail in the app — the names and
-                  the descriptions come from the command catalogue and appear on
-                  hover. See `engine/view/commands.js`.
-
-                  These were two stacked `Space`s, and five glyphs across a
-                  430 px sidebar had no reason to be on two lines: the wrap was
-                  buying nothing and the second row read as a second, unrelated
-                  toolbar. Grouped by a rule instead, which says the same thing
-                  in one line.
-
-                  Saving to a **file** — the project as .camweb.json, and opening
-                  one back — is deliberately not here: the library keeps the same
-                  thing under a name, with no dialog and no folder to find again,
-                  and two ways to do one job on one rail is two ways to be unsure
-                  which one you used. A file still opens by dropping it on the
-                  window. */}
-              {(show.files || show.project) && (
-              <Space wrap size={6} align="center">
-                {/* **Parse is on the viewport rail**, beside Simulate. It is pressed
-                    after every edit to the program, and pressing it from in here meant
-                    opening the drawer over the backplot it redraws. What stays is the
-                    two ways of *getting* a program — neither of which is a mid-session
-                    action. */}
-                {show.files && (
-                <Upload
-                  accept=".nc,.gcode,.gc,.tap,.cnc,.ngc,.txt,.mpf"
-                  showUploadList={false}
-                  beforeUpload={(file) => { loadFile(file); return false; }}
-                >
-                  <CommandButton id="openProgram" icon={<UploadOutlined />} />
-                </Upload>
-                )}
-                {show.files && (
-                <CommandButton
-                  id="sample"
-                  icon={<BulbOutlined />}
-                  onClick={() => parse(turning ? SAMPLE_TURNING : SAMPLE_GCODE)}
-                />
-                )}
-                {show.files && show.project && (
-                  <div style={{ width: 1, height: 22, background: CAD.border, margin: '0 2px' }} />
-                )}
-                {show.project && (
-                <CommandButton
-                  id="openLibrary"
-                  icon={<DatabaseOutlined />}
-                  type={libraryOpen ? 'primary' : 'default'}
-                  ghost={libraryOpen}
-                  onClick={() => setLibraryOpen((v) => !v)}
-                />
-                )}
-                {show.project && (
-                <CommandButton
-                  id="exportGcode"
-                  icon={<DownloadOutlined />}
-                  disabled={!gcode}
-                  onClick={onExportGcode}
-                />
-                )}
+            {libraryOpen ? (
+              // The library works *in* this drawer rather than in a popover:
+              // saving, looking through what is there, opening one and
+              // deleting two is a session, and a layer that shuts when you
+              // click near its edge is the wrong container for one.
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <LibraryPanel inline open={libraryOpen} onDone={setSaveMsg} />
+                <Text style={{ color: CAD.dim, fontSize: 12 }}>
+                  …or drag &amp; drop a .nc / .gcode / .tap program, a .camweb.json project,
+                  or an .stl / .obj / .ply to machine
+                </Text>
+                {saveMsg && <Alert type="success" showIcon message={saveMsg} />}
               </Space>
-              )}
-
-              {show.project && <>
-              {/* The library works *in* the sidebar rather than in a popover:
-                  saving, looking through what is there, opening one and deleting
-                  two is a session, and a layer that shuts when you click near
-                  its edge is the wrong container for one. */}
-              <LibraryPanel inline open={libraryOpen} onDone={setSaveMsg} />
-
-              <Text style={{ color: CAD.dim, fontSize: 12 }}>
-                …or drag &amp; drop a .nc / .gcode / .tap program, a .camweb.json project,
-                or an .stl / .obj / .ply to machine
-              </Text>
-
-              {saveMsg && <Alert type="success" showIcon message={saveMsg} />}
-              </>}
-
+            ) : (
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
               {/* CAM from a model. Sits above the program panel because it is
                   what *produces* a program — the G-code below is its output. */}
               {show.cam && <CamPanel />}
@@ -1737,6 +1687,7 @@ export default function App() {
               )}
               </>}
             </Space>
+            )}
           </Drawer>
 
           <Content style={{ position: 'relative' }}>
@@ -1837,7 +1788,7 @@ export default function App() {
                 <Button
                   size="small"
                   icon={<SettingOutlined />}
-                  onClick={() => setSettingsOpen(true)}
+                  onClick={() => { setLibraryOpen(false); setSettingsOpen(true); }}
                   data-open-setup
                 >
                   Setup

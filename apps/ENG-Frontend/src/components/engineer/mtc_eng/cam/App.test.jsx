@@ -141,21 +141,21 @@ afterEach(async () => {
 });
 
 describe('the sidebar while setting up', () => {
-  it('offers the file, project and setup controls', async () => {
+  it('offers the setup controls — open/sample/library/export moved to the File menu', async () => {
     await mount();
-    expect(siderCommands()).toEqual(
-      expect.arrayContaining(['openProgram', 'openLibrary', 'exportGcode', 'simulateVoxel']),
+    expect(siderCommands()).toEqual(expect.arrayContaining(['simulateVoxel']));
+    expect(siderCommands()).not.toEqual(
+      expect.arrayContaining(['openProgram', 'openLibrary', 'exportGcode']),
     );
   });
 
-  it('keeps Parse on the viewport rail, with the two ways of getting a program in the drawer', async () => {
+  it('keeps Parse on the viewport rail — it is pressed after every edit', async () => {
     // Parse is pressed after every edit and redraws the backplot; from the drawer
     // it was behind the picture it redraws. Opening a file and loading the sample
-    // are not mid-session actions, so they stay.
+    // are not mid-session actions — see the File menu, `MenuBar.test.jsx`.
     await mount();
     expect(siderCommands()).not.toContain('parse');
     expect(railCommands()).toContain('parse');
-    expect(siderCommands()).toEqual(expect.arrayContaining(['openProgram', 'sample']));
   });
 
   it('keeps Simulate on the viewport rail and its grid size in the drawer', async () => {
@@ -187,16 +187,6 @@ describe('the sidebar while setting up', () => {
 });
 
 describe('pressing Play collapses the sidebar to the program', () => {
-  it('drops the file and project buttons', async () => {
-    await mount();
-    expect(siderCommands()).toContain('openProgram');
-    await setStore({ playing: true });
-    const cmds = siderCommands();
-    expect(cmds).not.toContain('openProgram');
-    expect(cmds).not.toContain('sample');
-    expect(cmds).not.toContain('openLibrary');
-  });
-
   it('drops the material-removal controls', async () => {
     await mount();
     await setStore({ playing: true });
@@ -247,9 +237,8 @@ describe('pressing Play collapses the sidebar to the program', () => {
   it('brings the setup back on pause', async () => {
     await mount();
     await setStore({ playing: true });
-    expect(siderCommands()).not.toContain('openProgram');
+    expect(sider().textContent).not.toContain('Material removal');
     await setStore({ playing: false });
-    expect(siderCommands()).toContain('openProgram');
     expect(sider().textContent).toContain('Material removal');
   });
 });
@@ -1070,35 +1059,91 @@ describe('the cutter type of a tool the program named', () => {
   });
 });
 
-describe('the library is a place in the sidebar, not a menu over it', () => {
-  it('offers one row: the library, and exporting the program', async () => {
+describe('the library and Setup share one drawer, titled for whichever is open', () => {
+  // Open program / Load sample / Library / Export G-code used to double as
+  // their own icon row at the top of the Setup drawer; now that the File menu
+  // carries the same four actions, that row is gone and these are reached
+  // from there instead — `MenuBar.test.jsx` covers the menu itself. Library
+  // also used to show its content *inside* the "Setup"-titled drawer, which
+  // made it look like a sub-mode of Setup rather than the separate thing it
+  // is — the title now switches to say plainly which one is open, and
+  // Setup's own content is hidden while Library's is showing.
+  //
+  // They were briefly two separate Drawer components before this. That broke
+  // in a way worth remembering: antd's default mask sits at z-index 1000 over
+  // the whole page, including whichever button was about to open the *other*
+  // drawer — so switching from one to the other via a toolbar button landed
+  // the click on the mask instead, which just closed what was open. One
+  // Drawer with `mask={false}` sidesteps it; see the comment on the Drawer
+  // itself in App.jsx.
+  async function openFileMenu() {
+    const title = [...document.querySelectorAll('.ant-menu-submenu-title')]
+      .find((el) => el.textContent.trim().startsWith('File'));
+    await act(async () => { title.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => { await new Promise((r) => { setTimeout(r, 30); }); });
+  }
+  const fileMenuItem = (label) => [...document.querySelectorAll('li.ant-menu-item')]
+    .find((el) => el.textContent.includes(label));
+  const drawerTitle = () => q('.ant-drawer-title')?.textContent ?? null;
+
+  it('is no longer its own row in the drawer — File carries it instead', async () => {
     await mount();
     const ids = siderCommands();
-    expect(ids).toContain('openLibrary');
-    expect(ids).toContain('exportGcode');
-    // Saving to a file, and opening one back, have gone from this rail — the
-    // library keeps the same session without a dialog, and two ways to do one
-    // job is two ways to be unsure which one was used.
-    expect(ids).not.toContain('saveProject');
-    expect(ids).not.toContain('openProject');
-    expect(ids).not.toContain('saveToLibrary');
+    expect(ids).not.toContain('openProgram');
+    expect(ids).not.toContain('openLibrary');
+    expect(ids).not.toContain('exportGcode');
+    await openFileMenu();
+    expect(fileMenuItem('Open program')).toBeTruthy();
+    expect(fileMenuItem('Library')).toBeTruthy();
+    expect(fileMenuItem('Export G-code')).toBeTruthy();
   });
 
-  it('stays shut until the library button is pressed', async () => {
-    await mount();
+  it('stays shut until the library item is chosen', async () => {
+    await mount({ setup: false });
     expect(q('[data-testid="library-panel"]')).toBeNull();
   });
 
-  it('opens inside the sidebar, and stays open', async () => {
-    await mount();
-    await act(async () => { cmd('openLibrary').click(); });
-    const panel = sider().querySelector('[data-testid="library-panel"]');
+  it('opens titled "Library", and stays open', async () => {
+    await mount({ setup: false });
+    await openFileMenu();
+    await act(async () => { fileMenuItem('Library').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(drawerTitle()).toBe('Library');
+    const panel = sider()?.querySelector('[data-testid="library-panel"]');
     expect(panel).not.toBeNull();
-    // In the sidebar itself, not portalled out to a floating layer.
+    // A real drawer, not a floating layer that shuts on an outside click.
     expect(document.body.contains(panel)).toBe(true);
-    // A second press closes it again.
-    await act(async () => { cmd('openLibrary').click(); });
+    // Choosing it again closes it.
+    await openFileMenu();
+    await act(async () => { fileMenuItem('Library').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(q('[data-testid="library-panel"]')).toBeNull();
+  });
+
+  it('opens on its own, without Setup ever having been opened', async () => {
+    await mount({ setup: false });
+    await openFileMenu();
+    await act(async () => { fileMenuItem('Library').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(drawerTitle()).toBe('Library');
+    expect(sider()?.textContent).not.toContain('CAM from a model');
+  });
+
+  it('and the Setup button switch the same drawer back and forth', async () => {
+    await mount({ setup: false });
+    await openFileMenu();
+    await act(async () => { fileMenuItem('Library').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(drawerTitle()).toBe('Library');
+    expect(q('[data-testid="library-panel"]')).not.toBeNull();
+
+    // The toolbar's Setup button, clicked while Library is showing — this is
+    // the exact click that landed on the mask before `mask={false}`.
+    await openSetup();
+    expect(drawerTitle()).toBe('Setup');
+    expect(sider()?.textContent).toContain('CAM from a model');
+    expect(q('[data-testid="library-panel"]')).toBeNull();
+
+    await openFileMenu();
+    await act(async () => { fileMenuItem('Library').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(drawerTitle()).toBe('Library');
+    expect(q('[data-testid="library-panel"]')).not.toBeNull();
   });
 });
 
