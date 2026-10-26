@@ -113,6 +113,127 @@ function gridFromWorksheet(ws, rows, cols) {
   return { rows, cols, colW, rowH, borders, fills, cells, merges };
 }
 
+// Reverse of xlsxEdge/XLSX_BORDER_STYLE: the editor's own {w,s} vocabulary (the
+// LINE_WEIGHTS × LINE_STYLES dropdowns in SdsBlankTemplateGrid.jsx — exactly the
+// widths/styles XLSX_BORDER_STYLE's values ever take) → an Excel named border
+// style. Several Excel styles collapse to one editor style on import (dashDot,
+// dashDotDot, slantDashDot all → "dashed"); going back picks the one Excel style
+// per (style, weight) pair that reads the same, which is the best this can do
+// without storing the original Excel style name forever.
+const edgeToXlsxStyle = (w, s) => {
+  const weight = Number(w) || 1;
+  if (s === 'dotted') return 'dotted';
+  if (s === 'double') return 'double';
+  if (s === 'dashed') return weight >= 1.5 ? 'mediumDashed' : 'dashed';
+  if (weight <= 0.5) return 'hair';
+  if (weight <= 1) return 'thin';
+  if (weight <= 1.5) return 'medium';
+  return 'thick';
+};
+const hexToArgb = (hex) => {
+  if (!hex) return null;
+  const h = String(hex).replace('#', '');
+  return 'FF' + h.toUpperCase();
+};
+
+/** Mirror of gridFromWorksheet: editor grid model → a new worksheet on `wb`, for
+ *  "Export xlsx" (the inverse of "Upload xlsx"). colW/rowH use the same px ⇄
+ *  Excel-unit formulas gridFromWorksheet reads, run backwards, so a round trip
+ *  (export, then re-import) reproduces column/row sizing to within Excel's own
+ *  coarser units. Missing colW/rowH fall back to the SAME defaults the PDF
+ *  renderer uses for an unset cell (sdsV2HeadlessController's `fit()` — 30px /
+ *  22px) rather than Excel's own default (8.43 chars), so an export matches what
+ *  actually prints today, not what a brand-new blank xlsx column looks like.
+ */
+function worksheetFromGrid(grid, wb) {
+  const rows = Math.max(1, parseInt(grid.rows, 10) || 56);
+  const cols = Math.max(1, parseInt(grid.cols, 10) || 48);
+  const colW = Array.isArray(grid.colW) ? grid.colW : [];
+  const rowH = Array.isArray(grid.rowH) ? grid.rowH : [];
+  const borders = grid.borders || {};
+  const fills = grid.fills || {};
+  const cells = grid.cells || {};
+  const merges = Array.isArray(grid.merges) ? grid.merges : [];
+
+  const ws = wb.addWorksheet('Sheet1');
+
+  for (let c = 0; c < cols; c++) {
+    const px = Number(colW[c]) > 0 ? Number(colW[c]) : 30;
+    ws.getColumn(c + 1).width = Math.max(1, (px - 5) / 7);
+  }
+  for (let r = 0; r < rows; r++) {
+    const px = Number(rowH[r]) > 0 ? Number(rowH[r]) : 22;
+    ws.getRow(r + 1).height = Math.max(1, px * 72 / 96);
+  }
+
+  // Which cells a merge COVERS but isn't the master of — mirrors gridFromWorksheet's
+  // own `isCovered` skip (its comment: reading .text off a covered cell whose master
+  // is empty throws inside exceljs) and matters just as much writing: a covered cell
+  // can still carry its OWN stale `cells[key]` entry in grid_json (e.g. real text that
+  // was there before the UI editor merged over it), and ExcelJS merged cells share one
+  // underlying value — the LAST (r,c) in iteration order to set .value therefore wins,
+  // not necessarily the master. Without this, that stale text can silently overwrite
+  // or blank out the real banner/footer text. Borders and fills are NOT skipped here:
+  // Excel (and gridFromWorksheet's own read) store those per physical cell regardless
+  // of merge coverage, which is how a merged region gets a full border on all its edges.
+  const coveredNotMaster = new Set();
+  for (const m of merges) {
+    const r1 = +m.r1, c1 = +m.c1, r2 = +m.r2, c2 = +m.c2;
+    if ([r1, c1, r2, c2].some((n) => Number.isNaN(n))) continue;
+    for (let r = r1; r <= r2; r++) {
+      for (let c = c1; c <= c2; c++) {
+        if (r === r1 && c === c1) continue; // the master itself
+        coveredNotMaster.add(`${r},${c}`);
+      }
+    }
+    try { ws.mergeCells(r1 + 1, c1 + 1, r2 + 1, c2 + 1); } catch (_) { /* overlapping merge — skip it rather than fail the whole export */ }
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const key = `${r},${c}`;
+      const edge = borders[key];
+      const fill = fills[key];
+      const cd = coveredNotMaster.has(key) ? null : cells[key];
+      if (!edge && !fill && !cd) continue;
+
+      const cell = ws.getCell(r + 1, c + 1);
+
+      if (edge) {
+        const border = {};
+        for (const [side, prop] of [['t', 'top'], ['r', 'right'], ['b', 'bottom'], ['l', 'left']]) {
+          const e = edge[side];
+          if (!e) continue;
+          border[prop] = { style: edgeToXlsxStyle(e.w, e.s), color: { argb: hexToArgb(e.c) || 'FF000000' } };
+        }
+        cell.border = border;
+      }
+      if (fill) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(fill) } };
+      }
+      if (cd) {
+        if (cd.v != null) cell.value = cd.v;
+        const f = cd.f || {};
+        if (f.name || f.size || f.bold || f.italic || f.color) {
+          cell.font = {
+            name: f.name || undefined,
+            size: f.size || undefined,
+            bold: !!f.bold,
+            italic: !!f.italic,
+            color: f.color ? { argb: hexToArgb(f.color) } : undefined,
+          };
+        }
+        const a = cd.a || {};
+        if (a.h || a.v || a.wrap) {
+          cell.alignment = { horizontal: a.h || undefined, vertical: a.v || undefined, wrapText: !!a.wrap };
+        }
+      }
+    }
+  }
+
+  return ws;
+}
+
 /** Parse the bundled sds_template.xlsx into the editor's grid model (fixed A1:AV56 —
  *  the file's known printable range). */
 async function parseSdsXlsxGrid() {
@@ -1480,6 +1601,33 @@ router.get('/template-grid', isSdsExcelImageAdmin, async (req, res) => {
   }
 });
 
+/** GET /api/sds/v2/admin/template-grid/export-xlsx — the DEFAULT template's
+ *  current design as a downloadable .xlsx. Inverse of "Upload xlsx" — see
+ *  worksheetFromGrid.
+ */
+router.get('/template-grid/export-xlsx', isSdsExcelImageAdmin, async (req, res) => {
+  try {
+    await ensureGridTemplateTable();
+    const r = await engPool.query(
+      `SELECT name, grid_json FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE is_default LIMIT 1`
+    );
+    if (!r.rows[0]?.grid_json) return res.status(404).json({ error: 'No default template found' });
+    let grid = null;
+    try { grid = JSON.parse(r.rows[0].grid_json); } catch (_) { grid = null; }
+    if (!grid) return res.status(500).json({ error: 'Template has no grid data' });
+
+    const wb = new ExcelJS.Workbook();
+    worksheetFromGrid(grid, wb);
+    const buf = await wb.xlsx.writeBuffer();
+    const safeName = String(r.rows[0].name || 'template').replace(/[^\w\- ]+/g, '_');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.xlsx"`);
+    res.send(Buffer.from(buf));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** GET /api/sds/v2/admin/template-grid/from-xlsx
  *  Parses sds_template.xlsx into the editor grid model (A1:AV56) so the editor
  *  exactly mirrors the real Excel template — column widths, row heights, borders,
@@ -1605,6 +1753,34 @@ router.get('/template-grids/:id', isSdsExcelImageAdmin, async (req, res) => {
     let grid = null;
     try { grid = JSON.parse(r.rows[0].grid_json); } catch (_) { grid = null; }
     res.json({ id: r.rows[0].id, name: r.rows[0].name, is_default: r.rows[0].is_default, grid, updated_at: r.rows[0].updated_at });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/template-grids/:id/export-xlsx — one specific
+ *  template's current design as a downloadable .xlsx. Inverse of "Upload
+ *  xlsx" — see worksheetFromGrid.
+ */
+router.get('/template-grids/:id/export-xlsx', isSdsExcelImageAdmin, async (req, res) => {
+  try {
+    await ensureGridTemplateTable();
+    const r = await engPool.query(
+      `SELECT name, grid_json FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Template not found' });
+    let grid = null;
+    try { grid = JSON.parse(r.rows[0].grid_json); } catch (_) { grid = null; }
+    if (!grid) return res.status(500).json({ error: 'Template has no grid data' });
+
+    const wb = new ExcelJS.Workbook();
+    worksheetFromGrid(grid, wb);
+    const buf = await wb.xlsx.writeBuffer();
+    const safeName = String(r.rows[0].name || 'template').replace(/[^\w\- ]+/g, '_');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.xlsx"`);
+    res.send(Buffer.from(buf));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

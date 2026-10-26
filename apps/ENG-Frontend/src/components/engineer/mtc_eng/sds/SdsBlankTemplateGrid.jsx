@@ -328,6 +328,18 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   // View the blank template PDF WITHOUT saving — opens the currently-saved layout.
   const viewBlankPdf = () => { window.open(blankPdfUrl, '_blank'); };
 
+  // Export the CURRENTLY SAVED layout as .xlsx (inverse of "Upload xlsx" — same
+  // worksheetFromGrid on the backend). Like "View PDF", not "Save + PDF": it
+  // downloads what's saved, not any unsaved edits in the editor right now.
+  const exportXlsxUrl = useMemo(() => {
+    const token = localStorage.getItem('token') || '';
+    const base = templateId
+      ? `${server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS}/${templateId}/export-xlsx`
+      : `${server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID}/export-xlsx`;
+    return `${base}?token=${encodeURIComponent(token)}`;
+  }, [templateId]);
+  const exportXlsx = () => { window.open(exportXlsxUrl, '_blank'); };
+
   // ── Template management ──────────────────────────────────────────────────────
   const switchTemplate = async (id) => { setTemplateId(id); await loadTemplate(id); };
 
@@ -1043,13 +1055,17 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
         <Divider type="vertical" style={{ margin: '0 2px' }} />
 
         <Text code style={{ fontSize: 11 }}>{selLabel}</Text>
-        <Tooltip title="Import layout from sds_template.xlsx (overwrites unsaved edits)">
-          <Button size="small" icon={<FileExcelOutlined />} onClick={importXlsx} loading={loading}>xlsx</Button>
-        </Tooltip>
+        {/* "xlsx" (import from the bundled sds_template.xlsx) hidden by request
+            (2026-10-26) — "Upload xlsx" (pick any workbook) covers the same
+            import path and is kept. importXlsx() is still defined below, so
+            this is a one-line revert if it's wanted back. */}
         <Tooltip title="Import layout from any .xlsx you pick (overwrites unsaved edits)">
           <Upload accept=".xlsx" showUploadList={false} beforeUpload={importXlsxFile}>
             <Button size="small" icon={<UploadOutlined />} loading={loading}>Upload xlsx</Button>
           </Upload>
+        </Tooltip>
+        <Tooltip title="Download the SAVED layout as .xlsx (save first if you have unsaved edits)">
+          <Button size="small" icon={<FileExcelOutlined />} onClick={exportXlsx}>Export xlsx</Button>
         </Tooltip>
         <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={loading}>Reload</Button>
         <Button size="small" icon={<SaveOutlined />} onClick={save} loading={saving}>Save</Button>
