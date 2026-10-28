@@ -105,13 +105,30 @@ export function odHolderGeometry(radius = 0.8, shape = {}) {
   };
 }
 
-/** Boring bar: a round shank along +Z with a small insert at the tip. */
+/**
+ * Boring bar: a round shank along +Z with a small insert at the tip.
+ *
+ * The insert's own `x`/`z` are computed here, not left for `Viewport.jsx` to
+ * place inline the way an earlier version of this did — the file's own
+ * header says every number lives here *because* it's tested, and an inline
+ * position in the component is exactly the untested exception that slips
+ * past that. It mattered in practice: the insert is a `sides`-gon rotated
+ * 45° about its own axis (so a square insert reads as a diamond), and its
+ * reach toward the bar is `r·cos(45°)` — the old inline position landed
+ * that reach barely at `barRadius`, with no margin for rounding either way,
+ * which is how it read as a visible gap rather than a seated insert.
+ */
 export function boringBarGeometry(radius = 0.8, shape = {}) {
   const { s, thickY, standout } = toolScale(radius);
   const sides = shape.sides ?? 4;
   const angle = shape.angle ?? 35;
   const r = s * 0.42;
   const barRadius = s * 0.55;
+  // How far the insert's own corner reaches toward +Z from its centre, once
+  // rotated 45° about Y — exact for the sides=4 case this always ships with;
+  // a generic sides-gon's reach varies with its own rotation, but Math.SQRT1_2
+  // (≈cos 45°) is the worst case among the vertices, so it never overshoots.
+  const reach = r * Math.SQRT1_2;
   return {
     barRadius,
     barLength: s * 6,
@@ -119,10 +136,57 @@ export function boringBarGeometry(radius = 0.8, shape = {}) {
     // rake face is not tangent to it — a cylinder touching a plane along a line
     // fights for that line exactly as two coplanar faces do.
     barY: -(barRadius + standout),
-    insert: { r, thickY, sides, zScale: sides === 4 ? Math.max(Math.tan((angle / 2) * DEG), 0.2) : 1 },
+    insert: {
+      r,
+      thickY,
+      sides,
+      zScale: sides === 4 ? Math.max(Math.tan((angle / 2) * DEG), 0.2) : 1,
+      x: -r * 0.4,
+      // Positioned so the insert's own far corner lands `0.3·reach` *past*
+      // the bar's face (z = barRadius + 0.3·reach), not just touching it — a
+      // real insert sits in its pocket, overlapping the holder, and that
+      // margin is what survives the rounding a bare "just touching" position
+      // does not.
+      z: barRadius - reach * 0.7,
+    },
     insertY: -thickY / 2,
     standout,
   };
+}
+
+/**
+ * A coaxial axial tool — a drill, reamer, tap or centre drill — on the
+ * spindle centreline: a straight round shaft along +Z ending in a pointed
+ * tip, **not** a boring bar's offset shank. A boring bar reaches into a bore
+ * from one side, which is why its geometry shifts sideways in X as well as
+ * dropping in Y; a drill's own axis *is* the spindle axis, so it stays on
+ * X = 0 and only the tip's point angle changes its silhouette.
+ *
+ * `angle` is a literal tool point angle here, not an insert-corner angle like
+ * the OD/boring markers use — a twist drill really is ~118°, and nothing
+ * about this shape goes singular as the angle passes 90° the way
+ * `odHolderGeometry`'s does (see the comment on the catalogue entries), so
+ * the real angle can be used directly.
+ *
+ * No `standout` drop, unlike every other marker here: that trick exists for
+ * a *flat* face sitting coplanar with another flat face (an insert's rake
+ * face against the cutting plane) — a drill's tip is a single vertex and its
+ * shaft a curved surface, neither of which can coplanar-fight anything. The
+ * first version of this dropped the shaft only, leaving the cone sitting flush
+ * at the join — the step between the two read as a blunt, rounded cap
+ * instead of a point, not a subtle depth-fight at all.
+ */
+export function drillGeometry(radius = 0.8, shape = {}) {
+  // True to scale with `radius` itself — unlike the OD/boring/parting markers,
+  // which run it through `toolScale()`'s proportional blow-up (that `radius`
+  // is a small nose-radius-like number, not a real dimension). A drill's
+  // radius *is* the hole it cuts (`turningCutRadiusResolver` carves the same
+  // number), so scaling it up here would draw a bit visibly narrower than the
+  // bore it is shown making.
+  const shaftRadius = Math.max(radius, 0.25);
+  const angle = shape.angle ?? 118;
+  const tipHeight = shaftRadius / Math.max(Math.tan((angle / 2) * DEG), 0.05);
+  return { shaftRadius, shaftLength: Math.max(shaftRadius * 8, 5), tipHeight };
 }
 
 /** Parting / grooving blade: a thin tall plate down to a narrow edge. */
@@ -130,7 +194,13 @@ export function partingBladeGeometry(radius = 0.8, shape = {}) {
   const { s, standout } = toolScale(radius);
   const depth = Math.max(radius * 2.4, 1.8) * 1.4;
   return {
-    width: Math.max((shape.grooveW ?? 3) * 0.35, s * 0.18),
+    // True to scale with `grooveW` — this is the one dimension of the blade
+    // that is a real, measured number rather than a decorated drawing: it
+    // is the kerf, and `turningGrooveWidthResolver` carves exactly this wide.
+    // Scaling it by `toolScale()`'s proportional factor (as every other
+    // dimension here still is) drew a groove on the marker visibly narrower
+    // than the one actually cut.
+    width: Math.max(shape.grooveW ?? 3, 0.3),
     height: s * 5,
     depth,
     // Blade top `standout` under the plane; the cutting tip is what reaches it.
@@ -154,6 +224,27 @@ export function markerYSpan(kind, radius, shape = {}) {
     const g = partingBladeGeometry(radius, shape);
     return [Math.min(g.bladeY - g.depth / 2, g.tipY - (g.depth * 1.02) / 2), 0];
   }
+  if (kind === 'drill') {
+    // No standout (see drillGeometry's own doc) — the marker is perfectly
+    // coaxial, so its span is simply the shaft diameter either side of the
+    // centreline, down to the tip sitting exactly on Y=0.
+    const g = drillGeometry(radius, shape);
+    return [-2 * g.shaftRadius, 0];
+  }
   const g = odHolderGeometry(radius, shape);
   return [g.bodyY - g.depth, 0];
+}
+
+/**
+ * Should the show/hide-tool control be offered at all?
+ *
+ * Only for turning. The lathe marker is one piece — holder and insert
+ * together — so there is nothing inside it to partially drop the way
+ * `showArbor` drops just the collet above a mill's cutter (see
+ * `millTool.js`'s `offerArborToggle`); this toggle hides the whole thing,
+ * which is exactly what a lathe operator wants when the holder sits over the
+ * cut they are trying to look at. The sketch page has no tool at all.
+ */
+export function offerToolToggle({ mode = 'mill', sketching = false } = {}) {
+  return !sketching && mode === 'turn';
 }

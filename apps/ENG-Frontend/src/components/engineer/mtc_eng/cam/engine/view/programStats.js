@@ -11,15 +11,10 @@
  * is in it, and a test can assert the numbers without rendering anything.
  */
 
-/** Seconds → `1:02:03` / `2:03` / `0:03`, the way a control posts cycle time. */
+/** Seconds → `64s`, a plain whole-second count. */
 export function formatDuration(seconds) {
-  if (!isFinite(seconds) || seconds <= 0) return '0:00';
-  const total = Math.round(seconds);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n) => String(n).padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  if (!isFinite(seconds) || seconds <= 0) return '0s';
+  return `${Math.round(seconds)}s`;
 }
 
 /**

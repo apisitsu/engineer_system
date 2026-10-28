@@ -161,6 +161,11 @@ export const useCamStore = create((set, get) => ({
   // Deliberately not a saved setting (see projectFile's SETTING_KEYS): it is how
   // you are looking at the job right now, not part of the job.
   showArbor: true,
+  // The whole lathe tool marker — holder and insert together, since turning
+  // has nothing inside the marker to drop piecemeal the way `showArbor` does
+  // for milling. The holder sits right over the cut it is making; this is
+  // how you get it out of the way to look. Also not a saved setting.
+  showTool: true,
   // The backplot — where the tool went. Worth being able to drop for the same
   // reason as the arbor: on a dense program the lines cover the very surface
   // you are trying to judge. Also not a saved setting, for the same reason.
@@ -296,6 +301,7 @@ export const useCamStore = create((set, get) => ({
     });
   },
   toggleArbor: () => set((s) => ({ showArbor: !s.showArbor })),
+  toggleTool: () => set((s) => ({ showTool: !s.showTool })),
   toggleToolpath: () => set((s) => ({ showToolpath: !s.showToolpath })),
   setCutFollows: (v) => {
     set({ cutFollowsPlayback: v });
@@ -667,6 +673,7 @@ export const useCamStore = create((set, get) => ({
         // longer costs a ring per slice (turningMesh simplifies the profile), so
         // the field can afford to be much finer than the milling cell size.
         cellSize: Math.min(cellSize, 0.05), margin: stockMargin, stockOversize,
+        toolOverrides: get().toolOverrides,
       });
       setBuffers({ sim: init });
       set({

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  odHolderGeometry, boringBarGeometry, partingBladeGeometry, markerYSpan, toolScale,
+  odHolderGeometry, boringBarGeometry, partingBladeGeometry, drillGeometry,
+  markerYSpan, toolScale, offerToolToggle,
 } from './latheTool.js';
 import { STANDARD_TURN_TOOLS } from '../sim/turning.js';
 
@@ -58,12 +59,34 @@ describe('every lathe marker cuts on the spindle centre plane', () => {
     expect(g.barY + g.barRadius).toBeCloseTo(-standout, 12);
   });
 
+  it('seats the boring bar insert against the bar face, with no gap', () => {
+    // The regression: the insert's z was hardcoded in Viewport.jsx, landing
+    // its far corner right at barRadius with no margin — any rounding either
+    // way showed as a visible gap between the insert and the holder.
+    for (const [sides, angle] of [[4, 35], [4, 60], [3, 60]]) {
+      const g = boringBarGeometry(1.6, { sides, angle });
+      const reach = g.insert.r * Math.SQRT1_2;
+      expect(g.insert.z + reach).toBeGreaterThan(g.barRadius);
+    }
+  });
+
   it('puts the parting blade under the plane', () => {
     const { standout } = toolScale(1.6);
     const g = partingBladeGeometry(1.6, { grooveW: 3 });
     // Same again: the cutting tip is on the plane, the blade behind it is not.
     expect(g.tipY + (g.depth * 1.02) / 2).toBeCloseTo(0, 12);
     expect(g.bladeY + g.depth / 2).toBeCloseTo(-standout, 12);
+  });
+
+  it('draws its width true to scale with grooveW — the bug this exists for', () => {
+    // `width` is the one real, measured dimension here: it is the kerf,
+    // and `turningGrooveWidthResolver` carves exactly this many mm wide.
+    // Running it through `toolScale()`'s proportional blow-up (as every
+    // other dimension here still is) drew a groove narrower than the one
+    // actually cut, whatever the marker radius.
+    expect(partingBladeGeometry(1.6, { grooveW: 3 }).width).toBeCloseTo(3, 6);
+    expect(partingBladeGeometry(1.6, { grooveW: 4.5 }).width).toBeCloseTo(4.5, 6);
+    expect(partingBladeGeometry(0.8, {}).width).toBeCloseTo(3, 6); // default
   });
 });
 
@@ -88,8 +111,15 @@ describe('OD holder silhouette', () => {
     expect(heights.size).toBe(1);
   });
 
-  it('produces a finite, non-degenerate outline for every standard tool', () => {
-    for (const tool of STANDARD_TURN_TOOLS) {
+  it('produces a finite, non-degenerate outline for every tool actually drawn with it', () => {
+    // Only 'od' (and, loosely, 'boring' — its own geometry doesn't share this
+    // math, but its angles happen to live in the same safe range) ever reach
+    // odHolderGeometry in the real app; `LatheTool` routes 'drill' to
+    // `drillGeometry` instead. A 'drill' entry's angle is a literal tool
+    // angle (118° for a twist drill) and is *expected* to be unsafe here —
+    // see the catalogue's own comment — so it is deliberately excluded
+    // rather than constraining real drill angles to stay odHolderGeometry-safe.
+    for (const tool of STANDARD_TURN_TOOLS.filter((t) => t.kind !== 'drill')) {
       const g = odHolderGeometry(1.6, tool);
       expect(g.outline).toHaveLength(5);
       for (const [x, z] of g.outline) {
@@ -113,5 +143,71 @@ describe('OD holder silhouette', () => {
     const big = odHolderGeometry(3, {});
     expect(big.height).toBeGreaterThan(small.height);
     expect(big.depth).toBeGreaterThan(small.depth);
+  });
+});
+
+describe('drillGeometry — a coaxial axial tool, not a boring bar', () => {
+  it('stays on the spindle axis: nothing here is offset in X the way a boring bar is', () => {
+    // drillGeometry itself never returns an X offset — the marker's tip and
+    // shaft are both built centred on X=0 in Viewport.jsx. This is the
+    // property that distinguishes it from boringBarGeometry, whose insert
+    // and bar are both deliberately shifted sideways.
+    const g = drillGeometry(1.6, { angle: 118 });
+    expect(g).not.toHaveProperty('barRadius'); // not a boring bar in disguise
+    expect(g.shaftRadius).toBeGreaterThan(0);
+  });
+
+  it('does not go singular as the angle passes 90°, unlike odHolderGeometry', () => {
+    // The whole reason this shape exists instead of reusing the OD/boring
+    // one: a real twist drill is ~118°, which drove odHolderGeometry's head
+    // height to blow up (see the catalogue's own comment on this).
+    for (const angle of [45, 90, 118, 150]) {
+      const g = drillGeometry(1.6, { angle });
+      expect(Number.isFinite(g.tipHeight)).toBe(true);
+      expect(g.tipHeight).toBeGreaterThan(0);
+    }
+  });
+
+  it('a wider included angle makes a shorter, blunter tip', () => {
+    const sharp = drillGeometry(1.6, { angle: 45 });
+    const blunt = drillGeometry(1.6, { angle: 118 });
+    expect(blunt.tipHeight).toBeLessThan(sharp.tipHeight);
+  });
+
+  it('scales with the marker radius', () => {
+    const small = drillGeometry(0.5, { angle: 118 });
+    const big = drillGeometry(3, { angle: 118 });
+    expect(big.shaftRadius).toBeGreaterThan(small.shaftRadius);
+    expect(big.shaftLength).toBeGreaterThan(small.shaftLength);
+  });
+
+  it('draws true to scale — the bug this exists for', () => {
+    // Unlike the OD/boring/parting markers, which run `radius` through
+    // `toolScale()`'s proportional blow-up, a drill's radius *is* the hole
+    // it cuts: `turningCutRadiusResolver` carves this exact number. A
+    // decorated shaft drew visibly narrower than the bore around it (a
+    // ⌀8.5 drill's bore reaches 4.25, but the old formula drew a ⌀1.8 bit).
+    expect(drillGeometry(4.25, { angle: 118 }).shaftRadius).toBeCloseTo(4.25, 6);
+    expect(drillGeometry(0.8, { angle: 118 }).shaftRadius).toBeCloseTo(0.8, 6);
+  });
+
+  it('markerYSpan reaches exactly 0 — the apex, which needs no standout of its own', () => {
+    const [lo, hi] = markerYSpan('drill', 1.6, { angle: 118 });
+    expect(hi).toBe(0);
+    expect(lo).toBeLessThan(0);
+  });
+});
+
+describe('offerToolToggle', () => {
+  it('is offered for turning', () => {
+    expect(offerToolToggle({ mode: 'turn' })).toBe(true);
+  });
+
+  it('is withheld for milling — that is what the arbor toggle is for', () => {
+    expect(offerToolToggle({ mode: 'mill' })).toBe(false);
+  });
+
+  it('is withheld on the sketch page, where there is no tool', () => {
+    expect(offerToolToggle({ mode: 'turn', sketching: true })).toBe(false);
   });
 });

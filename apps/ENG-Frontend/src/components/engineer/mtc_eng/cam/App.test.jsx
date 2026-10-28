@@ -292,6 +292,65 @@ describe('the holder toggle', () => {
   });
 });
 
+describe('the tool toggle', () => {
+  // Turning's counterpart to the holder toggle: the lathe marker is one piece
+  // (holder + insert), so there is nothing to drop separately — this hides the
+  // whole thing, which is what sits over the cut an operator wants to see.
+  const toolButton = () => cmd('showTool');
+  const isOn = () => toolButton().classList.contains('ant-btn-primary');
+
+  it('is offered on the lathe page', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    expect(toolButton()).not.toBeNull();
+  });
+
+  it('carries its name for anyone who does not read the glyph', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    expect(toolButton().getAttribute('aria-label')).toBe('Show tool');
+  });
+
+  it('starts on, with the tool shown', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    expect(useCamStore.getState().showTool).toBe(true);
+    expect(isOn()).toBe(true);
+  });
+
+  it('hides the tool when clicked, and brings it back', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    await act(async () => { toolButton().click(); });
+    expect(useCamStore.getState().showTool).toBe(false);
+    expect(isOn()).toBe(false);
+
+    await act(async () => { toolButton().click(); });
+    expect(useCamStore.getState().showTool).toBe(true);
+    expect(isOn()).toBe(true);
+  });
+
+  it('stays available while the program runs', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    await setStore({ playing: true });
+    expect(toolButton()).not.toBeNull();
+  });
+
+  it('is withheld on the milling page, where it would do nothing', async () => {
+    await mount();
+    expect(toolButton()).toBeNull();
+  });
+
+  it('sits on the viewport rail, next to the toolpath toggle', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    const rail = railCommands();
+    expect(rail).toContain('showTool');
+    expect(Math.abs(rail.indexOf('showTool') - rail.indexOf('showToolpath'))).toBe(1);
+  });
+});
+
 describe('the toolpath toggle', () => {
   // The backplot covers the very surface it describes on a dense program, so it
   // drops the same way the holder does — and sits beside it, because they are
@@ -1056,6 +1115,60 @@ describe('the cutter type of a tool the program named', () => {
     await mount();
     await loadProgramWithTools('T4(TAP D8)\nM6\nG0 X0 Y0 Z5\nG1 Z-2 F200\nG1 X60 F400');
     expect(marker()).toMatchObject({ cutter: '', type: 'flat', radius: 4 });
+  });
+});
+
+/**
+ * A turning tool's diameter — the ⌀ field the Tool table was missing. A
+ * drill, reamer or tap runs down the centreline at X~0, so the program's own
+ * path states no diameter at all; this field is the only thing that can,
+ * and it is the same number the sim now bores with (`turningCutRadiusResolver`).
+ */
+describe('the diameter of a turning tool', () => {
+  async function loadTurnProgramWithTools(src) {
+    const { segments, bounds, stats } = interpret(src, { mode: 'turn' });
+    const path = buildPath(segments);
+    setBuffers({ path, bounds, stats });
+    await setStore({
+      page: 'turn', mode: 'turn', gcode: src, bufVer: 1, playing: false, playhead: path.count,
+    });
+  }
+
+  const DRILL = 'T0202(DRILL DIA 8.5 MM)\nG97 S600 M3\nG0 X0 Z2\nG1 Z-20 F0.1\nG0 Z2\nM30';
+
+  afterEach(() => {
+    clearBuffers();
+    useCamStore.setState({ toolOverrides: {} });
+  });
+
+  it('shows the diameter the program\'s own comment named', async () => {
+    await mount();
+    await loadTurnProgramWithTools(DRILL);
+    expect(q('input[aria-label="T202 diameter"]').value).toBe('8.5');
+  });
+
+  it('resizes the marker when the operator overrides it', async () => {
+    await mount();
+    await loadTurnProgramWithTools(DRILL);
+    await act(async () => { useCamStore.getState().setToolOverride(202, { diameter: 12 }); });
+    expect(marker().radius).toBeCloseTo(6, 6);
+    expect(q('input[aria-label="T202 diameter"]').value).toBe('12.0');
+  });
+
+  it('states a diameter for a tool whose comment gave none at all', async () => {
+    await mount();
+    await loadTurnProgramWithTools('T0303(UNDERCUT)\nG97 S600 M3\nG0 X10 Z2\nG1 Z-5 F0.1\nM30');
+    expect(q('input[aria-label="T303 diameter"]').value).toBe('');
+    await act(async () => { useCamStore.getState().setToolOverride(303, { diameter: 4 }); });
+    expect(marker().radius).toBeCloseTo(2, 6);
+  });
+
+  it('offers a groove-width field only for a parting tool, not an OD or drill one', async () => {
+    await mount();
+    await loadTurnProgramWithTools(DRILL);
+    expect(q('input[aria-label="T202 groove width"]')).toBeNull();
+    await loadTurnProgramWithTools('T0505(PARTING OFF)\nG97 S600 M3\nG0 X22 Z-10\nG1 X0 F0.06\nM30');
+    expect(q('input[aria-label="T505 groove width"]')).not.toBeNull();
   });
 });
 

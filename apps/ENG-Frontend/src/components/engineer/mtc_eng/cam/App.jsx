@@ -20,8 +20,8 @@ import {
 } from '@ant-design/icons';
 import CommandButton from './components/CommandButton.jsx';
 import {
-  PartIcon, StockIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon, ToolpathIcon,
-  CUTTER_ICONS,
+  PartIcon, StockIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, LatheToolIcon, RotateWorkIcon,
+  ToolpathIcon, CUTTER_ICONS,
 } from './components/glyph.jsx';
 import {
   CUTTERS, cutterById, cutterWarning, defaultThickness, defaultShank,
@@ -44,13 +44,14 @@ import { sidebarSections } from './engine/view/sidebar.js';
 import { formatDuration, programStatRows, timingBreakdown } from './engine/view/programStats';
 import { autoSimKey, shouldAutoSimulate } from './engine/view/autoSim.js';
 import { offerArborToggle, parkedTip } from './engine/view/millTool.js';
+import { offerToolToggle } from './engine/view/latheTool.js';
 import { sweptFitBox } from './engine/view/rotaryFrame.js';
 import { sketchBounds } from './engine/sketch/edit.js';
 import {
   lineAt, timeAt, rotaryAt, toolAt, segmentAtTime, toolPointAt, blockTargetAt,
   runningAt,
 } from './engine/gcode/path.js';
-import { STANDARD_TURN_TOOLS } from './engine/sim/turning.js';
+import { STANDARD_TURN_TOOLS, effectiveTurnTool } from './engine/sim/turning.js';
 import {
   billetBox, billetWarnings, billetExtents, previewSolid, suggestBillet,
 } from './engine/sim/billet.js';
@@ -529,6 +530,7 @@ export default function App() {
   const stockEnabled = useCamStore((s) => s.stockEnabled);
   const showStock = useCamStore((s) => s.showStock);
   const showArbor = useCamStore((s) => s.showArbor);
+  const showTool = useCamStore((s) => s.showTool);
   const showToolpath = useCamStore((s) => s.showToolpath);
   const cutFollowsPlayback = useCamStore((s) => s.cutFollowsPlayback);
   const autoSimEnabled = useCamStore((s) => s.autoSimEnabled);
@@ -562,6 +564,7 @@ export default function App() {
   const setBillet = useCamStore((s) => s.setBillet);
   const toggleStockEnabled = useCamStore((s) => s.toggleStockEnabled);
   const toggleArbor = useCamStore((s) => s.toggleArbor);
+  const toggleTool = useCamStore((s) => s.toggleTool);
   const toggleToolpath = useCamStore((s) => s.toggleToolpath);
   const setCutFollows = useCamStore((s) => s.setCutFollows);
   const setPage     = useCamStore((s) => s.setPage);
@@ -616,6 +619,7 @@ export default function App() {
   // decision lives in engine/view/sidebar.js so it is tested, not buried in JSX.
   const show = sidebarSections({ playing });
   const arborToggle = offerArborToggle({ mode, sketching });
+  const toolToggle = offerToolToggle({ mode, sketching });
 
   // Open on a blank page — no sample program is loaded. The user brings their
   // own via drag-and-drop, Open file, or the (optional) Load sample button.
@@ -927,18 +931,24 @@ export default function App() {
   const markerShank = marker.shank;
   // Gauge length (tip to collet) drives how far the milling marker sticks out.
   const markerLength = marker.length;
-  // The turning toolholder for the marker — chosen per-tool in the Tool table.
+  // The turning toolholder for the marker — the operator's own pick for this
+  // tool number, else what the program's own comment implies (T0909(INTERNAL
+  // THREAD BAR) picks the threading bar on its own), else the global default.
   // MVJNR's insert nose angle is adjustable; MVVNN's is fixed.
-  const baseTurnTool = STANDARD_TURN_TOOLS.find((t) => t.id === (currentOverride.insert ?? turnTool))
-    ?? STANDARD_TURN_TOOLS[0];
+  const baseTurnTool = effectiveTurnTool({
+    detected: currentTool, overrideId: currentOverride.insert, fallbackId: turnTool,
+  });
   // Memoised for the same reason as `rotaryIndices`: a fresh object each render
   // makes every memo listing it re-run every render.
   const turnInsert = useMemo(() => (turning
     ? {
       ...baseTurnTool,
       angle: baseTurnTool.adjustable ? (currentOverride.insertAngle ?? baseTurnTool.angle) : baseTurnTool.angle,
+      // Only `partingBladeGeometry` reads this (`shape.grooveW`); harmless on
+      // every other holder shape, which never looks at it.
+      grooveW: currentOverride.grooveW,
     }
-    : null), [turning, baseTurnTool, currentOverride.insertAngle]);
+    : null), [turning, baseTurnTool, currentOverride.insertAngle, currentOverride.grooveW]);
   // Feed and spindle speed at the playhead, and what the tool in the spindle
   // is, for the position page's footer. The tool description is the one the
   // marker draws and the carvers cut with (`effectiveTool` above), not the
@@ -1289,13 +1299,31 @@ export default function App() {
                           </b>
                           <span style={{ minWidth: 58, color: CAD.muted }}>{t.type}</span>
                           {turning ? (() => {
-                            const holderId = ov.insert ?? turnTool;
-                            const holder = STANDARD_TURN_TOOLS.find((x) => x.id === holderId);
+                            const holder = effectiveTurnTool({
+                              detected: t, overrideId: ov.insert, fallbackId: turnTool,
+                            });
+                            const holderId = holder.id;
                             return (
                               <>
                                 <TurnInsertPicker
                                   value={holderId}
                                   onChange={(id) => setToolOverride(t.n, { insert: id })}
+                                />
+                                {/* Size the marker — and, for a drill/reamer/tap/centre
+                                    drill, the real bore this move cuts: those run down
+                                    the centreline at X~0, so the program's own path
+                                    carries no diameter at all; this is the only number
+                                    that can state one (`turningCutRadiusResolver`). */}
+                                <span style={{ color: CAD.label }}>⌀</span>
+                                <InputNumber controls={false}
+                                  size="small"
+                                  aria-label={`T${t.n} diameter`}
+                                  min={0.1}
+                                  step={0.5}
+                                  value={effDia}
+                                  placeholder="dia"
+                                  onChange={(v) => setToolOverride(t.n, { diameter: v ?? undefined })}
+                                  style={{ width: 68 }}
                                 />
                                 {holder?.adjustable && (
                                   <>
@@ -1310,6 +1338,23 @@ export default function App() {
                                       style={{ width: 62 }}
                                     />
                                   </>
+                                )}
+                                {holder?.kind === 'parting' && (
+                                  <Tooltip title="Groove width — the blade's kerf, both drawn and cut this wide.">
+                                    <Space.Compact>
+                                      <span className="ant-input-group-addon" style={addonStyle('left')}>w</span>
+                                      <InputNumber controls={false}
+                                        size="small"
+                                        aria-label={`T${t.n} groove width`}
+                                        min={0.5}
+                                        step={0.5}
+                                        value={ov.grooveW ?? null}
+                                        placeholder="3"
+                                        onChange={(v) => setToolOverride(t.n, { grooveW: v ?? undefined })}
+                                        style={{ width: 56 }}
+                                      />
+                                    </Space.Compact>
+                                  </Tooltip>
                                 )}
                               </>
                             );
@@ -1850,6 +1895,17 @@ export default function App() {
                   onClick={toggleArbor}
                 />
               )}
+              {/* Turning's equivalent of the arbor toggle — the lathe marker has no
+                  collet to drop separately, so this hides the whole holder+insert
+                  instead, which is what sits over the cut an operator wants to see. */}
+              {toolToggle && (
+                <CommandButton
+                  id="showTool" size="small"
+                  type={showTool ? 'primary' : 'default'}
+                  icon={<LatheToolIcon />}
+                  onClick={toggleTool}
+                />
+              )}
               {/* The backplot covers the surface it describes on a dense
                   program, so it drops the same way the holder does. */}
               {!sketching && (
@@ -1980,6 +2036,7 @@ export default function App() {
               mode={sketching ? 'mill' : mode}
               sketching={sketching}
               showArbor={showArbor}
+              showTool={showTool}
               showToolpath={showToolpath}
               rotaryFrame={rotaryFrame}
               rotaryCenter={rotaryCenter}
