@@ -56,7 +56,14 @@ export function odHolderGeometry(radius = 0.8, shape = {}) {
   const lead = shape.lead ?? 93;
   const flip = !!shape.flip;
   const r = s * 0.62;
-  const zScale = sides === 4 ? Math.max(Math.tan((angle / 2) * DEG), 0.2) : 1;
+  // tan(angle/2) is the insert's own half-nose-angle ratio — true of a pointed
+  // diamond (sides: 4) exactly as much as a pointed V (sides: 3, the threading
+  // tool/bar): both are a corner with two flanks at `angle` to each other. The
+  // old `sides === 4` gate left every non-diamond insert at a hard-coded 1 —
+  // for a 60°-V threading tool that is ~1.7× its real tan(30°) ≈ 0.577 — which
+  // swung the holder's `shift` (below) the wrong way in Z on a flipped holder,
+  // pointing the shank back toward the chuck instead of away from it.
+  const zScale = Math.max(Math.tan((angle / 2) * DEG), 0.2);
   const depth = thickY * 1.5;
 
   const sgn = flip ? -1 : 1;
@@ -140,7 +147,9 @@ export function boringBarGeometry(radius = 0.8, shape = {}) {
       r,
       thickY,
       sides,
-      zScale: sides === 4 ? Math.max(Math.tan((angle / 2) * DEG), 0.2) : 1,
+      // Same fix as odHolderGeometry's zScale: a pointed insert's half-nose
+      // angle, not a hard-coded 1 for anything that isn't a 4-sided diamond.
+      zScale: Math.max(Math.tan((angle / 2) * DEG), 0.2),
       x: -r * 0.4,
       // Positioned so the insert's own far corner lands `0.3·reach` *past*
       // the bar's face (z = barRadius + 0.3·reach), not just touching it — a
