@@ -168,10 +168,13 @@ const sectionTitle = (label, C) => (
 // Minimal stat card — title + total only, same visual language (coloured top border,
 // active ring, dimmed sibling) as MiniStatCard below. `onClick` makes the card a
 // toggle filter on the CN table (part type); `active` outlines it in its own colour,
-// `dimmed` fades it while a sibling card is selected.
+// `dimmed` turns it fully grey (border, label, number) instead of fading its colour,
+// so a sibling card being selected reads as "not this one" rather than "same, paler".
+// No longer shows its own count — picking a card moves that number into the TOTAL
+// tile instead (via `scopedStats.total`), so a number never sits in two places at once.
 const PartTypeCard = ({ pt, C, onClick, active, dimmed }) => {
   const cardStyle = cardStyleOf(C);
-  const color = partTypeColors(C)[pt.part_type] || C.cyan;
+  const color = dimmed ? C.textSec : (partTypeColors(C)[pt.part_type] || C.cyan);
   // Custom label mapping: 'body' or 'mecha' -> 'Mecha' (shared with the chart series)
   const displayLabel = partTypeLabel(pt.part_type);
 
@@ -184,14 +187,18 @@ const PartTypeCard = ({ pt, C, onClick, active, dimmed }) => {
         ...cardStyle, borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box',
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: active ? `0 0 0 2px ${color}` : 'none',
-        opacity: dimmed ? 0.6 : 1, transition: 'box-shadow 0.15s, opacity 0.15s',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        transition: 'box-shadow 0.15s, border-color 0.15s, color 0.15s',
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
       }}>
       <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>{displayLabel}</Text>
-      <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{(pt.total ?? 0).toLocaleString()}</Text>
     </div>
   );
 };
+
+// A dimmed card shows grey instead of its own colour (border + label), same rule as
+// PartTypeCard — "not the selected one" reads as neutral, not as a paler version of
+// its own colour. Shared by MiniStatCard and by the outer boxes it sits `bare` inside.
+const dimColor = (color, dimmed, C) => (dimmed ? C.textSec : color);
 
 // ── Mini Stat Card ───────────────────────────────────────────────────────────────
 // Same title+number shape as the (now minimal) PartTypeCard, for a non-part-type stat
@@ -199,24 +206,27 @@ const PartTypeCard = ({ pt, C, onClick, active, dimmed }) => {
 // `bare` drops the card's own background/border/padding — used when it's placed as a
 // block INSIDE a shared outer card (see the Total/Complete/%Complete columns) instead
 // of standing as its own floating box.
-const MiniStatCard = ({ label, value, suffix, color, C, onClick, active, dimmed, bare }) => (
-  <div
-    role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
-    aria-pressed={onClick ? !!active : undefined}
-    onClick={onClick}
-    onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
-    style={{
-      ...(bare ? {} : { ...cardStyleOf(C), borderTop: `3px solid ${color}` }),
-      height: '100%', boxSizing: 'border-box',
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      cursor: onClick ? 'pointer' : 'default',
-      boxShadow: active ? `0 0 0 2px ${color}` : 'none',
-      opacity: dimmed ? 0.6 : 1, transition: 'box-shadow 0.15s, opacity 0.15s',
-    }}>
-    <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>{label}</Text>
-    <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{(value ?? 0).toLocaleString()}{suffix}</Text>
-  </div>
-);
+const MiniStatCard = ({ label, value, suffix, color, C, onClick, active, dimmed, bare }) => {
+  const effColor = dimColor(color, dimmed, C);
+  return (
+    <div
+      role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
+      aria-pressed={onClick ? !!active : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      style={{
+        ...(bare ? {} : { ...cardStyleOf(C), borderTop: `3px solid ${effColor}` }),
+        height: '100%', boxSizing: 'border-box',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        cursor: onClick ? 'pointer' : 'default',
+        boxShadow: active ? `0 0 0 2px ${effColor}` : 'none',
+        transition: 'box-shadow 0.15s, border-color 0.15s, color 0.15s',
+      }}>
+      <Text style={{ color: effColor, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>{label}</Text>
+      <Text style={{ color: dimmed ? C.textSec : C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{(value ?? 0).toLocaleString()}{suffix}</Text>
+    </div>
+  );
+};
 
 // Label stacked ABOVE the number (instead of MiniStatCard's side-by-side) — for a card
 // at roughly half MiniStatCard's width, where label+number side by side wraps badly.
@@ -408,6 +418,7 @@ export default function SdsCoverageDashboard() {
         const pt = cardPartTypes.find(p => p.part_type === filterPt);
         if (!pt) return { complete: 0, pending: 0, completePct: 0, completeSaved: 0, completeSavedPct: 0 };
         return {
+          total: pt.total ?? 0,
           complete: pt.complete ?? 0, pending: pt.pending ?? 0,
           completePct: pt.complete_pct ?? 0,
           completeSaved: pt.complete_saved ?? pt.complete ?? 0,
@@ -415,6 +426,7 @@ export default function SdsCoverageDashboard() {
         };
       })()
     : {
+        total: cardKpi?.total ?? 0,
         complete: cardKpi?.complete ?? 0, pending: cardKpi?.pending ?? 0,
         completePct: cardKpi?.completePct ?? 0,
         completeSaved: cardKpi?.completeSaved ?? cardKpi?.complete ?? 0,
@@ -493,14 +505,17 @@ export default function SdsCoverageDashboard() {
       labels: monthlyNewParts.map(r => r.isAvg ? r.label : fmtMonth(r.month)),
       datasets: activePartTypes.map(t => {
         const color = PART_TYPE_COLOR[t] || C.cyan;
+        // A picked part-type card used to fade the OTHER segments to 0.2 opacity and
+        // keep them stacked — reads as a cluttered pale bar instead of "showing just
+        // this type". Zeroing their data out instead makes the stack collapse down to
+        // a single solid bar for the selected type, nothing else drawn.
+        const hidden = !!filterPt && t !== filterPt;
         return {
           label: partTypeLabel(t),
-          data: monthlyNewParts.map(r => r[t] || 0),
-          // A picked month fades every other month; a picked part-type card fades every
-          // other part type's segments — so both selections read off the chart.
+          data: monthlyNewParts.map(r => hidden ? 0 : (r[t] || 0)),
+          // A picked month still fades every other month within the (now single) bar.
           backgroundColor: monthlyNewParts.map(r => hexToRgba(color,
-            (filterPt && t !== filterPt) || (filterMonth && r.month !== filterMonth)
-              ? 0.2 : (faint(r) ? 0.35 : 0.75))),
+            (filterMonth && r.month !== filterMonth) ? 0.2 : (faint(r) ? 0.35 : 0.75))),
           borderColor: color, borderWidth: 1, stack: 'np',
         };
       }),
@@ -932,10 +947,17 @@ export default function SdsCoverageDashboard() {
   // A direct count can't be negative: a sheet either was signed that month or it
   // wasn't, so a bar is always ≥ 0. Windowed to the FYE like the other monthly
   // charts; a month with no signings defaults to 0 rather than being omitted.
+  // A picked part-type card re-scopes this the same way it does New SDS Reqs per
+  // Month and the KPI cards — reading `byPartType[filterPt]` instead of the whole-FY
+  // `count` (the backend carries both per month, same pattern as `monthlyStatus`).
   const innovatorMonthly = useMemo(() => {
-    const raw = Object.fromEntries((data?.monthlyInnovatorSigned || []).map(r => [r.month, r.count]));
-    return fyMonths(fyeWin).map(key => ({ month: key, count: raw[key] || 0 }));
-  }, [data, fyeWin]);
+    const raw = Object.fromEntries((data?.monthlyInnovatorSigned || []).map(r => [r.month, r]));
+    return fyMonths(fyeWin).map(key => {
+      const row = raw[key];
+      const count = filterPt ? (row?.byPartType?.[filterPt] || 0) : (row?.count || 0);
+      return { month: key, count };
+    });
+  }, [data, fyeWin, filterPt]);
 
   const innovatorMonthlyChartData = useMemo(() => {
     const curMonth = new Date().toISOString().slice(0, 7);
@@ -1231,8 +1253,8 @@ export default function SdsCoverageDashboard() {
                         {/* TOTAL — same compact stat-tile shape as Complete/Pending/%Complete;
                             the Innovator/THAI detail it used to carry is already shown in the
                             Complete and %Complete breakdown cards below it. */}
-                        <div style={{ ...cardStyle, borderTop: `3px solid ${C.cyan}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                          <MiniStatCard label="Total" value={cardKpi?.total ?? 0} color={C.cyan} C={C} bare
+                        <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(C.cyan, !!(filterPt || filterReason || filterMonth), C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
+                          <MiniStatCard label="Total" value={scopedStats.total} color={C.cyan} C={C} bare
                             onClick={clearSelection}
                             dimmed={!!(filterPt || filterReason || filterMonth)} />
                           <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
@@ -1242,7 +1264,7 @@ export default function SdsCoverageDashboard() {
                               dimmed={!!filterReason && filterReason !== 'PENDING'} />
                           </div>
                         </div>
-                        <div style={{ ...cardStyle, borderTop: `3px solid ${C.green}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                        <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(C.green, !!filterReason && filterReason !== 'COMPLETE', C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
                           <MiniStatCard label="Complete" value={scopedStats.complete} color={C.green} C={C} bare
                             onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
                             dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
@@ -1265,7 +1287,7 @@ export default function SdsCoverageDashboard() {
                             </Col>
                           </Row>
                         </div>
-                        <div style={{ ...cardStyle, borderTop: `3px solid ${scopedStats.completePct >= 90 ? C.green : C.red}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                        <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(scopedStats.completePct >= 90 ? C.green : C.red, !!filterReason && filterReason !== 'COMPLETE', C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
                           <MiniStatCard label="% Complete" value={scopedStats.completePct} suffix="%"
                             color={scopedStats.completePct >= 90 ? C.green : C.red} C={C} bare
                             onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}

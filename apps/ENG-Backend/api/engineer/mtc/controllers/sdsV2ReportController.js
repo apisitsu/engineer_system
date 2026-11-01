@@ -1078,15 +1078,27 @@ async function buildCoverage() {
     // only way a past month's count changes is a revoke, which is the sheet genuinely
     // no longer being complete — correct to reflect, not a staleness bug to freeze
     // against).
+    // `byPartType` rides along per month (same pattern as `monthlyStatus` below) so a
+    // part-type card filter can re-scope this chart too, instead of it staying stuck
+    // on the whole-FY total while every other chart/card narrows to the selection.
     const signedMon = new Map(); // 'YYYY-MM' → count
+    const signedMonByType = new Map(); // 'YYYY-MM' → Map(part_type → count)
     for (const r of evaluated) {
       if (r.coverage_level_saved !== 'COMPLETE' || !r.stamped_full_at) continue;
       const m = ym(r.stamped_full_at);
       signedMon.set(m, (signedMon.get(m) || 0) + 1);
+      const byType = signedMonByType.get(m) || new Map();
+      byType.set(r.part_type, (byType.get(r.part_type) || 0) + 1);
+      signedMonByType.set(m, byType);
     }
     const monthlyInnovatorSigned = [...signedMon.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, count]) => ({ month, count }));
+      .map(([month, count]) => {
+        const byType = signedMonByType.get(month) || new Map();
+        const byPartType = {};
+        for (const pt of partTypes) byPartType[pt] = byType.get(pt) || 0;
+        return { month, count, byPartType };
+      });
 
     let cumWorkable = 0, cumComplete = 0, cumCompleteSaved = 0;
     const cumByType = {}; // part_type → { workable, complete, completeSaved } (running totals)
