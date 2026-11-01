@@ -121,45 +121,233 @@ export function odHolderGeometry(radius = 0.8, shape = {}) {
  * position in the component is exactly the untested exception that slips
  * past that. It mattered in practice: the insert is a `sides`-gon rotated
  * 45° about its own axis (so a square insert reads as a diamond), and its
- * reach toward the bar is `r·cos(45°)` — the old inline position landed
- * that reach barely at `barRadius`, with no margin for rounding either way,
- * which is how it read as a visible gap rather than a seated insert.
+ * reach toward the bar is `r·cos(45°)`.
+ *
+ * Two generations of this bug, both from the same root cause: nothing here
+ * pinned the insert's actual **cutting corner** to the tip (Z=0, the one
+ * invariant every other marker's insert keeps — see this file's header) or
+ * put the bar's own face anywhere near it. The first fix (`barRadius -
+ * reach·0.7`, since replaced) stopped the insert's far corner from landing
+ * exactly *on* the bar's face with no rounding margin — but the bar's face
+ * itself still sat a full `barRadius` away from the tip (the bar's own
+ * *radius*, reused as a Z offset for no reason tied to the insert at all).
+ * Against that gap, a single corner poking `0.3·reach` past the face reads
+ * as a kite grazing a block from a distance, not a seated insert — visibly
+ * disconnected over most of its own silhouette, closing to a point only
+ * right at that one corner.
+ *
+ * Now: the insert's centre is placed so its **cutting corner lands exactly
+ * on the tip**, the same way `odHolderGeometry`'s insert does, and the
+ * bar's face sits `standout` behind the cutting plane — the same clearance
+ * every other marker's body keeps, not `barRadius`. With the gap it has to
+ * cross cut from ~6 units to ~0.6, the insert's far half is now solidly
+ * inside the bar's footprint rather than just touching it.
+ *
+ * A third generation of the same bug, found after the above shipped: which
+ * *vertex* is "the cutting corner" was still hard-coded as the 4-sided
+ * insert's own `(reach, −reach)` offset, true only for a square rotated 45°.
+ * `threadbar` (sides: 3) hits this same code with a triangular insert, whose
+ * vertices sit at completely different angles — pinning that offset to the
+ * tip pinned empty space next to the insert instead, leaving it floating
+ * off the bar's face by about a unit with no vertex anywhere near (0, 0).
+ * A fourth, found immediately after *that* one shipped: picking the tip
+ * vertex by "whichever one a flat 45° mount leaves nearest the tip" (then
+ * "whichever one's own local angle is closest to 90°, mounted to match
+ * sides: 4's old −45°") both pin a real vertex, but neither one is
+ * guaranteed to be the insert's own **axis of symmetry** — a V insert
+ * mounted off that axis reads as skewed even once its tip is correctly
+ * pinned to (0, 0), because the two flanks either side of the point are no
+ * longer mirror images of each other on screen.
+ *
+ * Only one vertex is ever *actually* on that axis, for any `sides`: the one
+ * at local angle 0°, i.e. index 0 — because `zScale` only scales the local
+ * Z axis, and scaling along an axis can never break mirror symmetry *about*
+ * that same axis (every other vertex's own line is off-axis, and the
+ * anisotropic scale does break symmetry about those). So: always vertex 0,
+ * and mounted at a **fixed** 90° — which, for a point that starts out lying
+ * exactly on local Z with zero local X, always rotates it onto world +X
+ * with zero world Z, for any `sides`/`zScale` at all. That isn't a
+ * coincidence to re-derive per shape; it's point lies at **(0, r·zScale)**.
+ * Centring the insert at **(−r·zScale, 0)** is what lands that point
+ * exactly on the tip — closed-form, no per-`sides` solving left to do, and
+ * the remaining two (or more) vertices come out as exact mirror images of
+ * each other in Z, either side of that line — the "base parallel to Z"
+ * a real threading insert's own symmetry demands, not a diagonal lean left
+ * over from matching a diamond holder's own, unrelated 45° convention.
+ *
+ * `shape.barDiameter` (mm, one of `App.jsx`'s `BORING_BAR_DIAMETERS` —
+ * standard shank sizes, not a free-form number) sets `barRadius` directly —
+ * `barDiameter / 2`, literally, in the same units as everything else this
+ * marker draws in. An earlier version of this scaled a decorative `s*0.55`
+ * baseline proportionally instead, so picking "6" drew whatever the old
+ * unlabelled default happened to be (12.3 units) rather than 6 — correct by
+ * the marker's own "decorative, not a real dimension" convention, but not
+ * what a picker labelled with real shank sizes should do. Direct means a 6mm
+ * pick can draw a bar thinner than the insert sitting on it (the insert's
+ * own radius, `r`, is still the generic decorative size every OD/boring/
+ * parting insert uses, unrelated to `barDiameter`) — accepted deliberately,
+ * since the alternative (every pick drawing in proportion to 6, never its
+ * own stated size) is the wrong trade the first time round.
+ *
+ * `shape.insertTilt` (degrees, default 0) adds to the fixed 90° mount —
+ * `boring`'s own catalogue entry carries −35° so its insert sits tilted off
+ * the bar's own axis rather than mounted dead square to it, same spirit as
+ * `odHolderGeometry`'s lead angle.
+ *
+ * A later attempt moved the insert itself — solving its Z so the near
+ * corner landed exactly on `barNearZ`, no wedge needed — and that was wrong
+ * in a way the earlier, smaller-gap generations of this bug were not: the
+ * near corner's own natural distance from the tip (`boringInsertVertex`'s
+ * own geometry, not a small margin) runs to several units, several times
+ * `standout` itself, so "solve the setback" dragged the *tip* — the one
+ * point every marker in this file promises sits on the cutting plane itself
+ * (see this file's header) — off the programmed cutting position by the
+ * same several units, in the wrong direction, for both `boring` and
+ * `threadbar` alike (tilt only changes *how much*, never whether). The tip
+ * stays pinned at (0, 0); `boringConnectorWedge` below is what makes the
+ * near corner read as flush with the bar without moving the insert off that
+ * invariant to do it.
  */
+/**
+ * The insert mesh's own mount rotation about Y — fixed at 90° for every
+ * `sides`/`angle`. See `boringBarGeometry`'s header for the derivation: a
+ * point lying exactly on the local Z axis (zero local X) always rotates
+ * onto world +X with zero world Z at a 90° mount, for any anisotropic
+ * Z-only scale. There is nothing left to solve per shape.
+ */
+const BORING_INSERT_MOUNT_ROT = Math.PI / 2;
+
+/**
+ * The insert's own tip-vertex offset from its centre, before mounting —
+ * local (0, r·zScale) rotated by `rot` (default the fixed 90° mount — see
+ * `BORING_INSERT_MOUNT_ROT`'s own header). Vertex index 0 is the one vertex
+ * guaranteed to sit on the insert's own axis of symmetry regardless of
+ * `zScale`; every other vertex's own line is off that axis and the
+ * anisotropic scale breaks symmetry about it. `rot` is a parameter, not
+ * always the fixed constant, because a catalogue entry can dial in extra
+ * tilt on top of it (`shape.insertTilt` — see `boringBarGeometry`) and the
+ * tip still has to land wherever that rotated mount actually puts it.
+ */
+function boringInsertTip(r, zScale, rot = BORING_INSERT_MOUNT_ROT) {
+  const x = r * zScale * Math.sin(rot);
+  const z = r * zScale * Math.cos(rot);
+  return { x, z };
+}
+
+/**
+ * One of the insert's own vertices, in absolute (tip-relative) coordinates —
+ * `boringInsertTip`'s own derivation, generalised to any vertex index and
+ * (so a tilted mount keeps every vertex consistent, not just the tip) any
+ * mount rotation.
+ */
+function boringInsertVertex(insertX, insertZ, r, zScale, sides, i, rot = BORING_INSERT_MOUNT_ROT) {
+  const theta = (i / sides) * 2 * Math.PI;
+  const lx = r * Math.sin(theta);
+  const lz = r * Math.cos(theta) * zScale;
+  return {
+    x: insertX + (lx * Math.cos(rot) + lz * Math.sin(rot)),
+    z: insertZ + (-lx * Math.sin(rot) + lz * Math.cos(rot)),
+  };
+}
+
+/**
+ * A small flat triangle, same material as the bar, bridging the gap between
+ * the insert's near corner (vertex `sides − 1`, the one neighbouring the
+ * tip on the bar's side) and the bar's own face — not by moving the insert
+ * (see `boringBarGeometry`'s header for why solving the insert's own
+ * position for this broke the tip-at-origin invariant instead), purely a
+ * cosmetic infill the way `odHolderGeometry`'s own bevelled head is. One
+ * triangle: [the tip, the near corner, and the bar's own near-top corner]
+ * — the edge from the tip to the near corner is already the insert's own
+ * edge, so this reads as a seamless continuation of it.
+ *
+ * Only called for an **untilted** mount (see `boringBarGeometry`): at
+ * `mountRot = 90°` the near corner's own local-X contribution is zero, so
+ * it stays close to the tip's own X and the triangle reads as a thin
+ * sliver. A real tilt swings that same corner — it is still a rigid
+ * rotation about the pinned tip, so every *other* vertex necessarily moves
+ * in an arc around it — out to an X far from the tip's own, several units
+ * wide, the same order as the insert's own radius: not a sliver bridging a
+ * gap any more but a second, wide, flat face of roughly the insert's own
+ * size, open in the air in front of the bar rather than hidden inside it.
+ * That is what read as a slab of "extra" bar material. There is no bend of
+ * this triangle that stays thin across a real tilt, so a tilted insert
+ * draws with no wedge at all instead — see `boringBarGeometry`.
+ */
+function boringConnectorWedge(insert, standout, barNearZ) {
+  const tip = boringInsertVertex(insert.x, insert.z, insert.r, insert.zScale, insert.sides, 0, insert.rot);
+  const nearIndex = insert.sides - 1;
+  const near = boringInsertVertex(insert.x, insert.z, insert.r, insert.zScale, insert.sides, nearIndex, insert.rot);
+  return {
+    points: [[tip.x, tip.z], [near.x, near.z], [-standout, barNearZ]],
+  };
+}
+
 export function boringBarGeometry(radius = 0.8, shape = {}) {
   const { s, thickY, standout } = toolScale(radius);
   const sides = shape.sides ?? 4;
   const angle = shape.angle ?? 35;
   const r = s * 0.42;
-  const barRadius = s * 0.55;
-  // How far the insert's own corner reaches toward +Z from its centre, once
-  // rotated 45° about Y — exact for the sides=4 case this always ships with;
-  // a generic sides-gon's reach varies with its own rotation, but Math.SQRT1_2
-  // (≈cos 45°) is the worst case among the vertices, so it never overshoots.
-  const reach = r * Math.SQRT1_2;
+  // 6 mm, unprompted, matches the Tool table's own default display
+  // (`BORING_BAR_DIAMETERS[0]` in App.jsx) — an unset override must draw
+  // what the picker already claims to be showing.
+  const barRadius = (shape.barDiameter ?? 6) / 2;
+  // Same fix as odHolderGeometry's zScale: a pointed insert's half-nose
+  // angle, not a hard-coded 1 for anything that isn't a 4-sided diamond.
+  const zScale = Math.max(Math.tan((angle / 2) * DEG), 0.2);
+  const mountRot = BORING_INSERT_MOUNT_ROT + (shape.insertTilt ?? 0) * DEG;
+  const tip = boringInsertTip(r, zScale, mountRot);
+  // The bar sits on the spindle axis — Y=0, the same plane the stock itself
+  // is centred on (a round bar of material is symmetric about that axis by
+  // construction). A centring pass through here once moved the *insert* to
+  // the bar's own axis instead, to read as seated through the bar's middle
+  // from Front — which left the insert sitting well clear of the stock's
+  // own centre once the stock was visible alongside it, looking like it
+  // was cutting at nothing. Centring the bar here instead keeps both where
+  // the workpiece actually is; `depthTest: false` on the insert (set in
+  // `Viewport.jsx`) is what keeps it visible over the bar's crown in Top
+  // view now that the crown can reach above Y=0, not a Y offset.
+  const barY = 0;
+  const barNearZ = standout;
+  const insert = {
+    r,
+    thickY,
+    sides,
+    zScale,
+    // `Viewport.jsx` mounts the insert mesh at this rotation.
+    rot: mountRot,
+    // The insert's centre sits exactly far enough back to cancel its own
+    // tip vertex's rotated offset (`boringInsertTip`), so that vertex —
+    // the one actually doing the cutting, not an assumed one — lands
+    // precisely on (0, 0), same invariant as every other marker here, for
+    // any `mountRot` at all.
+    x: -tip.x,
+    z: -tip.z,
+  };
   return {
     barRadius,
     barLength: s * 6,
-    // The bar's crown clears the cutting plane by `standout`, so the insert's
-    // rake face is not tangent to it — a cylinder touching a plane along a line
-    // fights for that line exactly as two coplanar faces do.
-    barY: -(barRadius + standout),
-    insert: {
-      r,
-      thickY,
-      sides,
-      // Same fix as odHolderGeometry's zScale: a pointed insert's half-nose
-      // angle, not a hard-coded 1 for anything that isn't a 4-sided diamond.
-      zScale: Math.max(Math.tan((angle / 2) * DEG), 0.2),
-      x: -r * 0.4,
-      // Positioned so the insert's own far corner lands `0.3·reach` *past*
-      // the bar's face (z = barRadius + 0.3·reach), not just touching it — a
-      // real insert sits in its pocket, overlapping the holder, and that
-      // margin is what survives the rounding a bare "just touching" position
-      // does not.
-      z: barRadius - reach * 0.7,
-    },
+    barY,
+    // The bar's FACE (its near end, not just its crown) sits here too — a
+    // hair behind the cutting plane, same reasoning as `barY`, not `barRadius`
+    // away from it. `Viewport.jsx` reads this for the bar's Z position.
+    barNearZ,
+    insert,
+    // Flush with the cutting plane, same invariant as every other marker's
+    // insert (see this file's header) — and, since the bar is now centred
+    // on Y=0 too, this also sits close to the bar's own middle rather than
+    // its crown, without the two requirements fighting each other.
     insertY: -thickY / 2,
     standout,
+    // See `boringConnectorWedge`'s own header — fills the gap `barNearZ`
+    // otherwise leaves open between the (pinned-at-origin) tip and the
+    // bar's face, without moving the insert off that invariant to do it.
+    // Only for an untilted mount: a real tilt swings the vertex this
+    // triangle's far corner uses out to roughly the insert's own size,
+    // reading as a slab of "extra" bar material rather than a thin sliver.
+    connectorWedge: (shape.insertTilt ?? 0) === 0
+      ? boringConnectorWedge(insert, standout, barNearZ)
+      : null,
   };
 }
 
@@ -222,12 +410,18 @@ export function partingBladeGeometry(radius = 0.8, shape = {}) {
 
 /**
  * The Y span a marker occupies, as [low, high]. The whole point: `high` must be
- * 0 — the cutting corner on the spindle centre plane — for every marker.
+ * 0 — the cutting corner on the spindle centre plane — for every marker,
+ * **except `boring`**: its bar is centred on that same plane (matching the
+ * stock, which is centred on it too — see `boringBarGeometry`'s header), so
+ * its crown can reach *above* Y=0 rather than stopping there.
  */
 export function markerYSpan(kind, radius, shape = {}) {
   if (kind === 'boring') {
     const g = boringBarGeometry(radius, shape);
-    return [Math.min(g.barY - g.barRadius, g.insertY - g.insert.thickY / 2), 0];
+    return [
+      Math.min(g.barY - g.barRadius, g.insertY - g.insert.thickY / 2),
+      Math.max(g.barY + g.barRadius, 0),
+    ];
   }
   if (kind === 'parting') {
     const g = partingBladeGeometry(radius, shape);

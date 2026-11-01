@@ -65,5 +65,7 @@ export function timingBreakdown(stats) {
     `rapid ${formatDuration(stats.rapidTime)}`,
   ];
   if (stats.dwellTime > 0) parts.push(`dwell ${formatDuration(stats.dwellTime)}`);
+  if (stats.toolChangeTime > 0) parts.push(`tool change ${formatDuration(stats.toolChangeTime)}`);
+  if (stats.rotaryIndexTime > 0) parts.push(`axis index ${formatDuration(stats.rotaryIndexTime)}`);
   return parts.join(' · ');
 }

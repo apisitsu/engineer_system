@@ -128,4 +128,16 @@ describe('a parting-blade marker is drawn true to scale with the groove it cuts'
     const r = await mount({ turnInsert: { kind: 'parting', grooveW: 4.5 }, toolRadius: 1.6 });
     for (const m of r.scene.findAllByType('Mesh')) expect(kerfOf(m)).toBeCloseTo(4.5, 6);
   });
+
+  it('is edge-referenced in Z, not centred — matches carveTurningMove\'s matching fix', async () => {
+    // The programmed Z (the tool's local Z=0, since `Tool` places the whole
+    // marker group at `pos`) is the edge kept, not the middle of the blade —
+    // see `carveTurningMove`'s identical comment. A box of width w centred
+    // at z=-w/2 spans [-w, 0]: flush against the tool position on one side,
+    // reaching back toward the chuck on the other.
+    const r = await mount({ turnInsert: { kind: 'parting', grooveW: 3 }, toolRadius: 1.6 });
+    for (const m of r.scene.findAllByType('Mesh')) {
+      expect(m.instance.position.z).toBeCloseTo(-1.5, 6); // -grooveW/2
+    }
+  });
 });

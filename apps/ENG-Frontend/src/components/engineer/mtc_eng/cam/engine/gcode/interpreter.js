@@ -137,18 +137,41 @@ function toPartFrame(p, aDeg, bDeg, aCenter) {
 /**
  * @param {string} text raw G-code program
  * @param {{mode?:'mill'|'turn', rapidRate?:number, diameterMode?:boolean,
- *          rotaryFrame?:'part'|'machine', rotaryCenter?:[number,number]}} opts
+ *          rotaryFrame?:'part'|'machine', rotaryCenter?:[number,number],
+ *          maxTurnRpm?:number}} opts
  *   rapidRate — machine traverse speed in mm/min, used to time G0 moves.
  *   diameterMode — turn mode only: treat the X word as a diameter.
  *   rotaryFrame — 'part' orients each A index onto the workpiece (what you want
  *     to look at); 'machine' leaves coordinates as programmed, with the tool
  *     always along +Z (what the height-field simulator needs).
  *   rotaryCenter — Y/Z the A-axis physically passes through; see `toPartFrame`.
+ *   maxTurnRpm — turn mode only: the selected machine's own spindle ceiling,
+ *     honoured by `currentRpm()` alongside (not instead of) a G96 program's
+ *     own G50 clamp — see its comment for why a program that omits G50
+ *     needs this to avoid an unbounded RPM near the centreline.
+ *   toolChangeSeconds — real seconds billed for every distinct T word this
+ *     program selects (the first included — loading it from whatever was in
+ *     the spindle before the program started is still a real tool change).
+ *     Defaults to 0, not a guessed average: unlike `rapidRate`/`maxTurnRpm`,
+ *     this is not a published machine spec (a chip-to-chip time varies by
+ *     ATC design even within one brand's line-up), so it is left at "not
+ *     modelled" until the operator states their own shop's number, the same
+ *     way `rapidRate`'s own manual field already works when no machine is
+ *     selected.
+ *   rotaryIndexSeconds — real seconds billed every time the A or B word
+ *     moves the rotary axis to a new angle (the segments themselves carry no
+ *     time for this — see `words.A`/`words.B` below). Same reasoning and the
+ *     same default as `toolChangeSeconds`: a trunnion's own index time is
+ *     mostly acceleration, settle and (on many machines) an axis brake
+ *     clamping/unclamping, not a published feed-rate-like number, and it
+ *     varies by machine far more than it varies by how many degrees the
+ *     index itself covers — so this is a flat cost per index, not a
+ *     degrees-per-second rate that would claim more precision than is real.
  */
 export function interpret(text, opts = {}) {
   const {
     mode = 'mill', rapidRate = 5000, diameterMode = true, rotaryFrame = 'part',
-    rotaryCenter,
+    rotaryCenter, maxTurnRpm, toolChangeSeconds = 0, rotaryIndexSeconds = 0,
   } = opts;
   const turning = mode === 'turn';
   const partFrame = rotaryFrame !== 'machine';
@@ -205,6 +228,8 @@ export function interpret(text, opts = {}) {
   let rapidTime = 0;
   let feedTime = 0;
   let dwellTime = 0;
+  let toolChangeTime = 0;
+  let rotaryIndexTime = 0;
   const aIndices = new Set([0]); // every A angle the program machines at
   const toolCut = new Map(); // tool number -> { feeds, cutLength } actually cut
   const min = [Infinity, Infinity, Infinity];
@@ -239,14 +264,28 @@ export function interpret(text, opts = {}) {
    * As the tool approaches centre the diameter goes to zero and the ideal RPM
    * runs away, which is exactly what `G50 S…` clamps on a real control; the
    * clamp is honoured here for the same reason.
+   *
+   * `maxTurnRpm` (the selected machine's own spindle ceiling, from `opts`)
+   * is honoured too, and independently of the program's own `G50`: a program
+   * missing its G50 altogether (or one written against a different, faster
+   * machine) would otherwise let the ideal RPM run away unbounded as the
+   * diameter shrinks, which made cycle time near the centreline read as
+   * near-instant rather than merely fast. The lower of the two applies,
+   * same as a real control would never exceed its own spindle no matter
+   * what the program asks for.
    */
   const currentRpm = () => {
     if (!state.cssActive) return Math.abs(state.spindle);
     // pos[0] is already a radius in turning mode.
     const diameter = Math.abs(state.pos[0]) * 2;
-    if (diameter < 1e-6) return state.spindleClamp || Math.abs(state.spindle);
+    const ceiling = Math.min(
+      state.spindleClamp > 0 ? state.spindleClamp : Infinity,
+      maxTurnRpm > 0 ? maxTurnRpm : Infinity,
+    );
+    const clamp = isFinite(ceiling) ? ceiling : 0;
+    if (diameter < 1e-6) return clamp || Math.abs(state.spindle);
     const ideal = (1000 * Math.abs(state.cssSpeed)) / (Math.PI * diameter);
-    return state.spindleClamp > 0 ? Math.min(ideal, state.spindleClamp) : ideal;
+    return clamp > 0 ? Math.min(ideal, clamp) : ideal;
   };
 
   /** Effective cutting feed in mm/min for the current modal state. */
@@ -729,20 +768,38 @@ export function interpret(text, opts = {}) {
         else state.spindle = words.S;
       }
       // The rotary axes index the part, not the tool. Degrees, never scaled.
+      // Billed as real time too (`rotaryIndexSeconds`, flat per index — see
+      // `interpret`'s own comment), same shape as the tool-change billing
+      // below: only when the resolved angle actually differs from the one
+      // already indexed to, so a block that merely restates it (or a G91
+      // move of 0) does not double-bill.
       if (words.A !== undefined) {
-        state.aAxis = state.absolute ? words.A : state.aAxis + words.A;
+        const nextA = state.absolute ? words.A : state.aAxis + words.A;
+        if (rotaryIndexSeconds > 0 && Math.abs(nextA - state.aAxis) > EPS) rotaryIndexTime += rotaryIndexSeconds;
+        state.aAxis = nextA;
       }
       // B is a rotary index on a mill / 5-axis machine; on a lathe the same
       // address is a cycle parameter (e.g. the G76 thread angle), so only a
       // milling program rotates the part with it.
       if (!turning && words.B !== undefined) {
-        state.bAxis = state.absolute ? words.B : state.bAxis + words.B;
+        const nextB = state.absolute ? words.B : state.bAxis + words.B;
+        if (rotaryIndexSeconds > 0 && Math.abs(nextB - state.bAxis) > EPS) rotaryIndexTime += rotaryIndexSeconds;
+        state.bAxis = nextB;
       }
       // A tool change (T word) selects the cutter every following move is made
       // with. The tool-change block itself carries no motion, so tagging from
       // here forward is enough. A lathe T word packs an offset (T0606); keep the
       // raw number — the comment table (milling) keys on the small tool index.
-      if (words.T !== undefined) state.tool = words.T;
+      //
+      // Billed as real time too, against `state.tool`'s *previous* value —
+      // the first T word included, since loading it from whatever sat in the
+      // spindle before the program started is still a real tool change — but
+      // only when it actually differs: `T0606` re-stating the already-active
+      // tool (an offset-only restate some posts emit) must not double-bill.
+      if (words.T !== undefined) {
+        if (toolChangeSeconds > 0 && words.T !== state.tool) toolChangeTime += toolChangeSeconds;
+        state.tool = words.T;
+      }
 
       // G4 dwell: P (or X/U) seconds. Consumes the block — no motion.
       if (dwellThisBlock) {
@@ -906,7 +963,9 @@ export function interpret(text, opts = {}) {
       rapidTime,           // seconds
       feedTime,            // seconds
       dwellTime,           // seconds
-      cycleTime: rapidTime + feedTime + dwellTime,
+      toolChangeTime,      // seconds — 0 unless `toolChangeSeconds` was given
+      rotaryIndexTime,     // seconds — 0 unless `rotaryIndexSeconds` was given
+      cycleTime: rapidTime + feedTime + dwellTime + toolChangeTime + rotaryIndexTime,
       // Distinct A-axis indices the program machines at. More than one means a
       // 4-axis job, which the Z-up height-field simulator can't carve whole.
       aIndices: [...aIndices].sort((x, y) => x - y),
@@ -994,8 +1053,12 @@ function expandDrillCycle(code, state, words, start, target, emit, lineNo, addDw
   // G82/G89 dwell at the bottom of the hole for P seconds.
   if ((code === 82 || code === 89) && words.P !== undefined) addDwell(Math.abs(words.P));
 
-  // 4. Retract. G85/G89 feed back out (boring); others rapid.
-  const retractType = code === 85 || code === 89 ? 'feed' : 'rapid';
+  // 4. Retract. G85/G89 feed back out (boring); G84 backs the tap out at the
+  // same synchronized feed it plunged at — a rigid tap never runs its axis
+  // and spindle out of sync, retract leg included, so modelling it as a
+  // rapid (as G81/G82/G83/G86 genuinely are) understated every tapped
+  // hole's real cycle time by the whole length of that leg. The others rapid.
+  const retractType = code === 85 || code === 89 || code === 84 ? 'feed' : 'rapid';
   emit(retractType, [hx, hy, zBottom], [hx, hy, retractZ], lineNo);
 
   state.pos = [hx, hy, retractZ];

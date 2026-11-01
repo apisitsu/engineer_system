@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   Layout, Button, Statistic, Alert, Space, Typography, theme,
-  InputNumber, Segmented, Switch, Divider, Slider, Tag, Tooltip, Drawer,
+  InputNumber, Segmented, Switch, Divider, Slider, Tag, Tooltip, Drawer, Select,
   App as AntdApp,
 } from 'antd';
 import {
@@ -201,6 +201,13 @@ function TurnToolGlyph({ tool }) {
     </span>
   );
 }
+
+/**
+ * Standard boring-bar shank diameters (mm) — the sizes a boring bar actually
+ * ships in, not an arbitrary continuous range. Drives both the bar diameter
+ * picker below and `boringBarGeometry`'s `barDiameter` shape field.
+ */
+const BORING_BAR_DIAMETERS = [6, 8, 10, 12, 16, 20, 25, 32];
 
 /**
  * Icon picker for a tool's turning insert/holder — a row of glyph buttons (one per
@@ -505,6 +512,8 @@ export default function App() {
   const page      = useCamStore((s) => s.page);
   const diameterMode = useCamStore((s) => s.diameterMode);
   const rapidRate = useCamStore((s) => s.rapidRate);
+  const toolChangeSeconds = useCamStore((s) => s.toolChangeSeconds);
+  const rotaryIndexSeconds = useCamStore((s) => s.rotaryIndexSeconds);
   const view      = useCamStore((s) => s.view);
   const viewNonce = useCamStore((s) => s.viewNonce);
   const toolRadius = useCamStore((s) => s.toolRadius);
@@ -570,6 +579,8 @@ export default function App() {
   const setPage     = useCamStore((s) => s.setPage);
   const setViewPreset = useCamStore((s) => s.setViewPreset);
   const setRapidRate = useCamStore((s) => s.setRapidRate);
+  const setToolChangeSeconds = useCamStore((s) => s.setToolChangeSeconds);
+  const setRotaryIndexSeconds = useCamStore((s) => s.setRotaryIndexSeconds);
   const setDiameterMode = useCamStore((s) => s.setDiameterMode);
   const setRotaryFrame = useCamStore((s) => s.setRotaryFrame);
   // Through the feature tree, so a dropped file becomes the base of a history
@@ -947,8 +958,16 @@ export default function App() {
       // Only `partingBladeGeometry` reads this (`shape.grooveW`); harmless on
       // every other holder shape, which never looks at it.
       grooveW: currentOverride.grooveW,
+      // Only `boringBarGeometry` reads this (`shape.barDiameter`) — the bar's
+      // own shank size, picked from `BORING_BAR_DIAMETERS`, not the bore it
+      // cuts (the program's own X states that; see `FIXED_RADIUS_TYPES`'s
+      // comment on why boring is deliberately excluded there).
+      barDiameter: currentOverride.barDiameter,
     }
-    : null), [turning, baseTurnTool, currentOverride.insertAngle, currentOverride.grooveW]);
+    : null), [
+    turning, baseTurnTool, currentOverride.insertAngle, currentOverride.grooveW,
+    currentOverride.barDiameter,
+  ]);
   // Feed and spindle speed at the playhead, and what the tool in the spindle
   // is, for the position page's footer. The tool description is the one the
   // marker draws and the carvers cut with (`effectiveTool` above), not the
@@ -1218,6 +1237,40 @@ export default function App() {
                     mm/min
                   </span>
                 </Space.Compact>
+                <Tooltip title="Seconds billed for every tool change — 0 means not counted. Not a published spec like Rapid; set it from your own machine's chip-to-chip time.">
+                  <span style={{ color: CAD.label }}>Tool change</span>
+                </Tooltip>
+                <Space.Compact>
+                  <InputNumber controls={false}
+                    min={0}
+                    step={1}
+                    value={toolChangeSeconds}
+                    onChange={(v) => setToolChangeSeconds(v || 0)}
+                    style={{ width: 72 }}
+                  />
+                  <span className="ant-input-group-addon" style={addonStyle('right')}>
+                    s
+                  </span>
+                </Space.Compact>
+                {!turning && (
+                  <>
+                    <Tooltip title="Seconds billed every time an A/B word indexes the 4th/5th axis to a new angle — 0 means not counted. Mostly acceleration/settle/clamp time, which varies by machine far more than it varies by angle, so this is a flat cost per index, not a rate.">
+                      <span style={{ color: CAD.label }}>Axis index</span>
+                    </Tooltip>
+                    <Space.Compact>
+                      <InputNumber controls={false}
+                        min={0}
+                        step={1}
+                        value={rotaryIndexSeconds}
+                        onChange={(v) => setRotaryIndexSeconds(v || 0)}
+                        style={{ width: 72 }}
+                      />
+                      <span className="ant-input-group-addon" style={addonStyle('right')}>
+                        s
+                      </span>
+                    </Space.Compact>
+                  </>
+                )}
                 {turning && (
                   <Tooltip title="Lathe convention: the X word is a diameter, not a radius">
                     <Space>
@@ -1338,6 +1391,20 @@ export default function App() {
                                       style={{ width: 62 }}
                                     />
                                   </>
+                                )}
+                                {holder?.kind === 'boring' && (
+                                  <Tooltip title="Boring bar shank diameter — standard sizes only; sets the marker's bar thickness, not the bore it cuts (that's the program's own X).">
+                                    <Space.Compact>
+                                      <span className="ant-input-group-addon" style={addonStyle('left')}>bar⌀</span>
+                                      <Select
+                                        size="small"
+                                        value={ov.barDiameter ?? BORING_BAR_DIAMETERS[0]}
+                                        onChange={(v) => setToolOverride(t.n, { barDiameter: v })}
+                                        options={BORING_BAR_DIAMETERS.map((d) => ({ value: d, label: `${d}` }))}
+                                        style={{ width: 62 }}
+                                      />
+                                    </Space.Compact>
+                                  </Tooltip>
                                 )}
                                 {holder?.kind === 'parting' && (
                                   <Tooltip title="Groove width — the blade's kerf, both drawn and cut this wide.">

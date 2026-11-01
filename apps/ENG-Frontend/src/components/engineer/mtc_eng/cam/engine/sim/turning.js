@@ -48,16 +48,37 @@ export const STANDARD_TURN_TOOLS = [
   // code is needed for it. Added alongside the G76 expansion (see
   // `interpreter.js`): before that, a threading pass had nowhere to point in
   // this list and no cutting motion to simulate either.
-  { id: 'threadtool', label: 'Threading tool · 60° V (external)', kind: 'od', lead: 29.5, sides: 3, angle: 60, adjustable: false, flip: true },
+  //
+  // `flip: false` here, unlike its three OD siblings above — not an
+  // inconsistency. `odHolderGeometry`'s `t` is built from `lead + angle/2`
+  // against a 90° pivot; every sibling's `lead + angle/2` lands *above* 90°
+  // (104.5–135°), so their `flip: true` is what turns the holder away from
+  // the chuck. This tool's lead is only 29.5° (a thread's V-point has no real
+  // "lead angle" the way a turning insert does — this value was chosen to
+  // orient the point, not copied off a catalogue approach angle), putting
+  // `lead + angle/2` at 59.5° — *below* 90° — so the same `flip: true` pivots
+  // it the other way and swings the holder body back toward the chuck
+  // instead of away from it. `flip: false` is what keeps this tool's holder
+  // on the same side of the tip (away from the chuck) as the other three —
+  // verified against `odHolderGeometry()`'s own numbers: the outline's Z
+  // span is [0, 13ish] for all four with this setting, not negative only for
+  // this one.
+  { id: 'threadtool', label: 'Threading tool · 60° V (external)', kind: 'od', lead: 29.5, sides: 3, angle: 60, adjustable: false, flip: false },
   // A boring bar reaching into the bore, insert cutting the ID (marker only —
   // the sim still carves an outer profile).
-  { id: 'boring', label: 'Boring bar · ID (insert adj.)', kind: 'boring', lead: 93, sides: 4, angle: 35, adjustable: true },
+  // `insertTilt` is `boringBarGeometry`'s own shape field (see its header) —
+  // dialled in by eye against the live render, not derived from anything
+  // else on this row. The insert's Z placement itself is not a shape field
+  // at all: `boringBarGeometry` always solves it so the insert sits flush
+  // against the bar's own face, for whatever `insertTilt` ends up being.
+  { id: 'boring', label: 'Boring bar · ID (insert adj.)', kind: 'boring', lead: 93, sides: 4, angle: 35, adjustable: true, insertTilt: -35 },
   // Internal threading bar — same reasoning as the external entry above, on
   // the boring-bar body instead of the OD holder.
   // `lead` is unused by `boringBarGeometry` (only `odHolderGeometry` reads
   // it) — carried anyway, same as the 'boring' entry above, because
   // `turning_check.mjs` asserts every catalogue entry has one, for the same
   // "one family of markers" reason it also requires `angle`/`sides`.
+  // No `insertTilt` here — only `boring`'s insert was asked to tilt.
   { id: 'threadbar', label: 'Threading bar · 60° V (internal)', kind: 'boring', lead: 93, sides: 3, angle: 60, adjustable: false },
   // Axial tools — a centre/spot drill, twist drill, reamer or tap, held in
   // the tailstock or turret and cutting on the spindle centreline. These get
@@ -425,9 +446,16 @@ export function carveTurningMove(stock, a, b, noseR, mode = 'od', minRadius = 0,
     // an 'id' one (it grows the bore outward) — the same across every slice
     // the blade's width spans, since its cutting edge is flat.
     const extreme = Math.max(0, mode === 'id' ? Math.max(ra, rb) : Math.min(ra, rb));
-    const half = Math.max(0, grooveWidth) / 2;
-    const k0 = Math.max(0, Math.ceil((za - half - stock.zMin) / stock.cs - 0.5));
-    const k1 = Math.min(stock.nz - 1, Math.floor((za + half - stock.zMin) / stock.cs - 0.5));
+    // Edge-referenced, not centred: a real tool offset is touched off to ONE
+    // point on the insert, so the programmed Z sits flush against the
+    // material being kept and the kerf lands entirely on the far (scrap/
+    // chuck) side of it — the same side a facing move's own billet
+    // truncation already treats as +Z. Centring it here used to eat half
+    // the blade width into the already-turned good length (a part
+    // programmed to come out 30.5mm read as 29.5mm for a 2mm blade).
+    const zLo = za - Math.max(0, grooveWidth);
+    const k0 = Math.max(0, Math.ceil((zLo - stock.zMin) / stock.cs - 0.5));
+    const k1 = Math.min(stock.nz - 1, Math.floor((za - stock.zMin) / stock.cs - 0.5));
     let removed = 0;
     if (k1 >= k0) {
       for (let k = k0; k <= k1; k++) removed += applyRadius(stock, k, extreme, mode);

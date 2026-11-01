@@ -90,6 +90,24 @@ describe('interpreter — canned drilling cycle', () => {
     // Each hole contributes cutting feed from R(2) down to Z(-6) = 8mm.
     expect(near(stats.feedLength, 16)).toBe(true);
   });
+
+  it('G81/G83/G86 rapid out, but G84 backs the tap out at the plunge feed', () => {
+    // A rigid tap never runs its axis and spindle out of sync — the retract
+    // is synchronized the same as the plunge, not an instant rapid the way
+    // a real G81/G86 retract is. Modelling it as a rapid (as an earlier
+    // version of this did) understated every tapped hole's own cycle time
+    // by the whole length of that leg.
+    const tap = interpret('G21 G90 G0 Z5\nG84 X10 Y10 Z-10 R2 F200\nG80');
+    const drill = interpret('G21 G90 G0 Z5\nG81 X10 Y10 Z-10 R2 F200\nG80');
+    // Same plunge (R2 to Z-10 = 12mm). G84's retract runs all the way back
+    // to the initial Z (5, the default retract plane with no G98/G99 in the
+    // program — R2 to Z5 = 15mm) and, unlike G81's, counts as feed, so the
+    // tap cuts a longer "feed" length and takes meaningfully longer than the
+    // drill's rapid-retract cycle.
+    expect(near(tap.stats.feedLength, 27)).toBe(true);
+    expect(near(drill.stats.feedLength, 12)).toBe(true);
+    expect(tap.stats.cycleTime).toBeGreaterThan(drill.stats.cycleTime);
+  });
 });
 
 describe('interpreter — lathe cycles in milling mode', () => {
@@ -315,6 +333,41 @@ describe('interpreter — cycle time', () => {
     expect(near(stats.cycleTime, 3.5)).toBe(true);
   });
 
+  it('bills a tool change only when the T word actually differs, and not at all with no toolChangeSeconds', () => {
+    const prog = 'G21 G90\nT0101\nG0 X10\nT0202\nG0 X20\nT0202\nG0 X30\nT0303\nG0 X40';
+    const unmodelled = interpret(prog);
+    expect(unmodelled.stats.toolChangeTime).toBe(0); // default: not modelled at all
+    const { stats } = interpret(prog, { toolChangeSeconds: 5 });
+    // T0101 (from nothing), T0202, T0303 are changes; the repeated T0202 is not.
+    expect(near(stats.toolChangeTime, 15)).toBe(true);
+    expect(near(stats.cycleTime, stats.rapidTime + stats.feedTime + stats.toolChangeTime)).toBe(true);
+  });
+
+  it('bills an axis index only when the A/B word actually moves to a new angle, and not at all by default', () => {
+    const prog = 'G21 G90\nG0 A0\nG1 X10\nG0 A90\nG1 X20\nG0 A90\nG1 X30\nG0 A180\nG1 X40';
+    const unmodelled = interpret(prog);
+    expect(unmodelled.stats.rotaryIndexTime).toBe(0); // default: not modelled at all
+    const { stats } = interpret(prog, { rotaryIndexSeconds: 3 });
+    // A0 restates the aAxis default (0) — no real index, so it is not
+    // billed. A90 and A180 each move to a genuinely new angle and are; the
+    // repeated A90 right after is not. Two real indexes × 3s = 6s.
+    expect(near(stats.rotaryIndexTime, 6)).toBe(true);
+    expect(near(
+      stats.cycleTime,
+      stats.rapidTime + stats.feedTime + stats.rotaryIndexTime,
+    )).toBe(true);
+  });
+
+  it('counts a B-axis index on a mill the same way, and ignores B on a lathe', () => {
+    // B is a rotary index on a mill but a cycle parameter (e.g. G76's angle)
+    // on a lathe — only the mill reading should ever bill it.
+    const prog = 'G21 G90\nG0 B45\nG1 X10';
+    const mill = interpret(prog, { mode: 'mill', rotaryIndexSeconds: 4 });
+    expect(near(mill.stats.rotaryIndexTime, 4)).toBe(true);
+    const turn = interpret(prog, { mode: 'turn', rotaryIndexSeconds: 4 });
+    expect(turn.stats.rotaryIndexTime).toBe(0);
+  });
+
   it('falls back to 100 mm/min and warns when a feed move has no F word', () => {
     const { stats } = interpret('G21 G90\nG1 X100');
     expect(near(stats.feedTime, 60)).toBe(true);
@@ -444,6 +497,8 @@ describe('interpreter — constant surface speed (G96 / G97 / G50)', () => {
   const turn = { mode: 'turn', diameterMode: true };
   /** Cutting minutes for one feed move at a given diameter. */
   const minutes = (src) => interpret(src, turn).stats.cycleTime / 60;
+  /** Same, with extra interpreter opts (e.g. `maxTurnRpm`) merged in. */
+  const minutes2 = (src, extra) => interpret(src, { ...turn, ...extra }).stats.cycleTime / 60;
 
   it('reads S under G96 as a surface speed, not as RPM', () => {
     // Ø30 at 200 m/min is ~2122 rpm, so 0.2 mm/rev feeds ~424 mm/min.
@@ -480,6 +535,31 @@ describe('interpreter — constant surface speed (G96 / G97 / G50)', () => {
     // G50 on a mill cancels scaling and carries no S; G96/G97 are not used.
     const { stats } = interpret('G21 G17 G94\nS2000 M03\nG00 X0 Y0\nG01 X100 F500', { mode: 'mill' });
     expect(stats.cycleTime).toBeCloseTo((100 / 500) * 60, 1);
+  });
+
+  it("honours the selected machine's own spindle ceiling when the program has no G50 of its own", () => {
+    // Same regression as the G50 test above, but for a program that simply
+    // never states one — which a real control would still never run past
+    // its own spindle regardless. Without `maxTurnRpm` the implied rpm is
+    // enormous and the time collapses toward zero.
+    const free = 'G21 G18 G99\nG96 S200 M03\nG00 X0.4 Z2.\nG01 Z-100. F0.2';
+    expect(minutes(free)).toBeLessThan(0.05);
+    const capped = minutes2(free, { maxTurnRpm: 1000 });
+    expect(capped).toBeGreaterThan(minutes(free));
+    // 1000 rpm at 0.2 mm/rev = 200 mm/min over 102 mm, same arithmetic as
+    // the program's-own-G50 case above.
+    expect(capped).toBeCloseTo(102 / 200, 1);
+  });
+
+  it('applies whichever of the program G50 and the machine ceiling is lower', () => {
+    const src = 'G21 G18 G99\nG50 S1000\nG96 S200 M03\nG00 X0.4 Z2.\nG01 Z-100. F0.2';
+    // Program clamps to 1000; a slower machine clamps harder still.
+    const slowMachine = minutes2(src, { maxTurnRpm: 400 });
+    expect(slowMachine).toBeCloseTo(102 / (400 * 0.2), 1);
+    // A faster machine than the program's own clamp changes nothing — the
+    // program's G50 is still the tighter of the two.
+    const fastMachine = minutes2(src, { maxTurnRpm: 5000 });
+    expect(fastMachine).toBeCloseTo(minutes(src), 6);
   });
 });
 

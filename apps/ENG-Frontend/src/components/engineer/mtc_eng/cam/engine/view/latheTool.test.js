@@ -8,9 +8,18 @@ import { STANDARD_TURN_TOOLS } from '../sim/turning.js';
 describe('every lathe marker cuts on the spindle centre plane', () => {
   // The regression: the OD insert was mounted on the holder's side face and sat
   // entirely at positive Y — 1 to 5 mm clear of the plane where the cut happens.
+  //
+  // `boring` is the one exception, and deliberately so: its bar is centred
+  // on Y=0 (matching the stock, which is centred on the same spindle axis —
+  // see `boringBarGeometry`'s header), so its crown reaches *above* Y=0
+  // rather than stopping there. Its insert still keeps the Y=0 invariant.
   it.each(STANDARD_TURN_TOOLS.map((t) => [t.id, t]))('%s has its cutting corner at Y=0', (_id, tool) => {
     const [lo, hi] = markerYSpan(tool.kind, 1.6, tool);
-    expect(hi).toBe(0);
+    if (tool.kind === 'boring') {
+      expect(hi).toBeGreaterThan(0);
+    } else {
+      expect(hi).toBe(0);
+    }
     expect(lo).toBeLessThan(0);
   });
 
@@ -50,24 +59,115 @@ describe('every lathe marker cuts on the spindle centre plane', () => {
     expect(g.screwY - g.screwH / 2).toBeLessThan(0);
   });
 
-  it('puts the boring bar under the plane too, with its insert on it', () => {
-    const { standout } = toolScale(1.6);
+  it("centres the boring bar on the spindle axis, matching the stock", () => {
+    // Not a `standout`-clear of the cutting plane the way every other
+    // marker's body is: the bar is centred on Y=0 exactly, since that's the
+    // axis the stock itself is centred on too (see boringBarGeometry's
+    // header for the visible-stock regression this fixed).
     const g = boringBarGeometry(1.6, {});
-    // The insert reaches the plane; the bar's crown clears it, so the two are
-    // not tangent along a line the depth buffer would have to arbitrate.
-    expect(g.insertY + g.insert.thickY / 2).toBeCloseTo(0, 12);
-    expect(g.barY + g.barRadius).toBeCloseTo(-standout, 12);
+    expect(g.barY).toBe(0);
   });
 
-  it('seats the boring bar insert against the bar face, with no gap', () => {
-    // The regression: the insert's z was hardcoded in Viewport.jsx, landing
-    // its far corner right at barRadius with no margin — any rounding either
-    // way showed as a visible gap between the insert and the holder.
-    for (const [sides, angle] of [[4, 35], [4, 60], [3, 60]]) {
-      const g = boringBarGeometry(1.6, { sides, angle });
-      const reach = g.insert.r * Math.SQRT1_2;
-      expect(g.insert.z + reach).toBeGreaterThan(g.barRadius);
+  it('keeps the boring insert at Y=0, the same invariant every marker here keeps', () => {
+    // A centring pass once moved this insert to the bar's own axis instead,
+    // which left it sitting well clear of the stock's own centre (the stock
+    // is centred on Y=0, same as every other marker's insert) once the
+    // stock was visible alongside it. `Viewport.jsx` still draws it with
+    // `depthTest: false` + a higher `renderOrder`, now because the bar's
+    // *own* crown reaches above Y=0 (see the previous test) and would
+    // otherwise occlude the insert in Top view.
+    const g = boringBarGeometry(1.6, {});
+    const { thickY } = toolScale(1.6);
+    expect(g.insertY).toBeCloseTo(-thickY / 2, 12);
+    expect(g.insertY + g.insert.thickY / 2).toBeCloseTo(0, 12);
+  });
+
+  it("lands the insert's real cutting-corner vertex on (0, 0) in X/Z, for a triangular insert as much as a diamond one, tilted or not", () => {
+    // The regression this guards: a later attempt solved the insert's own Z
+    // so its *near* corner (the one facing the bar) landed exactly on the
+    // bar's face, no wedge needed. That corner's natural distance from the
+    // tip runs to several units — not a small margin — so solving for it
+    // dragged the tip itself off the programmed cutting position by that
+    // same several units, in the wrong direction, for every tilt including
+    // zero. The tip must stay pinned at the world origin regardless of
+    // `insertTilt`; `boringConnectorWedge` is what makes the near corner
+    // read as flush with the bar without moving the insert to do it.
+    for (const [sides, angle, insertTilt] of [[4, 35, 0], [3, 60, 0], [4, 35, -35], [3, 60, 20]]) {
+      const g = boringBarGeometry(1.6, { sides, angle, insertTilt });
+      const { insert } = g;
+      const rot = insert.rot;
+      const x = insert.x + (0 * Math.cos(rot) + insert.r * insert.zScale * Math.sin(rot));
+      const z = insert.z + (-0 * Math.sin(rot) + insert.r * insert.zScale * Math.cos(rot));
+      expect(x).toBeCloseTo(0, 9);
+      expect(z).toBeCloseTo(0, 9);
     }
+  });
+
+  it("mounts the insert on its own axis of symmetry, so its base is parallel to Z (not a diagonal lean)", () => {
+    // The regression: two earlier fixes both pinned a *real* vertex to the
+    // tip, but neither was guaranteed to be the insert's own symmetry axis
+    // — a vertex off that axis makes the two flanks either side of the
+    // point unequal lengths/angles on screen, reading as a skewed insert
+    // even though its tip sits correctly at (0, 0). `zScale` only scales
+    // local Z, so only the vertex that already sits ON local Z (index 0)
+    // keeps its own mirror symmetry after that scale; every other vertex's
+    // line is off-axis and the anisotropic scale breaks symmetry about it.
+    // A threading insert's real cutting edges are each other's mirror
+    // image about that axis, so this is what "looks right", not a 4-sided
+    // convention (the old 45°/−45°) being carried over onto a triangle.
+    for (const [sides, angle] of [[4, 35], [3, 60]]) {
+      const g = boringBarGeometry(1.6, { sides, angle });
+      const { insert } = g;
+      const worldOf = (i) => {
+        const theta = (i / sides) * 2 * Math.PI;
+        const lx = insert.r * Math.sin(theta);
+        const lz = insert.r * Math.cos(theta) * insert.zScale;
+        return {
+          x: insert.x + (lx * Math.cos(insert.rot) + lz * Math.sin(insert.rot)),
+          z: insert.z + (-lx * Math.sin(insert.rot) + lz * Math.cos(insert.rot)),
+        };
+      };
+      const tip = worldOf(0);
+      expect(tip.x).toBeCloseTo(0, 9);
+      expect(tip.z).toBeCloseTo(0, 9);
+      // Every other vertex has a mirror partner (index `sides - i`) at the
+      // same X, opposite Z — the "base parallel to Z" the insert's own
+      // shape guarantees once it's mounted on its true symmetry axis.
+      for (let i = 1; i < sides; i++) {
+        const a = worldOf(i);
+        const b = worldOf(sides - i);
+        expect(b.x).toBeCloseTo(a.x, 9);
+        expect(b.z).toBeCloseTo(-a.z, 9);
+      }
+    }
+  });
+
+  it('bridges the insert to the bar with the connector wedge, tip to near corner to the bar face — untilted only', () => {
+    // The wedge is what makes the near corner read as flush with the bar's
+    // face without moving the insert off the tip-at-origin invariant (see
+    // the test above). Its first point must be the insert's own tip — not
+    // an assumed (0, 0), so it stays correct if the tip invariant ever
+    // changes — and its last point must sit on the bar's own face.
+    for (const [sides, angle] of [[4, 35], [3, 60]]) {
+      const g = boringBarGeometry(1.6, { sides, angle });
+      const [tipPt, , barPt] = g.connectorWedge.points;
+      expect(tipPt[0]).toBeCloseTo(0, 9);
+      expect(tipPt[1]).toBeCloseTo(0, 9);
+      expect(barPt[1]).toBeCloseTo(g.barNearZ, 12);
+    }
+  });
+
+  it('skips the connector wedge for a tilted mount, rather than drawing an oversized one', () => {
+    // The regression: the wedge's far corner is a *real* insert vertex,
+    // which (being a rigid rotation about the pinned tip) swings out to an
+    // X several units from the tip's own as soon as a real tilt is applied
+    // — far enough that the "small" triangle became a second, wide, flat
+    // face roughly the insert's own size, sitting in open air in front of
+    // the bar rather than hidden inside it. It read as a slab of excess bar
+    // material. There is no tilt-aware bend of this triangle that stays a
+    // thin sliver, so a tilted mount gets no wedge at all.
+    const g = boringBarGeometry(1.6, { sides: 4, angle: 35, insertTilt: -35 });
+    expect(g.connectorWedge).toBeNull();
   });
 
   it('puts the parting blade under the plane', () => {

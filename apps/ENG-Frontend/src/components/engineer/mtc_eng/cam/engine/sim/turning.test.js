@@ -311,6 +311,29 @@ describe('carveTurningMove — od vs id carving', () => {
     expect(cut.length).toBe(1);
   });
 
+  it('is edge-referenced, not centred — the programmed Z is the edge kept, not the middle of the kerf', () => {
+    // A real tool offset is touched off to ONE point on the insert, so the
+    // kept material sits flush against the programmed Z and the kerf lands
+    // entirely on the far side. The bug: centring a 2mm blade on Z-15 ate 1mm
+    // into material a prior OD pass had already turned to its final length —
+    // "programmed Z-30.5 for a 30.5mm part" read as 29.5mm.
+    const s = freshStock();
+    carveTurningMove(s, [8, 0, 0], [8, 0, -15], 0, 'od');       // OD pass: Z0 to Z-15 turned to radius 8
+    carveTurningMove(s, [8, 0, -15], [2, 0, -15], 0, 'od', 0, 2); // parts off AT Z-15, a 2mm blade
+
+    const cut = [];
+    for (let k = 0; k < s.radius.length; k++) if (s.radius[k] <= 2 + 1e-6) cut.push(k);
+    expect(cut.length).toBeGreaterThanOrEqual(1);
+    const hi = Math.max(...cut); // the cell nearest Z-15, the kept side
+    const lo = Math.min(...cut); // the cell nearest the chuck side
+
+    // Every cell from the groove up to Z0 — the already-turned length — is
+    // untouched: still radius 8, not eaten into by the kerf.
+    for (let k = hi + 1; k < s.radius.length; k++) expect(s.radius[k]).toBeCloseTo(8, 6);
+    // Past the kerf (toward the chuck), the raw bar is untouched too.
+    expect(s.radius[lo - 1]).toBeCloseTo(10, 6);
+  });
+
   it('still leaves the true faced end alone — the billet truncation makes that face, not this move', () => {
     // Regression: the fix above first carved the end slice to the facing
     // move's own smallest radius (effectively 0), turning a flat end into a
