@@ -626,9 +626,8 @@ export default function SdsCoverageDashboard() {
   // so signing work in August lifts only the August bar, not every historical bar.
   // See the `max` comment on the left 'y' scale in `statusChartOpts`: keeps the tallest
   // bar at or below the screen height the target line sits at on the right axis
-  // (90/115 of the chart). Declared BEFORE `statusChartData` because that chart's
-  // "Label Anchor" dataset (the fixed-height row the count/%/delta labels pin to —
-  // see its comment) now plots directly at `yMax`, and is in its dependency array.
+  // (90/115 of the chart). Declared BEFORE `statusChartData` because `yMax` is in that
+  // chart's dependency array.
   const yMax = useMemo(() => {
     const barMax = Math.max(1, ...monthlyStatus.map(r => (r.complete || 0) + (r.pending || 0)));
     // Round UP to a "nice" gridline, but the rounding step itself scales with the data —
@@ -637,6 +636,47 @@ export default function SdsCoverageDashboard() {
     const step = barMax < 10 ? 1 : barMax < 50 ? 5 : barMax < 200 ? 10 : barMax < 1000 ? 50 : 500;
     return Math.ceil((barMax * 115 / 90) / step) * step;
   }, [monthlyStatus]);
+
+  // The summary table below the status chart lines its month columns up with the
+  // chart's own bars by reading the live x-axis geometry off the Chart.js instance
+  // rather than guessing at CSS widths — a category scale gives every column equal
+  // width between `scales.x.left` and `scales.x.right`, so that's exactly the gutter
+  // the table's first (row-label) column and value columns need to reproduce.
+  //
+  // Measured via a Chart.js `afterLayout` plugin, not a ResizeObserver on the canvas.
+  // The observer approach raced Chart.js's own first render: `animation:false` makes
+  // that render effectively synchronous, but the observer's callback is batched to
+  // the next frame regardless, so on a slow first paint it could fire before
+  // `chart.scales` existed and the table would silently stay on its 1fr fallback —
+  // equal-width columns, but not aligned to the chart underneath. `afterLayout` is
+  // Chart.js's own "the layout for this pass is final" hook, so it runs exactly when
+  // `scales.x.left/right` are authoritative — on first render AND on every resize.
+  //
+  // react-chartjs-2 only reads the `plugins` prop when it FIRST constructs the chart
+  // (`new Chart(canvas, { ..., plugins })` inside its own `renderChart`); none of its
+  // update effects re-apply a changed `plugins` prop to an existing instance. So this
+  // plugin object must never close over `monthlyStatus` (or anything else reactive) —
+  // on first mount `data` hasn't arrived yet and `monthlyStatus` is a shorter
+  // placeholder array (no prepended FYE-end row), and a closure over it would bake
+  // that wrong, permanently-stale category count into every later measurement,
+  // understating `colW` and overflowing the table past the chart's real width. Read
+  // the category count from the CHART's own live data instead — `chart.data.labels`
+  // is kept in sync on every render via react-chartjs-2's `setLabels` effect, so it's
+  // always current regardless of when this plugin closure was created.
+  const statusChartRef = useRef(null);
+  const [statusColLayout, setStatusColLayout] = useState(null); // { left, colW, right }
+  const statusColsPlugin = useMemo(() => ({
+    id: 'statusCols',
+    afterLayout: (chart) => {
+      const xs = chart.scales?.x;
+      const n = chart.data?.labels?.length || 0;
+      if (!xs || !n) return;
+      const left = xs.left, colW = (xs.right - xs.left) / n, right = chart.width - xs.right;
+      setStatusColLayout((prev) => (
+        prev && prev.left === left && prev.colW === colW && prev.right === right
+      ) ? prev : { left, colW, right });
+    },
+  }), []);
 
   const statusChartData = useMemo(() => {
     // The current month is still open — the backend keeps its bar moving until the
@@ -647,46 +687,6 @@ export default function SdsCoverageDashboard() {
     // A picked month (click on either chart) fades every other bar to one flat alpha.
     const dimmed = (r) => !!filterMonth && (r.isPrevLast || r.month !== filterMonth);
     const fill = (r, faintA, normalA) => (dimmed(r) ? 0.2 : (faint(r) ? faintA : normalA));
-    // A future placeholder month ({month:key, complete:0, pending:0, ...}, see the
-    // `monthlyStatus` useMemo) has nothing to label — the % line already skips it via
-    // `spanGaps`, and the count/delta labels below need the same guard.
-    const hasBarData = (row) => ((row?.complete || 0) + (row?.pending || 0)) > 0;
-    // The count/delta/% offsets below are tuned in PIXELS against a wide card (~157px
-    // per month-category). On a narrower screen the whole canvas shrinks but a fixed
-    // pixel offset does not, so at low width it eats a much bigger share of a much
-    // smaller gap and the delta label (shifted sideways into the gap between bars)
-    // starts overlapping the neighbour's own count/% stack. Scale every offset down
-    // together with however many CSS pixels a month actually gets, never up — on a
-    // wide chart this returns 1 and behaves exactly as before.
-    // `xs.width / categoryCount` — NOT `getPixelForValue(1) - getPixelForValue(0)`.
-    // A category scale's `getPixelForValue` looks its argument up in the LABEL array
-    // (it expects a label, or falls back to treating the number as one), so passing
-    // raw indices 0/1 doesn't return "the pixel at index 0/1" at all; on this chart it
-    // collapsed to ~0, which silently zeroed every offset — the exact all-labels-
-    // stacked-on-the-bar-top collision this was meant to fix. Total axis width divided
-    // by how many categories share it is unambiguous and always correct.
-    //
-    // `n` MUST count the whole FY (13: FYE-end + Apr..Mar), not just the months with
-    // real data — chart.js gives every category equal width whether or not it has a
-    // bar, so the empty Oct–Mar placeholders still take their share of the x-axis.
-    // The tuned baseline below (~85px) is exactly `1102.7 / 13`, measured from the
-    // chart at the width the current fixed offsets (26/40/10) were approved against —
-    // getting this count wrong (7, the visible bars only) overstated that baseline as
-    // ~157px, which silently scaled every offset down even at that same "good" width.
-    const TUNED_CATEGORY_PX = 85;
-    const catPxOf = (ctx) => {
-      const xs = ctx.chart.scales?.x;
-      const n = monthlyStatus.length || 1;
-      return xs?.width ? xs.width / n : TUNED_CATEGORY_PX;
-    };
-    const scaledOffset = (base) => (ctx) => base * Math.min(1, catPxOf(ctx) / TUNED_CATEGORY_PX);
-    // Proportional scaling alone still runs out of room below a certain width — three
-    // ~10px text lines squeezed toward a single point start touching however small
-    // their offsets get. Below this floor, drop straight back to the ORIGINAL,
-    // pre-this-feature look (just the % — always kept, never hidden) instead of
-    // rendering shrunken, overlapping text.
-    const MIN_EXTRA_LABEL_PX = 50;
-    const showExtras = (ctx) => catPxOf(ctx) >= MIN_EXTRA_LABEL_PX;
     return {
     labels: monthlyStatus.map(r => r.isPrevLast ? r.prevLabel : fmtMonth(r.month)),
     datasets: [
@@ -724,41 +724,6 @@ export default function SdsCoverageDashboard() {
         order: 3,
       },
       {
-        // Invisible marker, plotted on the same CN axis ('y') as the bars, at exactly
-        // half of that month's total (complete+pending) — so its point sits at the true
-        // vertical MIDDLE of the stacked bar regardless of how the Innovator/THAI/Pending split
-        // falls, and an anchor:'center' datalabel there reads as "the number inside the
-        // bar" rather than competing with the count/delta/% stack already crowded above
-        // it. No width tiering needed: unlike a horizontal label, this has nothing beside
-        // it to collide with, so it can just always show.
-        type: 'line',
-        label: 'Total (workable)',
-        data: monthlyStatus.map(r => hasBarData(r) ? ((r.complete || 0) + (r.pending || 0)) / 2 : null),
-        borderColor: 'transparent',
-        backgroundColor: 'transparent',
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        borderWidth: 0,
-        fill: false,
-        yAxisID: 'y',
-        order: 2, // below the % line and Target, above the bars (lower `order` draws on top) so the text isn't hidden under a segment
-        datalabels: {
-          display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]),
-          formatter: (v, ctx) => {
-            const r = monthlyStatus[ctx.dataIndex];
-            return ((r?.complete ?? 0) + (r?.pending ?? 0)).toLocaleString();
-          },
-          color: '#fff',
-          // A dark stroke around white text keeps it legible whether it lands on the
-          // pale Innovator green, the softer THAI green, or the tan Pending segment.
-          textStrokeColor: 'rgba(0,0,0,0.6)',
-          textStrokeWidth: 3,
-          anchor: 'center',
-          align: 'center',
-          font: { size: 10, weight: 700 },
-        },
-      },
-      {
         type: 'line',
         label: 'Complete % (Innovator+THAI)',
         // Cut the line at the last month that actually has data (null → no point),
@@ -766,76 +731,29 @@ export default function SdsCoverageDashboard() {
         // future months — same behaviour as the Inspection "Monthly Trend — FYE" line.
         data: monthlyStatus.map(r => ((r.complete || 0) + (r.pending || 0)) > 0 ? r.complete_pct : null),
         spanGaps: true,
-        borderColor: C.orange,
-        backgroundColor: hexToRgba(C.orange, 0.15),
+        borderColor: C.blue,
+        backgroundColor: hexToRgba(C.blue, 0.15),
         borderWidth: 2,
         pointRadius: monthlyStatus.map(r => r.month === curMonth ? 4 : 3),
-        pointBackgroundColor: monthlyStatus.map(r => r.month === curMonth ? hexToRgba(C.orange, 0.25) : C.orange),
-        pointBorderColor: C.orange,
+        pointBackgroundColor: monthlyStatus.map(r => r.month === curMonth ? hexToRgba(C.blue, 0.25) : C.blue),
+        pointBorderColor: C.blue,
         tension: 0.3,
         yAxisID: 'y1',
-        order: 1, // above the bars and the Total marker, below Target (lower `order` draws on top)
-      },
-      {
-        // Invisible marker pinned to a FIXED height (yMax, the top of the left axis)
-        // for every month — the count/delta/% labels anchor to THIS instead of to the
-        // % line's own point, so they sit in one flat row across the whole chart, the
-        // same way the x-axis month labels line up along one flat baseline at the
-        // bottom, rather than floating at each bar's own (variable) height.
-        type: 'line',
-        label: 'Label Anchor',
-        data: monthlyStatus.map(r => hasBarData(r) ? yMax : null),
-        borderColor: 'transparent',
-        backgroundColor: 'transparent',
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        borderWidth: 0,
-        fill: false,
-        yAxisID: 'y',
-        order: -1, // drawn on top of everything so its labels are never covered
-        // Two labels stacked above the line (count, %), plus delta vs the prior bar
-        // pushed into the GAP to its left — reads as "the change crossing into this
-        // bar" sitting between the two bars being compared, not stacked on either one.
+        order: 1, // above the bars, below Target (lower `order` draws on top)
         datalabels: {
-          display: true,
-          labels: {
-            count: {
-              display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]) && showExtras(ctx),
-              formatter: (v, ctx) => (monthlyStatus[ctx.dataIndex]?.complete ?? 0).toLocaleString(),
-              color: C.textPri,
-              anchor: 'end', align: 'top', offset: scaledOffset(26),
-              font: { size: 10, weight: 700 },
-            },
-            delta: {
-              display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]) && !!monthlyStatus[ctx.dataIndex - 1] && showExtras(ctx),
-              // Returning an array renders each entry as its own stacked line — arrow
-              // above the number, rather than side by side.
-              formatter: (v, ctx) => {
-                const d = (monthlyStatus[ctx.dataIndex]?.complete ?? 0) - (monthlyStatus[ctx.dataIndex - 1]?.complete ?? 0);
-                const arrow = d > 0 ? '▲' : d < 0 ? '▼' : '●';
-                return [arrow, Math.abs(d).toLocaleString()];
-              },
-              color: (ctx) => {
-                const d = (monthlyStatus[ctx.dataIndex]?.complete ?? 0) - (monthlyStatus[ctx.dataIndex - 1]?.complete ?? 0);
-                return d > 0 ? C.green : d < 0 ? C.red : C.textSec;
-              },
-              // A keyword align only offsets along ONE axis, so 'left' alone sits it
-              // at the point's own height (the trend line, well below the count row).
-              // A numeric align is a clockwise angle from the anchor (0=right, 90=
-              // bottom, 180=left, 270/-90=top) — -135 is up-and-left, landing the
-              // label level with the count row while still in the gap between bars.
-              anchor: 'end', align: -135, offset: scaledOffset(40),
-              font: { size: 9, weight: 700 },
-            },
-            // Only label months that actually have parts — skip empty future months
-            pct: {
-              display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]),
-              formatter: (v, ctx) => `${monthlyStatus[ctx.dataIndex]?.complete_pct}%`,
-              color: C.green,
-              anchor: 'end', align: 'top', offset: scaledOffset(10),
-              font: { size: 10, weight: 700 },
-            },
+          display: (ctx) => {
+            const r = monthlyStatus[ctx.dataIndex];
+            return ((r?.complete || 0) + (r?.pending || 0)) > 0;
           },
+          formatter: (v) => `${v}%`,
+          // Matches the %Complete KPI tile's own convention elsewhere on this page:
+          // at/above the 90% target reads green, below it reads red.
+          color: (ctx) => {
+            const r = monthlyStatus[ctx.dataIndex];
+            return (r?.complete_pct ?? 0) >= 90 ? C.green : C.red;
+          },
+          anchor: 'end', align: 'top', offset: 4,
+          font: { size: 10, weight: 700 },
         },
       },
       {
@@ -852,7 +770,51 @@ export default function SdsCoverageDashboard() {
       },
     ],
     };
-  }, [monthlyStatus, filterMonth, yMax]);
+  }, [monthlyStatus, filterMonth]);
+
+  // The row-label stack that used to float at the top of the chart (count, delta vs.
+  // last month, Complete %) now renders as a table under it instead — one row per
+  // metric, one column per month, aligned to the chart's own bars via `statusColLayout`.
+  const statusMonthlyRows = useMemo(() => {
+    const hasBarData = (row) => ((row?.complete || 0) + (row?.pending || 0)) > 0;
+    const deltaOf = (i) => {
+      const r = monthlyStatus[i], prev = monthlyStatus[i - 1];
+      if (!hasBarData(r) || !prev || !hasBarData(prev)) return null;
+      return (r.complete ?? 0) - (prev.complete ?? 0);
+    };
+    return [
+      {
+        key: 'total', label: 'Total', bold: true,
+        format: (r) => hasBarData(r) ? ((r.complete || 0) + (r.pending || 0)).toLocaleString() : '—',
+      },
+      {
+        key: 'complete', label: 'Complete',
+        format: (r) => hasBarData(r) ? (r.complete ?? 0).toLocaleString() : '—',
+      },
+      {
+        key: 'delta', label: 'Change',
+        format: (r, i) => {
+          const d = deltaOf(i);
+          if (d === null) return '—';
+          const sign = d > 0 ? '+' : d < 0 ? '-' : '';
+          return `${sign}${Math.abs(d).toLocaleString()}`;
+        },
+        color: (r, i) => {
+          const d = deltaOf(i);
+          if (d === null || d === 0) return C.textSec;
+          return d > 0 ? C.green : C.red;
+        },
+      },
+      {
+        key: 'remain', label: 'Remain', color: () => C.yellow,
+        format: (r) => hasBarData(r) ? (r.pending ?? 0).toLocaleString() : '—',
+      },
+      {
+        key: 'pct', label: '%', color: () => C.green,
+        format: (r) => hasBarData(r) ? `${r.complete_pct}%` : '—',
+      },
+    ];
+  }, [monthlyStatus, C]);
 
   const statusChartOpts = {
     // Only months that have bars are selectable — the empty future placeholders and the
@@ -867,30 +829,23 @@ export default function SdsCoverageDashboard() {
     },
     responsive: true, animation: false,
     maintainAspectRatio: false,
-    // Legend at the BOTTOM so the datalabels never collide with it. The count/delta/%
-    // stack now anchors to "Label Anchor", plotted exactly AT `yMax` (the left axis's
-    // own max) — unlike the old anchor (the Complete % line, which sat ~85-98% up a
-    // y1 axis with built-in headroom above 100), this one has ZERO built-in headroom:
-    // it's pinned to the very top of its axis on purpose (see that dataset's comment),
-    // so the WHOLE label stack (count + 2-line delta + pct, up to the delta's 40px
-    // offset plus its own text height) has to fit inside this padding alone. 54px was
-    // tuned for the old anchor's partial headroom and clipped the topmost line once
-    // that headroom went away — 90px is measured against the current stack.
-    layout: { padding: { top: 90 } },
+    // The count/delta stack that used to live at the top of the plot (pinned to `yMax`
+    // so it read as a flat row) now lives in the table below the chart instead. The
+    // chart itself keeps only the % line's own datalabel, which sits just above its
+    // point — a small top margin is enough headroom for that.
+    layout: { padding: { top: 20 } },
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: {
         position: 'bottom', labels: {
           color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12,
-          // Both markers are invisible positioning helpers, not real series.
-          filter: (item) => item.text !== 'Total (workable)' && item.text !== 'Label Anchor',
         },
       },
       datalabels: { display: false },  // datalabels plugin is registered globally — keep it off here
       tooltip: {
         callbacks: {
           label: ctx => {
-            if (['Target 90%', 'Total (workable)', 'Label Anchor'].includes(ctx.dataset.label)) return null;
+            if (ctx.dataset.label === 'Target 90%') return null;
             if (ctx.dataset.label.includes('%')) return `${ctx.dataset.label}: ${ctx.parsed.y}%`;
             return `${ctx.dataset.label}: ${ctx.parsed.y}`;
           },
@@ -903,7 +858,7 @@ export default function SdsCoverageDashboard() {
             return `Total (workable): ${total.toLocaleString()}`;
           },
         },
-        filter: item => !['Target 90%', 'Total (workable)', 'Label Anchor'].includes(item.dataset.label),
+        filter: item => item.dataset.label !== 'Target 90%',
       },
     },
     scales: {
@@ -947,32 +902,40 @@ export default function SdsCoverageDashboard() {
   // A direct count can't be negative: a sheet either was signed that month or it
   // wasn't, so a bar is always ≥ 0. Windowed to the FYE like the other monthly
   // charts; a month with no signings defaults to 0 rather than being omitted.
-  // A picked part-type card re-scopes this the same way it does New SDS Reqs per
-  // Month and the KPI cards — reading `byPartType[filterPt]` instead of the whole-FY
-  // `count` (the backend carries both per month, same pattern as `monthlyStatus`).
+  // Carries every part type's own count per month (not just the whole-FY `count`),
+  // same shape as `monthlyNewParts` above — so the chart below can stack by part
+  // type and colour each segment the same way "New SDS Reqs per Month" does,
+  // instead of collapsing to one flat green bar.
   const innovatorMonthly = useMemo(() => {
     const raw = Object.fromEntries((data?.monthlyInnovatorSigned || []).map(r => [r.month, r]));
     return fyMonths(fyeWin).map(key => {
       const row = raw[key];
-      const count = filterPt ? (row?.byPartType?.[filterPt] || 0) : (row?.count || 0);
-      return { month: key, count };
+      const out = { month: key, count: row?.count || 0 };
+      activePartTypes.forEach(t => { out[t] = row?.byPartType?.[t] || 0; });
+      return out;
     });
-  }, [data, fyeWin, filterPt]);
+  }, [data, fyeWin, activePartTypes]);
 
+  // One stacked dataset per part type, coloured and faded exactly like
+  // `newPartsChartData` — a selected part-type card zeroes out the other segments
+  // (collapsing the stack to one solid bar) instead of just dimming them.
   const innovatorMonthlyChartData = useMemo(() => {
     const curMonth = new Date().toISOString().slice(0, 7);
     return {
       labels: innovatorMonthly.map(r => fmtMonth(r.month)),
-      datasets: [{
-        label: 'Innovator Complete',
-        data: innovatorMonthly.map(r => r.count),
-        backgroundColor: innovatorMonthly.map(r => hexToRgba(C.green,
-          (filterMonth && r.month !== filterMonth) ? 0.25 : (r.month === curMonth ? 0.4 : 0.75))),
-        borderColor: C.green,
-        borderWidth: 1,
-      }],
+      datasets: activePartTypes.map(t => {
+        const color = PART_TYPE_COLOR[t] || C.cyan;
+        const hidden = !!filterPt && t !== filterPt;
+        return {
+          label: partTypeLabel(t),
+          data: innovatorMonthly.map(r => hidden ? 0 : (r[t] || 0)),
+          backgroundColor: innovatorMonthly.map(r => hexToRgba(color,
+            (filterMonth && r.month !== filterMonth) ? 0.25 : (r.month === curMonth ? 0.4 : 0.75))),
+          borderColor: color, borderWidth: 1, stack: 'innovator',
+        };
+      }),
     };
-  }, [innovatorMonthly, filterMonth]);
+  }, [innovatorMonthly, activePartTypes, filterMonth, filterPt]);
 
   const innovatorMonthlyChartOpts = {
     responsive: true, maintainAspectRatio: false, animation: false,
@@ -985,11 +948,23 @@ export default function SdsCoverageDashboard() {
       chart.canvas.style.cursor = row?.month ? 'pointer' : 'default';
     },
     plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: ctx => `Innovator Complete: ${ctx.parsed.y.toLocaleString()}` } },
+      legend: { position: 'bottom', labels: { color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12 } },
+      tooltip: { mode: 'index', intersect: false },
+      // One total label per bar, shown on the topmost stacked segment only — same
+      // pattern as `newPartsChartOpts` below.
       datalabels: {
-        display: (ctx) => (innovatorMonthly[ctx.dataIndex]?.count || 0) > 0,
-        formatter: (v) => v.toLocaleString(),
+        display: (ctx) => {
+          const row = innovatorMonthly[ctx.dataIndex];
+          const total = filterPt ? (row?.[filterPt] || 0)
+            : ctx.chart.data.datasets.reduce((s, ds) => s + (ds.data[ctx.dataIndex] || 0), 0);
+          return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 && total > 0;
+        },
+        formatter: (v, ctx) => {
+          const row = innovatorMonthly[ctx.dataIndex];
+          const total = filterPt ? (row?.[filterPt] || 0)
+            : ctx.chart.data.datasets.reduce((s, ds) => s + (ds.data[ctx.dataIndex] || 0), 0);
+          return total.toLocaleString();
+        },
         color: C.textPri,
         anchor: 'end', align: 'top', offset: 4,
         font: { size: 10, weight: 700 },
@@ -997,8 +972,9 @@ export default function SdsCoverageDashboard() {
     },
     layout: { padding: { top: 20 } },
     scales: {
-      x: { ticks: { color: C.textSec, font: { size: 10 }, maxRotation: 45 }, grid: { color: C.gridLine } },
+      x: { stacked: true, ticks: { color: C.textSec, font: { size: 10 }, maxRotation: 45 }, grid: { color: C.gridLine } },
       y: {
+        stacked: true,
         ticks: { color: C.textSec, font: { size: 10 } },
         grid: { color: C.gridLine },
         title: { display: true, text: 'CNs completed (Innovator)', color: C.textSec, font: { size: 10 } },
@@ -1214,15 +1190,14 @@ export default function SdsCoverageDashboard() {
             {/* ── Part Type Cards ─────────────────────────────────────────────── */}
             {byPartType.length > 0 && (
               <Row gutter={[10, 10]} style={{ marginBottom: 14 }}>
-                {/* "New SDS Reqs per Month" moved up here (was in the Charts Row below) —
-                    TOTAL now sits stacked above Pending instead, so this slot would
-                    otherwise sit empty. Same span=8 width it already had down there.
-                    Fixed 350px, matching Innovator Complete per Month — matching the KPI
-                    block's own (shorter) height instead squished the chart too thin to
-                    read. The KPI block keeps its own natural compact size either way
-                    (no stretch), so this trades a tall-chart/short-cards height
-                    mismatch for a short-chart/tall-cards one — picked tall chart. */}
-                <Col span={8}>
+                {/* Four columns across one row, all fixed 350px: New SDS Reqs per Month,
+                    Innovator Complete per Month right after it (both monthly charts
+                    together, moved up from the Charts Row below so that row isn't
+                    half-empty), then the Total/Complete/%Complete stack and the
+                    Ball/Race/Mecha/Sleeve stack. The KPI stack and part-type cards were
+                    widened to span=16/8 (of 24) when they had the row to themselves;
+                    narrowed back to 6/4 now that two charts share it. */}
+                <Col span={7}>
                   <div style={{ ...cardStyle, height: 350, display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
                     {sectionTitle(
                       <Tooltip title="Counts new (CN × machine × process) combinations, not CNs — one CN first produced on two machines counts as 2, possibly in different months. A combo's month is when it was FIRST produced (since the report's since-date), not a monthly recount.">
@@ -1238,95 +1213,99 @@ export default function SdsCoverageDashboard() {
                     </div>
                   </div>
                 </Col>
-                {/* Total/Complete/%Complete now stack in ONE wide column (left,
-                    span=16 — Total's old span=8 PLUS Complete's old span=8), and
-                    Ball/Race/Mecha/Sleeve moved into %Complete's old span=8 slot
-                    (right), stacked instead of laid out four-across. The whole row is
-                    a fixed 350px (matching New SDS Reqs per Month) with `align="stretch"`
-                    so both sub-columns fill it exactly; each stat card inside is
-                    `flex: 1` so Total/Complete/%Complete split the 350px into three
-                    even rows and Ball/Race/Mecha/Sleeve split it into four. */}
-                <Col span={16}>
-                  <Row gutter={[10, 10]} align="stretch" style={{ height: 350 }}>
-                    <Col span={16}>
-                      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 10, boxSizing: 'border-box' }}>
-                        {/* TOTAL — same compact stat-tile shape as Complete/Pending/%Complete;
-                            the Innovator/THAI detail it used to carry is already shown in the
-                            Complete and %Complete breakdown cards below it. */}
-                        <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(C.cyan, !!(filterPt || filterReason || filterMonth), C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
-                          <MiniStatCard label="Total" value={scopedStats.total} color={C.cyan} C={C} bare
-                            onClick={clearSelection}
-                            dimmed={!!(filterPt || filterReason || filterMonth)} />
-                          <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
-                          <div style={{ flex: 1 }}>
-                            <MiniStatCard label="Pending" value={scopedStats.pending} color={C.yellow} C={C} bare
-                              onClick={() => pickReason('PENDING')} active={filterReason === 'PENDING'}
-                              dimmed={!!filterReason && filterReason !== 'PENDING'} />
-                          </div>
-                        </div>
-                        <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(C.green, !!filterReason && filterReason !== 'COMPLETE', C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
-                          <MiniStatCard label="Complete" value={scopedStats.complete} color={C.green} C={C} bare
-                            onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
-                            dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
-                          <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
-                          {/* `align="stretch"` so Innovator/THAI match Pending's full stretched
-                              height instead of sitting at their own shorter natural size. */}
-                          <Row gutter={[8, 8]} align="stretch" style={{ flex: 1 }}>
-                            <Col span={12}>
-                              <SubStatCard label="Innovator complete" value={scopedStats.completeSaved} color={C.green} C={C} bare />
-                            </Col>
-                            <Col span={12} style={{ borderLeft: `1px solid ${C.border}` }}>
-                              {scopedStats.complete - scopedStats.completeSaved > 0 && (
-                                <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                                  <div style={{ height: '100%' }}>
-                                    <SubStatCard label="THAI complete *" value={scopedStats.complete - scopedStats.completeSaved}
-                                      color={C.greenSoft} C={C} bare />
-                                  </div>
-                                </Tooltip>
-                              )}
-                            </Col>
-                          </Row>
-                        </div>
-                        <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(scopedStats.completePct >= 90 ? C.green : C.red, !!filterReason && filterReason !== 'COMPLETE', C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
-                          <MiniStatCard label="% Complete" value={scopedStats.completePct} suffix="%"
-                            color={scopedStats.completePct >= 90 ? C.green : C.red} C={C} bare
-                            onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
-                            dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
-                          <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
-                          <Row gutter={[8, 8]} align="stretch" style={{ flex: 1 }}>
-                            <Col span={12}>
-                              <SubStatCard label="Innovator %" value={scopedStats.completeSavedPct} suffix="%"
-                                color={scopedStats.completeSavedPct >= 90 ? C.green : C.red} C={C} bare />
-                            </Col>
-                            <Col span={12} style={{ borderLeft: `1px solid ${C.border}` }}>
-                              {scopedStats.completePct - scopedStats.completeSavedPct > 0 && (
-                                <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                                  <div style={{ height: '100%' }}>
-                                    <SubStatCard label="THAI % *" value={(scopedStats.completePct - scopedStats.completeSavedPct).toFixed(1)} suffix="%"
-                                      color={C.greenSoft} C={C} bare />
-                                  </div>
-                                </Tooltip>
-                              )}
-                            </Col>
-                          </Row>
-                        </div>
+                <Col span={7}>
+                  <div style={{ ...cardStyle, height: 350, display: 'flex', flexDirection: 'column' }}>
+                    {sectionTitle(
+                      <Tooltip title="How many sheets were fully SIGNED as Innovator-complete (baseline stamp) in that calendar month — a direct count, so it's never negative. If a signature is later revoked, that sheet drops out of its original month's count on the next rebuild (the bar can shrink over time), but no month's count is ever computed as a difference from another, so it never goes below zero.">
+                        <span style={{ cursor: 'help' }}>Innovator Complete per Month</span>
+                      </Tooltip>,
+                      C
+                    )}
+                    <div style={{ flex: 1, minHeight: 0 }}>
+                      {innovatorMonthly.length > 0
+                        ? <Bar data={innovatorMonthlyChartData} options={innovatorMonthlyChartOpts} />
+                        : <div style={{ color: C.textSec, textAlign: 'center', paddingTop: 100 }}>No data</div>
+                      }
+                    </div>
+                  </div>
+                </Col>
+                <Col span={6}>
+                  <div style={{ height: 350, display: 'flex', flexDirection: 'column', gap: 10, boxSizing: 'border-box' }}>
+                    {/* TOTAL — same compact stat-tile shape as Complete/Pending/%Complete;
+                        the Innovator/THAI detail it used to carry is already shown in the
+                        Complete and %Complete breakdown cards below it. */}
+                    <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(C.cyan, !!(filterPt || filterReason || filterMonth), C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
+                      <MiniStatCard label="Total" value={scopedStats.total} color={C.cyan} C={C} bare
+                        onClick={clearSelection}
+                        dimmed={!!(filterPt || filterReason || filterMonth)} />
+                      <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
+                      <div style={{ flex: 1 }}>
+                        <MiniStatCard label="Pending" value={scopedStats.pending} color={C.yellow} C={C} bare
+                          onClick={() => pickReason('PENDING')} active={filterReason === 'PENDING'}
+                          dimmed={!!filterReason && filterReason !== 'PENDING'} />
                       </div>
-                    </Col>
-                    <Col span={8}>
-                      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 10, boxSizing: 'border-box' }}>
-                        {cardPartTypes.map(pt => (
-                          <div key={pt.part_type} style={{ flex: 1 }}>
-                            <PartTypeCard
-                              pt={pt} C={C}
-                              onClick={() => pickPartType(pt.part_type)}
-                              active={filterPt === pt.part_type}
-                              dimmed={!!filterPt && filterPt !== pt.part_type}
-                            />
-                          </div>
-                        ))}
+                    </div>
+                    <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(C.green, !!filterReason && filterReason !== 'COMPLETE', C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
+                      <MiniStatCard label="Complete" value={scopedStats.complete} color={C.green} C={C} bare
+                        onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
+                        dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
+                      <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
+                      {/* `align="stretch"` so Innovator/THAI match Pending's full stretched
+                          height instead of sitting at their own shorter natural size. */}
+                      <Row gutter={[8, 8]} align="stretch" style={{ flex: 1 }}>
+                        <Col span={12}>
+                          <SubStatCard label="Innovator complete" value={scopedStats.completeSaved} color={C.green} C={C} bare />
+                        </Col>
+                        <Col span={12} style={{ borderLeft: `1px solid ${C.border}` }}>
+                          {scopedStats.complete - scopedStats.completeSaved > 0 && (
+                            <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+                              <div style={{ height: '100%' }}>
+                                <SubStatCard label="THAI complete *" value={scopedStats.complete - scopedStats.completeSaved}
+                                  color={C.greenSoft} C={C} bare />
+                              </div>
+                            </Tooltip>
+                          )}
+                        </Col>
+                      </Row>
+                    </div>
+                    <div style={{ ...cardStyle, borderTop: `3px solid ${dimColor(scopedStats.completePct >= 90 ? C.green : C.red, !!filterReason && filterReason !== 'COMPLETE', C)}`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flex: 1, transition: 'border-color 0.15s' }}>
+                      <MiniStatCard label="% Complete" value={scopedStats.completePct} suffix="%"
+                        color={scopedStats.completePct >= 90 ? C.green : C.red} C={C} bare
+                        onClick={() => pickReason('COMPLETE')} active={filterReason === 'COMPLETE'}
+                        dimmed={!!filterReason && filterReason !== 'COMPLETE'} />
+                      <div style={{ borderTop: `1px solid ${C.border}`, margin: '10px 0' }} />
+                      <Row gutter={[8, 8]} align="stretch" style={{ flex: 1 }}>
+                        <Col span={12}>
+                          <SubStatCard label="Innovator %" value={scopedStats.completeSavedPct} suffix="%"
+                            color={scopedStats.completeSavedPct >= 90 ? C.green : C.red} C={C} bare />
+                        </Col>
+                        <Col span={12} style={{ borderLeft: `1px solid ${C.border}` }}>
+                          {scopedStats.completePct - scopedStats.completeSavedPct > 0 && (
+                            <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+                              <div style={{ height: '100%' }}>
+                                <SubStatCard label="THAI % *" value={(scopedStats.completePct - scopedStats.completeSavedPct).toFixed(1)} suffix="%"
+                                  color={C.greenSoft} C={C} bare />
+                              </div>
+                            </Tooltip>
+                          )}
+                        </Col>
+                      </Row>
+                    </div>
+                  </div>
+                </Col>
+                <Col span={4}>
+                  <div style={{ height: 350, display: 'flex', flexDirection: 'column', gap: 10, boxSizing: 'border-box' }}>
+                    {cardPartTypes.map(pt => (
+                      <div key={pt.part_type} style={{ flex: 1 }}>
+                        <PartTypeCard
+                          pt={pt} C={C}
+                          onClick={() => pickPartType(pt.part_type)}
+                          active={filterPt === pt.part_type}
+                          dimmed={!!filterPt && filterPt !== pt.part_type}
+                        />
                       </div>
-                    </Col>
-                  </Row>
+                    ))}
+                  </div>
                 </Col>
               </Row>
             )}
@@ -1355,32 +1334,56 @@ export default function SdsCoverageDashboard() {
               </div>
             )}
 
-            {/* ── Innovator Complete per Month + Cumulative Coverage Status ───── */}
-            {/* Both fixed at 350px — same literal height, not a stretch/measure trick,
-                so they're guaranteed equal regardless of either chart's content. */}
+            {/* ── Cumulative Coverage Status ──────────────────────────────────── */}
+            {/* Innovator Complete per Month moved up into the Part Type Cards row above
+                (far right), so this card now has the row to itself. */}
             <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
-              <Col span={8}>
-                <div style={{ ...cardStyle, height: 350, display: 'flex', flexDirection: 'column' }}>
-                  {sectionTitle(
-                    <Tooltip title="How many sheets were fully SIGNED as Innovator-complete (baseline stamp) in that calendar month — a direct count, so it's never negative. If a signature is later revoked, that sheet drops out of its original month's count on the next rebuild (the bar can shrink over time), but no month's count is ever computed as a difference from another, so it never goes below zero.">
-                      <span style={{ cursor: 'help' }}>Innovator Complete per Month</span>
-                    </Tooltip>,
-                    C
-                  )}
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    {innovatorMonthly.length > 0
-                      ? <Bar data={innovatorMonthlyChartData} options={innovatorMonthlyChartOpts} />
-                      : <div style={{ color: C.textSec, textAlign: 'center', paddingTop: 100 }}>No data</div>
-                    }
-                  </div>
-                </div>
-              </Col>
-              <Col span={16}>
+              <Col span={24}>
                 <div style={{ ...cardStyle, height: 350, display: 'flex', flexDirection: 'column' }}>
                   {sectionTitle('Cumulative Coverage Status', C)}
                   <div style={{ flex: 1, minHeight: 0 }}>
-                    <Bar data={statusChartData} options={statusChartOpts} />
+                    <Bar ref={statusChartRef} data={statusChartData} options={statusChartOpts} plugins={[statusColsPlugin]} />
                   </div>
+                </div>
+                <div style={{ ...cardStyle, marginTop: 8, padding: '8px 16px', overflowX: 'auto' }}>
+                  {(() => {
+                    const cols = statusColLayout
+                      ? `${statusColLayout.left}px repeat(${monthlyStatus.length}, ${statusColLayout.colW}px) ${statusColLayout.right}px`
+                      : `60px repeat(${monthlyStatus.length}, 1fr)`;
+                    const cellStyle = { border: `1px solid ${C.border}`, padding: '3px 4px', boxSizing: 'border-box' };
+                    return (
+                      <>
+                        {/* Header row — month labels, same text as the chart's own x-axis. */}
+                        <div style={{ display: 'grid', gridTemplateColumns: cols }}>
+                          <div style={cellStyle} />
+                          {monthlyStatus.map((r, i) => (
+                            <div key={i} style={{ ...cellStyle, textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.textSec }}>
+                              {r.isPrevLast ? r.prevLabel : fmtMonth(r.month)}
+                            </div>
+                          ))}
+                          <div style={cellStyle} />
+                        </div>
+                        {statusMonthlyRows.map(row => (
+                          <div key={row.key} style={{ display: 'grid', gridTemplateColumns: cols }}>
+                            <div style={{ ...cellStyle, fontSize: 10, fontWeight: 700, color: C.textSec }}>{row.label}</div>
+                            {monthlyStatus.map((r, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  ...cellStyle, textAlign: 'center', fontSize: 11,
+                                  color: row.color ? row.color(r, i) : C.textPri,
+                                  fontWeight: row.bold ? 800 : 600,
+                                }}
+                              >
+                                {row.format(r, i)}
+                              </div>
+                            ))}
+                            <div style={cellStyle} />
+                          </div>
+                        ))}
+                      </>
+                    );
+                  })()}
                 </div>
               </Col>
             </Row>
