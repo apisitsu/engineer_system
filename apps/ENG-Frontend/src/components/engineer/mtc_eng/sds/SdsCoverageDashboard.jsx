@@ -1347,8 +1347,11 @@ export default function SdsCoverageDashboard() {
                 </div>
                 <div style={{ ...cardStyle, marginTop: 8, padding: '8px 16px', overflowX: 'auto' }}>
                   {(() => {
+                    // No trailing spacer column for the chart's right-axis gutter — it
+                    // only padded the table with an empty cell past Mar 27 with nothing
+                    // to label, so the row/header widths stop at the last month instead.
                     const cols = statusColLayout
-                      ? `${statusColLayout.left}px repeat(${monthlyStatus.length}, ${statusColLayout.colW}px) ${statusColLayout.right}px`
+                      ? `${statusColLayout.left}px repeat(${monthlyStatus.length}, ${statusColLayout.colW}px)`
                       : `60px repeat(${monthlyStatus.length}, 1fr)`;
                     const cellStyle = { border: `1px solid ${C.border}`, padding: '3px 4px', boxSizing: 'border-box' };
                     return (
@@ -1361,7 +1364,6 @@ export default function SdsCoverageDashboard() {
                               {r.isPrevLast ? r.prevLabel : fmtMonth(r.month)}
                             </div>
                           ))}
-                          <div style={cellStyle} />
                         </div>
                         {statusMonthlyRows.map(row => (
                           <div key={row.key} style={{ display: 'grid', gridTemplateColumns: cols }}>
@@ -1378,7 +1380,6 @@ export default function SdsCoverageDashboard() {
                                 {row.format(r, i)}
                               </div>
                             ))}
-                            <div style={cellStyle} />
                           </div>
                         ))}
                       </>
