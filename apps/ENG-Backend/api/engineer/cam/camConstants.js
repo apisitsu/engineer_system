@@ -6,6 +6,8 @@
  */
 const TABLES = {
   CAM_SAVED_WORK: 'cam_saved_work',
+  CAM_STD_MATERIAL: 'cam_std_material',
+  CAM_STD_VC: 'cam_std_vc',
 };
 
 /** What `kind` a saved record may be — mirrors `engine/savedWork.js` on the client. */
@@ -22,4 +24,18 @@ const KINDS = ['project', 'program'];
  */
 const SHARED_SHELF = '~shared';
 
-module.exports = { TABLES, KINDS, SHARED_SHELF };
+/**
+ * The operations a standard cutting-speed range is kept for. Spelled once: the
+ * migration's CHECK constraint, the service's validation and the client's
+ * `engine/cam/stdVc.js` all use these same words.
+ */
+const STD_OPERATIONS = ['turning', 'milling', 'drilling', 'reaming', 'tap', 'parting', 'grooving', 'centre'];
+
+/**
+ * 'draft' until somebody with the authority has checked the figures against the
+ * tool maker's data and signed them off. The client labels every proposal it
+ * makes from a draft row, so a number nobody has verified never reads as one.
+ */
+const STD_STATUSES = ['draft', 'approved'];
+
+module.exports = { TABLES, KINDS, SHARED_SHELF, STD_OPERATIONS, STD_STATUSES };

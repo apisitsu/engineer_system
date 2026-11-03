@@ -409,6 +409,32 @@ So: **saving is always private**, and publishing is a separate, explicit act.
 Deployment — including the fact that **the migration and this code must land
 together** — is in `.claude/rules/cam-deploy.md`.
 
+## Standard cutting speeds (Tools ▸ Standard cutting speeds…, 2026-11-02/03)
+
+On opening an NC file the module finds the material (file name, then a `(MATERIAL: …)`
+header comment), reads each tool's Vc and feed, and offers to rewrite the *editor text*
+to the shop's standard Vc table; the operator confirms, and Tools ▸ Restore program
+undoes it. Pure logic is `engine/cam/stdVc.js`, sequencing is `stores/stdStore.js`, the
+dialogs are `StdVcDialog` (check) and `StdEditorDialog` (edit the table).
+
+- **The table is in the database**: `cam_std_material` + `cam_std_vc`, behind
+  `GET/PUT /api/engineer/cam/std-vc`. Operations: turning, milling, drilling, reaming,
+  tap, parting, grooving, centre. Threading deliberately has **no** figure.
+- **Both migrations are ALREADY APPLIED to the shared (prod) database** — 2026-11-02
+  (`20261102_create_cam_std_vc.js`) and 2026-11-03 (`20261103_extend_cam_std_vc_ops.js`, which
+  widens the operation CHECK). The code that reads them is not on plbmp118/130 until released;
+  the client treats a missing table or route as "no standard" and stays silent.
+- **Every figure is `draft`.** The five original ranges are the shop's Vc_Table_Internal; parting/
+  grooving come from a Haas HU30 insert chart (VDI 3323 groups N/M), centre drill from HSS-E
+  Hoffmann/Hommel datasheets. None is verified; an administrator marks a material `approved`.
+- **Program type comes from the text, not the CAM tab** (`detectProgramMode`: G96, G50, T0101
+  → lathe; M6, G43 → mill), with a Program type dropdown to override. The tab is just the last
+  thing the operator clicked; trusting it read a lathe file as milling and priced it at ten hours.
+- Out-of-range → the **lower bound**; rpm is capped (mill 8000, lathe 2200 or the machine's),
+  so some rows say "Spindle limit". Mill feeds scale with S, lathe feed/rev is untouched.
+- `parseToolTable` files grooving under type `parting`, so `operationOf` decides from the words.
+- Drei `<Html>` labels need an explicit `zIndexRange`: the default (~16.7M) floats above antd modals.
+
 ## Verifying a re-sync
 
 `npm run test:cam` + `npm run build` are necessary but not sufficient — per cam-web's

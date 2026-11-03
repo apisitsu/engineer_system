@@ -21,7 +21,8 @@ const express = require('express');
 const router = express.Router();
 
 const camController = require('./camController');
-const { isAdmin } = require('../../../middleware/mtcAuth');
+const camStdController = require('./camStdController');
+const { isAdmin, isEngineer } = require('../../../middleware/mtcAuth');
 
 router.get('/library', camController.listLibrary);
 router.get('/library/:id', camController.getLibraryItem);
@@ -34,5 +35,12 @@ router.delete('/library/:id', camController.deleteLibraryItem);
 // not just the shared one. Nothing in the UI triggers this; keep it that way,
 // and keep it behind isAdmin so a stray call cannot clear the shop's setups.
 router.delete('/library', isAdmin, camController.clearLibrary);
+
+// Standard cutting speeds the CAM module proposes from (see camStdService).
+// Anyone logged in may read them — the operator who opens a program needs them.
+// Editing is an engineer's job; marking a range 'approved' is checked in the
+// controller and needs an administrator.
+router.get('/std-vc', camStdController.listStdVc);
+router.put('/std-vc/:key', isEngineer, camStdController.putStdVc);
 
 module.exports = router;
