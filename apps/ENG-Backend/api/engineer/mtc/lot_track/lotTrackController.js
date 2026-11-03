@@ -89,6 +89,7 @@ async function createSaved(req, res) {
   try {
     res.status(201).json({ track: await savedStore.createSaved(empno, name, lots) });
   } catch (err) {
+    if (err.code === 'too_many_lots') return res.status(400).json({ error: err.message, max: err.max, count: err.count });
     console.error('[lot-track] createSaved failed:', err.message);
     res.status(500).json({ error: 'saved_create_failed', detail: err.message });
   }
@@ -107,6 +108,7 @@ async function updateSaved(req, res) {
     if (!track) return res.status(404).json({ error: 'not_found' });
     res.json({ track });
   } catch (err) {
+    if (err.code === 'too_many_lots') return res.status(400).json({ error: err.message, max: err.max, count: err.count });
     console.error('[lot-track] updateSaved failed:', err.message);
     res.status(500).json({ error: 'saved_update_failed', detail: err.message });
   }
