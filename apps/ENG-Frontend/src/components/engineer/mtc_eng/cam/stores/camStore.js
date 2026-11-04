@@ -47,6 +47,7 @@ function getSimWorker() {
 export const useCamStore = create((set, get) => ({
   gcode: '',
   fileName: null,
+  loadSeq: 0, // +1 each time a program is opened (parse called with a file name)
   // Large binary buffers (rapids, feeds, bounds, stats, path, sim) live in
   // bufferCache — NOT here — to prevent React DevTools DataCloneError.
   bufVer: 0,        // incremented every time bufferCache is updated
@@ -510,7 +511,8 @@ export const useCamStore = create((set, get) => ({
         totalFeeds: 0,
         aIndex: null,
         _lastCarveTarget: null,
-        ...(fileName ? { fileName } : {}),
+        // A file name means a program was OPENED; a bare parse() is the editor re-reading its own text.
+        ...(fileName ? { fileName, loadSeq: get().loadSeq + 1 } : {}),
       });
     } catch (err) {
       set({ status: 'error', error: err.message || String(err) });

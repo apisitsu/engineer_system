@@ -563,6 +563,35 @@ describe('interpreter — constant surface speed (G96 / G97 / G50)', () => {
   });
 });
 
+describe('interpreter — G96 spindle speed inside a G71 roughing cycle', () => {
+  // The cycle's passes used to be timed at the rpm of the START diameter, because the expansion
+  // never moved `state.pos`. A Ø35 start on a 70 m/min program ran every pass at 637 rpm instead
+  // of climbing as the diameter fell, so a roughing cycle came out ~40 % too slow.
+  const src = [
+    'G50 S2200', 'G96 S70 M3',
+    'G0 X35. Z2.',
+    'G71 U1. R0.5', 'G71 P10 Q20 U0.3 W0.1 F0.2',
+    'N10 G0 X10.', 'G1 Z-30.', 'N20 G1 X35.',
+  ].join('\n');
+  const passes = () => interpret(src, { mode: 'turn', diameterMode: true, rapidRate: 5000 })
+    .segments.filter((s) => s.type !== 'rapid' && Math.abs(s.b[2] - s.a[2]) > 20);
+
+  it('runs each rough pass at the rpm of ITS diameter, rising as the diameter falls', () => {
+    const rpms = passes().map((s) => s.rpm);
+    expect(rpms.length).toBeGreaterThanOrEqual(8);
+    // first pass: Ø33 at 70 m/min
+    expect(near(rpms[0], (1000 * 70) / (Math.PI * 33), 1)).toBe(true);
+    for (let i = 1; i < rpms.length; i++) expect(rpms[i]).toBeGreaterThanOrEqual(rpms[i - 1] - 1e-6);
+    expect(rpms[rpms.length - 1]).toBeGreaterThan(rpms[0] * 2.5);
+    expect(Math.max(...rpms)).toBeLessThanOrEqual(2200 + 1e-6); // the G50 clamp still applies
+  });
+
+  it('feeds faster per minute on the smaller passes (F is per revolution)', () => {
+    const p = passes();
+    expect(p[p.length - 1].f).toBeGreaterThan(p[0].f * 2.5);
+  });
+});
+
 describe('interpreter — what the control would be posting', () => {
   // Every segment carries the feed, the spindle speed and the feed mode in
   // effect while it runs, so the position page can post them beside the

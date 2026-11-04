@@ -451,3 +451,10 @@ export function markerYSpan(kind, radius, shape = {}) {
 export function offerToolToggle({ mode = 'mill', sketching = false } = {}) {
   return !sketching && mode === 'turn';
 }
+
+/**
+ * Standard boring-bar shank diameters (mm) — the sizes a boring bar actually
+ * ships in, not an arbitrary continuous range. Drives both the bar diameter
+ * picker below and `boringBarGeometry`'s `barDiameter` shape field.
+ */
+export const BORING_BAR_DIAMETERS = [6, 8, 10, 12, 16, 20, 25, 32];

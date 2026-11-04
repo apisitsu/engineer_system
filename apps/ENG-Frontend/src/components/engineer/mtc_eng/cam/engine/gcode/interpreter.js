@@ -479,7 +479,12 @@ export function interpret(text, opts = {}) {
     }
 
     let cur = [xs, 0, zs];
-    const move = (type, next) => { sink(type, cur, next, lineNo); cur = next; };
+    // `state.pos` has to follow the cycle's own moves: under G96 the spindle speed is read from
+    // it (`currentRpm`), so leaving it at the start point timed every rough pass at the rpm of the
+    // largest diameter — a Ø35 start on 17-4PH ran all 13 passes at 637 rpm instead of climbing to
+    // the 2200 clamp as the diameter fell, and a roughing cycle read ~40 % too slow. Same
+    // convention as the rest of the interpreter: the move is timed from where it STARTS.
+    const move = (type, next) => { state.pos = cur.slice(); sink(type, cur, next, lineNo); cur = next; };
 
     for (let k = 1; k <= MAX_ROUGH_PASSES; k++) {
       let x = xs - k * depth;
