@@ -752,6 +752,21 @@ export function turningMesh(stock, sides = 96, { creaseDeg = 25, simplifyTol = 0
   // a blind hole's bottom. A run that reaches a true end needs no floor: the
   // annular cap just added above already closes it there.
   const boreCol = CUT; // a bored/drilled surface is by definition cut, never raw
+  // One ring of bore-wall vertices at `z`. It names nothing from the run loop below, so it is
+  // declared once out here rather than rebuilt for every run (and so closes over `vcount` once).
+  const pushBoreRing = (z, r, n) => {
+    const base = vcount;
+    for (let a = 0; a < sides; a++) {
+      const th = (a / sides) * Math.PI * 2;
+      const ca = Math.cos(th);
+      const sa = Math.sin(th);
+      positions.push(r * ca, r * sa, z);
+      normals.push(n.nr * ca, n.nr * sa, n.nz);
+      colors.push(boreCol[0], boreCol[1], boreCol[2]);
+    }
+    vcount += sides;
+    return base;
+  };
   let k = 0;
   while (k < nz) {
     if (!(stock.bore[k] > 1e-6)) { k += 1; continue; }
@@ -773,20 +788,6 @@ export function turningMesh(stock, sides = 96, { creaseDeg = 25, simplifyTol = 0
       stations[0] = { z: z0 - cs / 2, r: stations[0].r };
       stations.push({ z: z0 + cs / 2, r: stock.bore[k] });
     }
-
-    const pushBoreRing = (z, r, n) => {
-      const base = vcount;
-      for (let a = 0; a < sides; a++) {
-        const th = (a / sides) * Math.PI * 2;
-        const ca = Math.cos(th);
-        const sa = Math.sin(th);
-        positions.push(r * ca, r * sa, z);
-        normals.push(n.nr * ca, n.nr * sa, n.nz);
-        colors.push(boreCol[0], boreCol[1], boreCol[2]);
-      }
-      vcount += sides;
-      return base;
-    };
 
     for (let i = 0; i < stations.length - 1; i++) {
       const a0 = stations[i];

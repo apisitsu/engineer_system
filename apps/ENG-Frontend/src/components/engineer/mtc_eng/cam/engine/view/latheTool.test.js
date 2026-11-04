@@ -15,11 +15,8 @@ describe('every lathe marker cuts on the spindle centre plane', () => {
   // rather than stopping there. Its insert still keeps the Y=0 invariant.
   it.each(STANDARD_TURN_TOOLS.map((t) => [t.id, t]))('%s has its cutting corner at Y=0', (_id, tool) => {
     const [lo, hi] = markerYSpan(tool.kind, 1.6, tool);
-    if (tool.kind === 'boring') {
-      expect(hi).toBeGreaterThan(0);
-    } else {
-      expect(hi).toBe(0);
-    }
+    // a boring bar's crown rises above the plane; every other marker stops exactly on it
+    expect(tool.kind === 'boring' ? hi > 0 : hi === 0).toBe(true);
     expect(lo).toBeLessThan(0);
   });
 

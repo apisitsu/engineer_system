@@ -214,6 +214,7 @@ export function interpret(text, opts = {}) {
     // allowance (its R), both set by its first (X/Z-less) block
     threadFirstBlock: null,
     threadAllowance: 0,
+    threadMinCut: 0,
   };
 
   const segments = []; // each: { type, a:[x,y,z], b:[x,y,z], line, t }
@@ -602,8 +603,8 @@ export function interpret(text, opts = {}) {
    * keep the chip cross-section roughly constant as the thread flank widens
    * with depth: a flat per-pass depth would make the first pass deceptively
    * light and the last dangerously heavy. The minimum-cut-depth word (first
-   * block's Q) isn't read — this simplified model doesn't need a floor on an
-   * already-shrinking increment.
+   * block's Q) IS read: it floors the shrinking increment, as the control does,
+   * and without it a fine first cut multiplied the pass count roughly twofold.
    *
    * P (thread height) and Q (first cut depth) on the SECOND block are Fanuc
    * microns, same convention as G74's peck — see the note there. R (finishing
@@ -615,6 +616,8 @@ export function interpret(text, opts = {}) {
     if (words.X === undefined && words.Z === undefined) {
       if (words.P !== undefined) state.threadFirstBlock = unpackG76P(words.P);
       if (words.R !== undefined) state.threadAllowance = Math.abs(words.R * state.scale);
+      // Q of the first block is the MINIMUM cut per pass, in microns (`Q030` = 0.030 mm).
+      if (words.Q !== undefined) state.threadMinCut = Math.abs(words.Q * state.scale) / 1000;
       return null;
     }
     const [xs, , zs] = state.pos;
@@ -641,9 +644,13 @@ export function interpret(text, opts = {}) {
     state.feed = lead;
     state.feedMode = 95;
 
+    // The n-th pass reaches firstCut·√n, but a pass never removes less than the minimum cut: once
+    // firstCut·(√n − √(n−1)) falls below it the control clamps every further pass to that floor.
+    // Without the floor, Q100 on a 0.6 mm thread counted 34 passes where a Fanuc makes about 17.
     let depth = 0;
     for (let n = 1; depth < totalDepth - EPS && n <= MAX_ROUGH_PASSES; n++) {
-      depth = Math.min(totalDepth, firstCut * Math.sqrt(n));
+      const step = Math.max(firstCut * (Math.sqrt(n) - Math.sqrt(n - 1)), state.threadMinCut);
+      depth = Math.min(totalDepth, depth + step);
       const xAt = xs + sign * depth; // state.pos[0] is already a radius
       move('rapid', [xAt, 0, zs]);
       move('feed', [xAt, 0, zEnd]);

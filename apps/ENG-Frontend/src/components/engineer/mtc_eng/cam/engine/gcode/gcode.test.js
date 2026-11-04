@@ -303,6 +303,23 @@ describe('interpreter — G76 threading', () => {
     expect(near(cut.f, 1.5 * 1000)).toBe(true); // lead 1.5 mm/rev × 1000 rpm
   });
 
+  describe('minimum cut per pass (Q of the first block)', () => {
+    // A 24 TPI internal thread, 0.6 mm deep, first cut 0.1 mm, 0.02 mm left for the finish passes.
+    const prog = (q) => ['G21 G90 G99 S400', 'G0 X8. Z3.', `G76 P020060 Q${q} R0.02`, 'G76 X9.525 Z-25. P600 Q100 F1.0583'].join('\n');
+    const passes = (q) => interpret(prog(q), { mode: 'turn', diameterMode: true })
+      .segments.filter((s) => s.line === 4 && s.type === 'feed').length;
+
+    it('floors the shrinking increment, as a Fanuc does', () => {
+      // 0.1, 0.1414, 0.1732 (the √n steps still above 0.03), then 0.03 a pass to 0.58 deep = 17 rough
+      // passes, + the 2 finishing passes named by P020060. Without the floor it is 34 + 2.
+      expect(passes(30)).toBe(19);
+    });
+
+    it('a tiny minimum leaves the plain √n progression', () => {
+      expect(passes(1)).toBeGreaterThanOrEqual(34);
+    });
+  });
+
   it('warns and skips when the X/Z block has no thread height or first cut', () => {
     const prog = 'G21 G90\nG0 X20 Z0\nG76 P020060 Q100 R0\nG76 X16 Z-20 F1.5';
     const { stats } = interpret(prog, { mode: 'turn' });

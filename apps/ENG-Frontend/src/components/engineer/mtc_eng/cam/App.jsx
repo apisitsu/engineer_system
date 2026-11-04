@@ -5,7 +5,7 @@
  * workers/engine, all state in camStore. Playback scrubs the ordered path and
  * (optionally) drives progressive material removal.
  */
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Layout, Button, Statistic, Alert, Space, Typography, theme,
   InputNumber, Input, Segmented, Switch, Divider, Slider, Tag, Tooltip, Drawer,
@@ -31,23 +31,21 @@ import { useCamPlanStore } from './stores/camPlanStore.js';
 import { PART_FORMATS } from './engine/mesh/import.js';
 import CamPanel from './components/CamPanel.jsx';
 import { useSketchStore } from './stores/sketchStore.js';
-import { exportGcode, openProjectFile, applyProject } from './lib/projectIO.js';
-import { readDraft, clearDraft, startAutosave, suspendAutosave } from './lib/autosave.js';
+import { exportGcode, openProjectFile } from './lib/projectIO.js';
 import LibraryPanel from './components/LibraryPanel.jsx';
 import { fitBoundsFor, fitBoundsForPart, chuckFromBounds } from './engine/view/setup.js';
 import { unionBounds } from './engine/view/camera.js';
 import { simMethodFor } from './engine/sim/method.js';
-import { SPEEDS, perTick } from './engine/view/playback.js';
+import { SPEEDS } from './engine/view/playback.js';
 import { sidebarSections } from './engine/view/sidebar.js';
 import { formatDuration, programStatRows, timingBreakdown } from './engine/view/programStats';
 import { toolSpecSummary } from './engine/view/toolRow.js';
-import { autoSimKey, shouldAutoSimulate } from './engine/view/autoSim.js';
 import { offerArborToggle, parkedTip } from './engine/view/millTool.js';
 import { offerToolToggle } from './engine/view/latheTool.js';
 import { sweptFitBox } from './engine/view/rotaryFrame.js';
 import { sketchBounds } from './engine/sketch/edit.js';
 import {
-  lineAt, timeAt, rotaryAt, toolAt, segmentAtTime, toolPointAt, blockTargetAt,
+  lineAt, timeAt, rotaryAt, toolAt, toolPointAt, blockTargetAt,
   runningAt,
 } from './engine/gcode/path.js';
 import { effectiveTurnTool } from './engine/sim/turning.js';
@@ -69,7 +67,11 @@ import ToolFallback from './components/ToolFallback.jsx';
 import BilletBox from './components/BilletBox.jsx';
 import LeftColumn from './components/LeftColumn.jsx';
 import { TREE_SIZE } from './components/FeatureTree.jsx';
-import { invalidate } from '@react-three/fiber';
+import { usePlayback } from './hooks/usePlayback.js';
+import { useAutoSimulate } from './hooks/useAutoSimulate.js';
+import { useRotaryCenterReparse } from './hooks/useRotaryCenterReparse.js';
+import { useDraftAutosave } from './hooks/useDraftAutosave.jsx';
+import { useTreeResize } from './hooks/useTreeResize.js';
 import { getBuf } from './engine/bufferCache.js';
 import { CAD } from './theme.js';
 
@@ -197,23 +199,7 @@ export default function App() {
   // Drives the feature-tree column's width; the tree itself owns the toggle.
   const treeOpen = useFeatureStore((s) => s.treeOpen);
   const treeWidth = useFeatureStore((s) => s.treeWidth);
-  // While the edge handle is dragged, drop the width transition so the column
-  // tracks the pointer instead of easing behind it.
-  const [treeResizing, setTreeResizing] = useState(false);
-  const startTreeResize = useCallback((e) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = useFeatureStore.getState().treeWidth;
-    setTreeResizing(true);
-    const onMove = (ev) => useFeatureStore.getState().setTreeWidth(startW + (ev.clientX - startX));
-    const onUp = () => {
-      setTreeResizing(false);
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  }, []);
+  const { treeResizing, startTreeResize } = useTreeResize();
   const sketching = page === 'sketch';
   const turning = page === 'turn';
 
@@ -227,39 +213,7 @@ export default function App() {
   // Open on a blank page — no sample program is loaded. The user brings their
   // own via drag-and-drop, Open file, or the (optional) Load sample button.
 
-  // Animation loop: advance the playhead while playing. Paced by *machine time*,
-  // not segment count — a helix tessellates into tens of thousands of tiny
-  // segments (T3 is 91% of them) while a face mill is a few long moves, so a
-  // segment-paced run parks on the helix and never shows the other tools. Time
-  // pacing gives every operation screen-time proportional to how long it runs.
-  const playTimeRef = useRef(0);
-  useEffect(() => {
-    if (!playing) return undefined;
-    const startPath = getBuf().path;
-    if (!startPath) return undefined;
-    // Resume from wherever the playhead sits (0 after a restart).
-    playTimeRef.current = timeAt(startPath, useCamStore.getState().playhead);
-    const id = setInterval(() => {
-      // The path is read per tick rather than captured, so a re-parse mid-run is
-      // picked up **without** this effect depending on `bufVer`. It must not:
-      // carving bumps `bufVer` on every step, so with "cut with playback" on the
-      // loop was torn down and rebuilt constantly, and each rebuild snapped the
-      // time cursor to `timeAt(playhead)` — the *end* of the segment in progress.
-      // Playback then advanced a whole segment per carve, running at the speed of
-      // the worker instead of the speed setting.
-      const path = getBuf().path;
-      if (!path) return;
-      const totalT = path.totalTime || 1;
-      // 40 ms per tick; the whole program spans PLAY_BASE_SECONDS at 1×.
-      playTimeRef.current += perTick(totalT, speed);
-      const k = segmentAtTime(path, playTimeRef.current);
-      useCamStore.getState().setPlayhead(k);
-      useCamStore.setState({ playT: playTimeRef.current }); // smooth marker interpolation
-      if (k >= path.count) useCamStore.getState().pause();
-      invalidate(); // wake up the demand-mode canvas
-    }, 40);
-    return () => clearInterval(id);
-  }, [playing, speed]);
+  usePlayback(playing, speed);
 
   // Saving / opening work. Errors surface in the store's `error` alert, the same
   // place a parse failure lands, so there is one place to look.
@@ -279,79 +233,14 @@ export default function App() {
   // Whether the library is open in the sidebar. It is a place to work, not a
   // menu, so it stays put until it is closed again.
   const [libraryOpen, setLibraryOpen] = useState(false);
-  // ---- Simulate on its own, once the setup says what to simulate ----------
-  //
-  // A program, a stated billet and an origin are the three things that make
-  // "what will this make?" answerable. Opt-in via `autoSimEnabled` (off by
-  // default) so a session that only wants the backplot never carves; when on,
-  // `autoSimKey` describes the setup as a string so the run happens once per
-  // setup rather than once per render — see `engine/view/autoSim.js`.
-  const autoKey = autoSimKey({
-    gcode, stockEnabled, stockSize, stockOrigin, datum: partDatum, aIndex, mode,
+  useAutoSimulate({
+    gcode, stockEnabled, stockSize, stockOrigin, partDatum, aIndex, mode,
+    autoSimEnabled, playing, simStatus, sketching, simulate,
   });
-  const lastAutoKey = useRef(null);
-  useEffect(() => {
-    if (!autoSimEnabled) return;
-    if (!shouldAutoSimulate({
-      key: autoKey,
-      last: lastAutoKey.current,
-      playing,
-      running: simStatus === 'running',
-      sketching,
-    })) return;
-    lastAutoKey.current = autoKey;
-    simulate();
-  }, [autoSimEnabled, autoKey, playing, simStatus, sketching, simulate]);
 
-  // A separately loaded .nc's indexed (A-word) moves pivot about camPlanStore's
-  // rotary centre, which only reaches the interpreter through
-  // `camStore.machineOpts()` at parse time. That store must not import the plan
-  // store back (see camStore.js), so the re-parse when the centre moves is wired
-  // here — the same shape as the auto-simulate effect above. Only the centre
-  // needs it: `reverseX` and the A0-face pick move the model, not the toolpath,
-  // and the viewport already redraws the model for those.
-  const rotaryCenterKey = JSON.stringify(partDatum.rotaryCenter ?? null);
-  const lastRotaryCenterKey = useRef(rotaryCenterKey);
-  useEffect(() => {
-    if (rotaryCenterKey === lastRotaryCenterKey.current) return;
-    lastRotaryCenterKey.current = rotaryCenterKey;
-    if (gcode) parse();
-  }, [rotaryCenterKey, gcode, parse]);
+  useRotaryCenterReparse({ partDatum, gcode, parse });
 
-  // Auto-save draft: mirror the drawing (sketches, feature tree, program) to
-  // localStorage on a debounce, and on load offer back whatever a previous
-  // session left. Cleared on an explicit Save (library or file) or New project.
-  useEffect(() => {
-    const draft = readDraft();
-    if (draft) {
-      const key = 'cam-autosave-draft';
-      notification.info({
-        key,
-        message: 'Unsaved work from a previous session',
-        description: `Last change ${new Date(draft.at).toLocaleString()}.`,
-        duration: 0,
-        actions: (
-          <Space>
-            <Button
-              size="small"
-              type="primary"
-              onClick={() => {
-                notification.destroy(key);
-                suspendAutosave(() => applyProject(draft.project)).catch(() => {});
-              }}
-            >
-              Restore
-            </Button>
-            <Button size="small" onClick={() => { clearDraft(); notification.destroy(key); }}>
-              Discard
-            </Button>
-          </Space>
-        ),
-      });
-    }
-    return startAutosave();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useDraftAutosave(notification);
 
   // Let a save confirmation fade rather than linger.
   useEffect(() => {
