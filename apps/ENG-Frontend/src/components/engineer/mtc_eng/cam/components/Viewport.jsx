@@ -271,7 +271,7 @@ function BoringBar({ radius = 0.8, shape }) {
   // once rather than trusting that only the wedge needed it. Built from the
   // numbers that are actually drawn (not the raw `shape` prop), so it changes
   // exactly when the picture should.
-  const shapeKey = `${insert.sides},${insert.r.toFixed(4)},${insert.zScale.toFixed(4)},${insert.rot.toFixed(4)},${g.barRadius},${g.barNearZ.toFixed(4)},${g.standout.toFixed(4)}`;
+  const shapeKey = `${insert.sides},${insert.r.toFixed(4)},${insert.zScale.toFixed(4)},${insert.rot.toFixed(4)},${g.barRadius},${g.barNearZ.toFixed(4)},${g.barGap.toFixed(4)}`;
   const wedgeKey = connectorWedge ? connectorWedge.points.flat().join(',') : null;
   const wedgeGeo = useMemo(() => {
     if (!connectorWedge) return null;
@@ -300,7 +300,7 @@ function BoringBar({ radius = 0.8, shape }) {
           own surface rather than reaching past it to cut. */}
       <mesh
         key={`bar-${shapeKey}`}
-        position={[-(g.barRadius + g.standout), g.barY, g.barNearZ + g.barLength / 2]}
+        position={[-(g.barRadius + g.barGap), g.barY, g.barNearZ + g.barLength / 2]}
         rotation={[Math.PI / 2, 0, 0]}
       >
         <cylinderGeometry args={[g.barRadius, g.barRadius, g.barLength, 20]} />

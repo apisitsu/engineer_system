@@ -240,6 +240,9 @@ function boringInsertTip(r, zScale, rot = BORING_INSERT_MOUNT_ROT, sides = 4, in
  */
 const BORING_FRONT_CLEARANCE = 3 * DEG;
 
+/** How far (mm) a `flushHead` insert's tip stands out of the bar's top. */
+const BORING_HEAD_PROTRUSION = 1.5;
+
 /**
  * Which corner of the insert is the cutting tip, and the mount rotation that
  * seats it so **nothing of the insert lies ahead of the tip (Z < 0) or beyond
@@ -377,7 +380,6 @@ export function boringBarGeometry(radius = 0.8, shape = {}) {
   // `Viewport.jsx`) is what keeps it visible over the bar's crown in Top
   // view now that the crown can reach above Y=0, not a Y offset.
   const barY = 0;
-  const barNearZ = standout;
   const insert = {
     r,
     thickY,
@@ -395,8 +397,24 @@ export function boringBarGeometry(radius = 0.8, shape = {}) {
     x: -tip.x,
     z: -tip.z,
   };
+  // `flushHead` (threading bar, trigon bar): the bar's head is carried forward
+  // to the insert's frontmost corner, so nothing of the insert hangs out past
+  // the bar's face in Z, and the tip stands `BORING_HEAD_PROTRUSION` proud of
+  // the bar's top in X — a real insert reaches out of its head to cut, but only
+  // a millimetre or two (level with the top read as not reaching at all; the
+  // legacy 0.6 mm gap read as hardly proud). Otherwise the legacy gap: face just
+  // behind the cutting plane, top `standout` below the tip.
+  const flush = Boolean(shape.flushHead) && !seat;
+  const frontZ = flush
+    ? Math.min(0, ...Array.from({ length: sides }, (_, i) => boringInsertVertex(
+      insert.x, insert.z, r, zScale, sides, i, mountRot,
+    ).z))
+    : standout;
+  const barNearZ = frontZ;
+  const barGap = flush ? BORING_HEAD_PROTRUSION : standout;
   return {
     barRadius,
+    barGap,
     barLength: s * 6,
     barY,
     // The bar's FACE (its near end, not just its crown) sits here too — a
@@ -422,7 +440,7 @@ export function boringBarGeometry(radius = 0.8, shape = {}) {
     // `boringSeatMount`) with solid grey that read as tool material already
     // cut through the part's face. The fix is in where the insert sits, so a
     // `frontSeat` insert needs no wedge at all.
-    connectorWedge: !seat && (shape.insertTilt ?? 0) === 0
+    connectorWedge: !seat && !flush && (shape.insertTilt ?? 0) === 0
       ? boringConnectorWedge(insert, standout, barNearZ)
       : null,
   };

@@ -77,7 +77,7 @@ export const STANDARD_TURN_TOOLS = [
   // No `insertTilt` (defaults to 0 in `boringBarGeometry`), which is also
   // what keeps the cosmetic connector wedge: see that function's header for
   // why the wedge is only drawn for an untilted mount.
-  { id: 'boringtri', label: 'Boring bar · 60° trigon (round shank)', kind: 'boring', lead: 93, sides: 3, angle: 60, adjustable: true },
+  { id: 'boringtri', label: 'Boring bar · 60° trigon (round shank)', kind: 'boring', lead: 93, sides: 3, angle: 60, adjustable: true, flushHead: true },
   // Internal threading bar — same reasoning as the external entry above, on
   // the boring-bar body instead of the OD holder.
   // `lead` is unused by `boringBarGeometry` (only `odHolderGeometry` reads
@@ -85,7 +85,7 @@ export const STANDARD_TURN_TOOLS = [
   // `turning_check.mjs` asserts every catalogue entry has one, for the same
   // "one family of markers" reason it also requires `angle`/`sides`.
   // No `insertTilt` here — only `boring`'s insert was asked to tilt.
-  { id: 'threadbar', label: 'Threading bar · 60° V (internal)', kind: 'boring', lead: 93, sides: 3, angle: 60, adjustable: false },
+  { id: 'threadbar', label: 'Threading bar · 60° V (internal)', kind: 'boring', lead: 93, sides: 3, angle: 60, adjustable: false, flushHead: true },
   // Axial tools — a centre/spot drill, twist drill, reamer or tap, held in
   // the tailstock or turret and cutting on the spindle centreline. These get
   // their own `kind: 'drill'` marker (`drillGeometry`/`DrillTool`), not the

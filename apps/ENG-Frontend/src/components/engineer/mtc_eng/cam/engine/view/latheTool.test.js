@@ -231,6 +231,28 @@ describe('every lathe marker cuts on the spindle centre plane', () => {
     }
   });
 
+  it('sits a flushHead insert on the bar: tip 1.5 mm proud of the top, nothing hanging past its face', () => {
+    // Thread bar report: the front corner hung ~3 mm ahead of the bar's face
+    // (fixed: the face reaches the insert's frontmost corner), and in X the tip
+    // should stand a millimetre or two out of the bar — not level with it
+    // (read as not reaching) and not the legacy 0.6 mm.
+    for (const id of ['threadbar', 'boringtri']) {
+      const catalogue = STANDARD_TURN_TOOLS.find((t) => t.id === id);
+      expect(catalogue.flushHead).toBe(true);
+      const g = boringBarGeometry(1.6, catalogue);
+      const { insert } = g;
+      const vertices = Array.from({ length: insert.sides }, (_, i) => boringInsertVertex(
+        insert.x, insert.z, insert.r, insert.zScale, insert.sides, i, insert.rot,
+      ));
+      expect(g.barGap).toBeGreaterThanOrEqual(1);
+      expect(g.barGap).toBeLessThanOrEqual(2);
+      expect(Math.max(...vertices.map((v) => v.x))).toBeCloseTo(0, 9);
+      expect(g.barNearZ).toBeCloseTo(Math.min(...vertices.map((v) => v.z)), 9);
+      expect(g.connectorWedge).toBeNull();
+      expect(insert.tipIndex).toBe(0);
+    }
+  });
+
   it('makes the sharpest corner of the diamond the Boring bar tip, not vertex 0', () => {
     const g = boringBarGeometry(1.6, { sides: 4, angle: 35, frontSeat: true });
     // Vertices 1 and 3 are the 35° corners; vertex 0 is the obtuse one.
