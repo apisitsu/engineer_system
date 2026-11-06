@@ -260,6 +260,18 @@ function ODHolder({ radius = 0.8, shape }) {
 function BoringBar({ radius = 0.8, shape }) {
   const g = boringBarGeometry(radius, shape ?? {});
   const { insert, connectorWedge } = g;
+  // Every mesh below is keyed off this. It is the whole reason the wedge's
+  // own flicker (see its `key` comment) was findable at all: the wedge used
+  // a manually-built `THREE.ExtrudeGeometry`, swapped out via `useMemo` +
+  // an effect cleanup racing R3F's own prop reattachment — a `key` sidesteps
+  // that by forcing a clean remount instead of an in-place update. The bar
+  // and insert meshes use plain intrinsic geometries (`<cylinderGeometry>`),
+  // which R3F is supposed to reconcile more safely, but a `key` costs nothing
+  // here and removes the same class of stale-instance risk from all three at
+  // once rather than trusting that only the wedge needed it. Built from the
+  // numbers that are actually drawn (not the raw `shape` prop), so it changes
+  // exactly when the picture should.
+  const shapeKey = `${insert.sides},${insert.r.toFixed(4)},${insert.zScale.toFixed(4)},${insert.rot.toFixed(4)},${g.barRadius},${g.barNearZ.toFixed(4)},${g.standout.toFixed(4)}`;
   const wedgeKey = connectorWedge ? connectorWedge.points.flat().join(',') : null;
   const wedgeGeo = useMemo(() => {
     if (!connectorWedge) return null;
@@ -287,6 +299,7 @@ function BoringBar({ radius = 0.8, shape }) {
           cutting corner sits at, so the insert read as resting on the bar's
           own surface rather than reaching past it to cut. */}
       <mesh
+        key={`bar-${shapeKey}`}
         position={[-(g.barRadius + g.standout), g.barY, g.barNearZ + g.barLength / 2]}
         rotation={[Math.PI / 2, 0, 0]}
       >
@@ -306,6 +319,7 @@ function BoringBar({ radius = 0.8, shape }) {
           Top view purely by position. `depthTest: false` + a higher
           `renderOrder` is what keeps the insert visually on top regardless. */}
       <mesh
+        key={`insert-${shapeKey}`}
         position={[insert.x, g.insertY, insert.z]}
         rotation={[0, insert.rot, 0]}
         scale={[1, 1, insert.zScale]}
@@ -319,10 +333,33 @@ function BoringBar({ radius = 0.8, shape }) {
           `boringConnectorWedge`'s own header for why this exists instead of
           moving the insert to close the gap, and why it is only drawn for
           an untilted mount (`shape.insertTilt` unset) — `wedgeGeo` is null
-          for a tilted one, same reasoning the header gives. */}
+          for a tilted one, same reasoning the header gives.
+          No extra Y offset: `rotateX(Math.PI / 2)` already lands the raw
+          ExtrudeGeometry's Y span at [-thickY, 0] — the same span the
+          insert mesh sits in, with no position prop of its own either. An
+          earlier `position={[0, -insert.thickY, 0]}` here double-applied
+          that shift, dropping the whole wedge a further `thickY` below the
+          insert it was meant to sit flush with — invisible from Top (which
+          looks straight down the axis the error was *along*, so the shape
+          seen from directly above never moved) and, from Front, a detached
+          grey block hanging under the insert with a `thickY`-tall gap of
+          daylight the eye read as a loose tab rather than part of the tool.
+          `depthTest: false` + `renderOrder` — same two lines, same reason,
+          as the insert mesh above: the wedge sits right where the bar's own
+          crown can reach above Y=0, and without them the crown painted over
+          it from Top, leaving the gap it exists to close looking unfilled
+          even though the geometry itself was correct. */}
       {wedgeGeo && (
-        <mesh position={[0, -insert.thickY, 0]} geometry={wedgeGeo}>
-          <meshStandardMaterial {...metal('#a7afbd')} side={THREE.DoubleSide} />
+        // `key={wedgeKey}` forces a full remount (not a prop update) whenever
+        // the wedge's shape changes — otherwise R3F reattaches the new
+        // `wedgeGeo` to the SAME mesh instance, racing against this
+        // component's own cleanup effect disposing the previous one. That
+        // race did not always lose: scrubbing to the identical T404 position
+        // twice rendered the wedge correctly once and not at all the other
+        // time, with nothing else different. A keyed remount has no stale
+        // instance left to race against.
+        <mesh key={wedgeKey} geometry={wedgeGeo} renderOrder={1}>
+          <meshStandardMaterial {...metal('#a7afbd')} side={THREE.DoubleSide} depthTest={false} />
         </mesh>
       )}
     </>
