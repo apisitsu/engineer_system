@@ -608,8 +608,24 @@ const ToolingImagesTab = ({ theme }) => {
 // grid template's id has been stable at 8 since it was created.
 const TURNING_GRID_TEMPLATE_ID = 8;
 const TURNING_TOOL_SLOT_COUNT = 8;
+// "Turning_General" (20261104d_create_turning_general_grid_template.js) — a clone of
+// Turning_PB (id=9, never assigned to a machine) plus one fixture slot, 12 cutting-tool
+// positions instead of 8. QTN200/LB12 moved onto it 2026-11-04/05. The per-slot PHOTO
+// upload below stays scoped to TURNING_GRID_TEMPLATE_ID only — Turning_General has no
+// per-tool photo box in its layout (only the ONE fixture photo, handled by the Tooling
+// Images tab's DWG-match path), so the backend has no `turning_tool_image_N` coordinates
+// for it; letting someone upload one here would silently recreate the exact bug fixed
+// live on QTN200 (a stale Tool_Photo_Key_N param painting at the OLD 8-slot template's
+// coordinates, landing inside this template's block-divider gap). Only the "Details"
+// text fields are safe to generalize — they already print correctly, since
+// 20261104b_seed_turning_pb_excel_mapping.js maps the same `{Field}_{slot}` param_keys
+// this form writes.
+const TURNING_GENERAL_GRID_TEMPLATE_ID = 10;
+const TURNING_GENERAL_TOOL_SLOT_COUNT = 12;
 const TURNING_TOOL_DETAIL_FIELDS = [
   { key: 'Tool_Name',    label: 'Tool Name' },
+  { key: 'Tool_Detail',  label: 'Tool Detail' },
+  { key: 'Usage',        label: 'Usage' },
   { key: 'VC',           label: 'VC' },
   { key: 'F',            label: 'F' },
   { key: 'AP',           label: 'AP' },
@@ -618,6 +634,8 @@ const TURNING_TOOL_DETAIL_FIELDS = [
   { key: 'Insert_Maker', label: 'Maker (Insert)' },
   { key: 'Holder_Info',  label: 'Holder' },
   { key: 'Holder_Maker', label: 'Maker (Holder)' },
+  { key: 'Overhang',     label: 'Overhang' },
+  { key: 'H_Width',      label: 'H.Width' },
   { key: 'Rotation',     label: 'Rotation' },
   { key: 'Hand',         label: 'Hand' },
 ];
@@ -719,9 +737,13 @@ const TurningToolImagesTab = ({ theme }) => {
     }
   };
 
+  const machineGridTemplateId = allMachineTypes.find(m => m.machine_type_name === machine)?.grid_template_id;
+  const isTurningGeneral = machineGridTemplateId === TURNING_GENERAL_GRID_TEMPLATE_ID;
+  const slotCount = isTurningGeneral ? TURNING_GENERAL_TOOL_SLOT_COUNT : TURNING_TOOL_SLOT_COUNT;
+
   const photoBySlot = Object.fromEntries(photoSlots.map(r => [r.slot, r]));
   const layoutPhoto = photoBySlot.layout || {};
-  const rows = Array.from({ length: TURNING_TOOL_SLOT_COUNT }, (_, i) => {
+  const rows = Array.from({ length: slotCount }, (_, i) => {
     const slot = i + 1;
     const photo = photoBySlot[slot] || {};
     return {
@@ -773,9 +795,9 @@ const TurningToolImagesTab = ({ theme }) => {
         <Space direction="vertical" style={{ width: '100%' }}>
           <Text type="secondary">
             Tool name, insert/holder info and a reference photo — one static set per
-            cutting-tool position (T01-T08), printed on every sheet for that machine. NOT
-            matched per-CN like a fixture, since a cutting insert/holder has no reliable
-            factory DWG number to match on.
+            cutting-tool position, printed on every sheet for that machine. NOT matched
+            per-CN like a fixture, since a cutting insert/holder has no reliable factory
+            DWG number to match on.
           </Text>
           <Select
             placeholder="Select machine"
@@ -783,7 +805,7 @@ const TurningToolImagesTab = ({ theme }) => {
             value={machine}
             onChange={setMachine}
             options={allMachineTypes
-              .filter(m => m.grid_template_id === TURNING_GRID_TEMPLATE_ID)
+              .filter(m => m.grid_template_id === TURNING_GRID_TEMPLATE_ID || m.grid_template_id === TURNING_GENERAL_GRID_TEMPLATE_ID)
               .map(m => ({ value: m.machine_type_name, label: m.machine_group || m.machine_type_name }))}
             showSearch
             optionFilterProp="label"
@@ -820,7 +842,7 @@ const TurningToolImagesTab = ({ theme }) => {
             ) : <Text type="secondary">No image</Text>}
             <Text type="secondary">
               One picture per machine, printed in the tall strip on the right of the sheet
-              (under the "TURNING CUTTING LAYOUT" heading, cells AK15:AT58).
+              (under the "TURNING CUTTING LAYOUT" heading, cells {isTurningGeneral ? 'AL27:AR50 — below the fixture box' : 'AL15:AT58'}).
             </Text>
           </Space>
         </Card>
@@ -1894,6 +1916,12 @@ const HEADER_CELL_FIELDS = [
   // category (cell B5) auto-fills from the part class (class1_name) by default.
   // A machine-default or per-CN value entered here overrides that factory value.
   { key: 'category',     label: 'Category',        cell: 'B5' },
+  // material_size (cell O5, confirmed the same address across every machine's
+  // sds_excel_mapping) has NO automatic source at all on any template — this
+  // was the only HEADER_CELL_FIELDS field missing from this editor, so nobody
+  // had anywhere to type it for ANY machine. Reported live while filling in
+  // QTN200's CN override.
+  { key: 'material_size', label: "Mat'l Size",     cell: 'O5' },
 ];
 
 const MachineConfigTab = ({ theme, visibleMachineNames }) => {

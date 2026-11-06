@@ -179,7 +179,10 @@ router.delete('/tooling/:tool_dwg_no', isAdmin, async (req, res) => {
 // PUT /api/sds/v2/admin/parameters/bulk (see TurningToolImagesTab.jsx): reusing
 // Holder_Info_N as the photo key would have silently overwritten whatever holder
 // description was typed there.
-const TURNING_TOOL_SLOTS = 8;
+// Extended from 8 to 12 (2026-11-05) for Turning_General, whose 12-slot layout
+// reuses this exact route/table — harmless for the older 8-slot "Turning"
+// template, whose own admin form never sends a slot above 8.
+const TURNING_TOOL_SLOTS = 12;
 const turningToolKey = (machine, slot) => `TURN:${machine}:${slot}`;
 // Besides the 8 cutting-tool positions, the same route stores the machine's single
 // "Turning Cutting Layout" picture (slot 'layout', printed in the right-hand strip where the

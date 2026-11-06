@@ -1042,15 +1042,20 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   // apart, using a deterministic key the admin never has to type.
   // Inert for every other machine: this only fires when the machine's own params
   // actually carry a Tool_Photo_Key_N, which only this upload route ever writes.
+  // Extended from 8 to 12 slots (2026-11-05) for Turning_General, whose 12-slot
+  // layout reuses this exact mechanism (see turning_general_tool_image_N in
+  // IMAGE_EXTENTS) — harmless for the older 8-slot "Turning" template, whose
+  // own admin form never writes a Tool_Photo_Key above 8.
+  const TURNING_TOOL_PHOTO_MAX_SLOT = 12;
   const turningHolderCodes = [];
-  for (let n = 1; n <= 8; n++) { const v = rawParams[`Tool_Photo_Key_${n}`]; if (v) turningHolderCodes.push(v); }
+  for (let n = 1; n <= TURNING_TOOL_PHOTO_MAX_SLOT; n++) { const v = rawParams[`Tool_Photo_Key_${n}`]; if (v) turningHolderCodes.push(v); }
   if (turningHolderCodes.length) {
     const turningImgRows = await engPool.query(
       `SELECT tool_dwg_no, image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = ANY($1)`,
       [turningHolderCodes]
     );
     map['_turningToolImages'] = {};
-    for (let n = 1; n <= 8; n++) {
+    for (let n = 1; n <= TURNING_TOOL_PHOTO_MAX_SLOT; n++) {
       const code = rawParams[`Tool_Photo_Key_${n}`];
       if (!code) continue;
       const img = turningImgRows.rows.find(i => i.tool_dwg_no === code);
@@ -1387,18 +1392,33 @@ function buildGridPdfHtml(grid) {
     const d = cells[baseOf(r, c)];
     return !!(d && (d.img || (d.v != null && String(d.v).trim() !== '')));
   };
-  // How far the text may run before the first occupied cell stops it, in mm — the cell's
-  // own width plus every CONSECUTIVE empty neighbour in the direction its alignment sends
-  // it. Bounding this is the whole fix: "the next cell is empty" is not a licence to run
-  // the length of the row, which is what `overflow:visible` alone granted.
+  // A vertical border between two columns marks a designed structural boundary
+  // (e.g. the divider between two tool-slot blocks) — "empty" on each side of it
+  // is not licence to spill across it. Without this, a short LABEL (e.g. a bare
+  // "Hand :" on a slot with no data) could spill tens of millimetres into an
+  // unrelated block just because every cell in between happened to be empty,
+  // landing it visually inside — and reading as misaligned with — a different
+  // tool slot's own columns. Reported live: Turning_General's T09 "Hand :"
+  // (no data) spilled ~75mm leftward, stopping only at T05's own filled "Hand"
+  // value several columns away, because nothing between them had ink.
+  const hasBorderBetween = (r, cLeft, cRight) => {
+    const bL = borders[`${r},${cLeft}`];
+    const bR = borders[`${r},${cRight}`];
+    return !!(bL && bL.r) || !!(bR && bR.l);
+  };
+  // How far the text may run before the first occupied cell OR structural border stops
+  // it, in mm — the cell's own width plus every CONSECUTIVE empty, unbordered neighbour
+  // in the direction its alignment sends it. Bounding this is the whole fix: "the next
+  // cell is empty" is not a licence to run the length of the row, which is what
+  // `overflow:visible` alone granted.
   const wMm = (c) => (colW[c] || 0) * scale;
   const spillWidthMm = (r, c, span, align) => {
     const c1 = c;
     const c2 = span ? span.c2 : c;
     let avail = 0;
     for (let i = c1; i <= c2; i++) avail += wMm(i);
-    if (align !== 'right') for (let i = c2 + 1; i < cols && !hasInk(r, i); i++) avail += wMm(i);
-    if (align !== 'left') for (let i = c1 - 1; i >= 0 && !hasInk(r, i); i--) avail += wMm(i);
+    if (align !== 'right') for (let i = c2 + 1; i < cols && !hasInk(r, i) && !hasBorderBetween(r, i - 1, i); i++) avail += wMm(i);
+    if (align !== 'left') for (let i = c1 - 1; i >= 0 && !hasInk(r, i) && !hasBorderBetween(r, i, i + 1); i--) avail += wMm(i);
     return avail;
   };
 
@@ -1518,6 +1538,31 @@ const IMAGE_EXTENTS = {
   // at AK — that column belongs to the fixture section (F02/F04/F06/F08 photos end there), so
   // an image starting at AK paints over the divider and the fixture photos.
   turning_layout_image: { tl: 'AL15', br: 'AT58' },
+  // Turning_General's own layout-diagram box starts BELOW its fixture section
+  // (AK15:AM18-ish, plus the fixture's own photo at AM17:AS26) rather than at
+  // AL15 like the older Turning template — the shared key above would paint
+  // straight over the fixture's "Tooling :"/"Dwg No :" labels and photo the
+  // moment anyone uploads a layout picture for one of these machines. Not yet
+  // triggered live (no Turning_General machine has had a layout photo
+  // uploaded), caught while generalizing the admin tab to this template.
+  // Extent matches PB Ring's own, independently confirmed live against this
+  // same grid_json (id=9, which Turning_General clones) in pbringGridService.js.
+  turning_general_layout_image: { tl: 'AL27', br: 'AR50' },
+  // Turning_General's 12 per-tool cutting-tool photo boxes — pre-formatted
+  // empty merges already sitting in the cloned grid_json (id=9/10), confirmed
+  // live (not guessed) by pbringGridService.js when PB Ring built the same
+  // feature for its own 2 turning machines on this identical template: each
+  // of the 3 column-blocks (H:K / T:W / AF:AI) has a merge at rows 18:25,
+  // 30:37, 42:49, 54:61 — the gap between each slot's AP/Nose R row and the
+  // next slot's Tool Detail row. Slot->box mapping: block0 (H)=slots 1-4,
+  // block1 (T)=slots 5-8, block2 (AF)=slots 9-12, reusing PB Ring's own
+  // verified coordinates rather than re-deriving them.
+  turning_general_tool_image_1: { tl: 'H18', br: 'K25' }, turning_general_tool_image_2: { tl: 'H30', br: 'K37' },
+  turning_general_tool_image_3: { tl: 'H42', br: 'K49' }, turning_general_tool_image_4: { tl: 'H54', br: 'K61' },
+  turning_general_tool_image_5: { tl: 'T18', br: 'W25' }, turning_general_tool_image_6: { tl: 'T30', br: 'W37' },
+  turning_general_tool_image_7: { tl: 'T42', br: 'W49' }, turning_general_tool_image_8: { tl: 'T54', br: 'W61' },
+  turning_general_tool_image_9: { tl: 'AF18', br: 'AI25' }, turning_general_tool_image_10: { tl: 'AF30', br: 'AI37' },
+  turning_general_tool_image_11: { tl: 'AF42', br: 'AI49' }, turning_general_tool_image_12: { tl: 'AF54', br: 'AI61' },
   // Turning template's F01-F08 jig/fixture photo boxes (2026-09-16) — the CURRENT
   // 8-tool + fixture-section layout, added once the template grew a dedicated photo
   // area for each fixture (it had none before, which is why tool_image_T01..T08 is
@@ -1528,12 +1573,23 @@ const IMAGE_EXTENTS = {
   turning_fixture_image_T03: { tl: 'Y27',  br: 'AC34' }, turning_fixture_image_T04: { tl: 'AD27', br: 'AK34' },
   turning_fixture_image_T05: { tl: 'Y38',  br: 'AC45' }, turning_fixture_image_T06: { tl: 'AD38', br: 'AK45' },
   turning_fixture_image_T07: { tl: 'Y49',  br: 'AC56' }, turning_fixture_image_T08: { tl: 'AD49', br: 'AK56' },
+
+  // "Turning_General" (sds_grid_template id=10, clone of Turning_PB id=9 + one
+  // fixture slot — 20261104d_create_turning_general_grid_template.js). Only ONE
+  // fixture slot exists on this layout (unlike the older Turning template's
+  // F01-F08), in the blank gap of the "TURNING CUTTING LAYOUT" section above the
+  // real layout-diagram box (which still uses `turning_layout_image`, same key
+  // as Turning_PB — not redefined here). See TURNING_GENERAL_FIXTURE_MACHINES.
+  turning_general_fixture_image_T01: { tl: 'AM17', br: 'AS26' },
 };
 
 // Machines on the Turning template — its F01-F08 fixture slots have a real photo box
 // (unlike tool_image_T01..T08's Standard-layout coordinates, which land on this
 // layout's own cutting-tool text and are suppressed by the collision check below).
 const TURNING_FIXTURE_MACHINES = new Set(['X-100', 'XD-8', 'J-WAVE', 'XC-100', 'XD-8T']);
+// Machines on "Turning_General" (sds_grid_template id=10) — its one fixture slot
+// uses turning_general_fixture_image_T01, not the older template's T01-T08 range.
+const TURNING_GENERAL_FIXTURE_MACHINES = new Set(['LB12', 'QTN200']);
 // Must match SUPPRESS_KEY in db_migrations/20260916b_suppress_shared_mapping_for_turning.js.
 const SUPPRESS_PARAM_KEY = '_suppressed';
 
@@ -1612,7 +1668,7 @@ function applyDataToGrid(grid, valueMap, mappings) {
   // sit inside a NEW photo box (confirmed live: `tool_name_T04`'s old address AD16 is
   // exactly the Turning template's F02 fixture-photo top-left) silently blocks that
   // photo, even though nothing is actually there to protect.
-  const IMAGE_PARAM_KEY = (k) => k === 'grinding_layout_image' || k === SUPPRESS_PARAM_KEY || /^(tool_image_T\d+|turning_tool_image_\d+|turning_fixture_image_T\d+)$/.test(k);
+  const IMAGE_PARAM_KEY = (k) => k === 'grinding_layout_image' || k === SUPPRESS_PARAM_KEY || /^(tool_image_T\d+|turning_tool_image_\d+|turning_fixture_image_T\d+|turning_general_fixture_image_T\d+|turning_general_tool_image_\d+)$/.test(k);
   const mappedRC = mappings
     .filter((m) => !IMAGE_PARAM_KEY(m.param_key))
     .map((m) => cellAddrToRC(m.cell_address))
@@ -1763,6 +1819,23 @@ function applyDataToGrid(grid, valueMap, mappings) {
   // 4) Tooling + grinding images into their anchor regions
   (valueMap.tooling || []).forEach((t) => {
     if (!t || !t.image) return;
+    // Turning_General's 12-slot layout has no per-tool photo box at all — only
+    // its ONE fixture slot (T01) does. Reported live: QTN200's T05 had a real
+    // matched tooling image (an uploaded photo for its insert family), and
+    // with no `turning_general_fixture_image_T05` extent defined, this used
+    // to fall through to `tool_image_T05` — coordinates designed for the OLD
+    // Standard-layout grid (AI18:AN23), which land in the gap between this
+    // layout's T05 and T09 blocks. The stray image (plus its own border) sat
+    // right next to the real block divider and read as a duplicate/misaligned
+    // line, masking the divider fix and making it look like it had no effect.
+    // For this machine set, only the fixture-slot key may ever place an
+    // image; anything else is silently dropped rather than guessing a
+    // coordinate from an incompatible layout.
+    if (TURNING_GENERAL_FIXTURE_MACHINES.has(valueMap.machine_type_name)) {
+      const key = `turning_general_fixture_image_${t.slot}`;
+      if (IMAGE_EXTENTS[key]) placeImage(key, t.image);
+      return;
+    }
     const key = TURNING_FIXTURE_MACHINES.has(valueMap.machine_type_name) && IMAGE_EXTENTS[`turning_fixture_image_${t.slot}`]
       ? `turning_fixture_image_${t.slot}`
       : `tool_image_${t.slot}`;
@@ -1776,9 +1849,20 @@ function applyDataToGrid(grid, valueMap, mappings) {
   for (const [slot, dataUri] of Object.entries(overrideImgs)) placeImage(`tool_image_${slot}`, dataUri);
 
   // 4b) Turning-style per-tool photos (Holder_Info_N-keyed) — see buildValueMap.
+  // Turning_General uses its OWN 12-slot extents (turning_general_tool_image_N,
+  // PB Ring's own confirmed coordinates on this identical cloned grid) — the
+  // older template's turning_tool_image_N coordinates are for its different
+  // 8-slot layout and would land in Turning_General's block-divider gaps, same
+  // failure class as the stray-image bug fixed 2026-11-05.
   const turningImgs = valueMap._turningToolImages || {};
-  for (const [n, dataUri] of Object.entries(turningImgs)) placeImage(`turning_tool_image_${n}`, dataUri);
-  placeImage('turning_layout_image', valueMap._turningLayoutImage, 0.7);
+  const isTurningGeneralMachine = TURNING_GENERAL_FIXTURE_MACHINES.has(valueMap.machine_type_name);
+  for (const [n, dataUri] of Object.entries(turningImgs)) {
+    placeImage(isTurningGeneralMachine ? `turning_general_tool_image_${n}` : `turning_tool_image_${n}`, dataUri);
+  }
+  placeImage(
+    TURNING_GENERAL_FIXTURE_MACHINES.has(valueMap.machine_type_name) ? 'turning_general_layout_image' : 'turning_layout_image',
+    valueMap._turningLayoutImage, 0.7
+  );
 
   return { ...grid, cells, fills, merges: [...(grid.merges || []), ...newMerges] };
 }
