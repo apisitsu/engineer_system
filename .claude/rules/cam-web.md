@@ -12,14 +12,21 @@ Browser CAD/CAM: G-code parse + backplot, material-removal simulation (dexel /
 voxel / turning), STL→toolpath planning, and a constraint-solved 2D sketcher.
 Route `MTC_PATHS.CAM` → `/eng/mtc_eng/cam`, sidebar entry "CAD/CAM".
 
-## This is now the only copy — develop it here
+## This is the source of truth — develop it here
 
 `cam/` began as a vendored copy of the standalone **cam-web** project
 (`C:\User DATA\Projects\cam-web`), imported at `a2a5775` and re-synced from
-`c781b78`. **That is history: as of 2026-08-05 this folder is the source of
-truth and all CAD/CAM work happens here, on `mtc`.** cam-web is the archived
-origin — do not develop there and re-sync, and do not treat anything here as
-"must stay verbatim".
+`c781b78`. **As of 2026-08-05 this folder is the source of truth and all CAD/CAM
+work happens here, on `mtc`.** Do not develop in cam-web and pull changes back,
+and do not treat anything here as "must stay verbatim".
+
+> **Update 2026-09-06:** cam-web is no longer archived. It was revived as a
+> maintained standalone app, kept level with this folder, and the sync direction
+> is **EngineerSystem → cam-web** (first re-sync on cam-web branch
+> `resync-from-eng`). The files that deliberately differ there (vite `?url`
+> worker/solver loaders, `100vh` App, offline IndexedDB `workApi.js`) are listed
+> in the `cam-web-resync` memory note — a naive wholesale copy breaks them.
+> cam-web's own CLAUDE.md still describes the old vendor-in direction.
 
 What survives from that arrangement is the *reasoning*: the notes below explain
 why several files look the way they do, and they are still load-bearing
@@ -29,6 +36,30 @@ Keep cam-web's house style, because the code is written to it and the tests
 depend on it: engine-first (pure logic in `engine/`, tested, then store, then
 view), and toolbar buttons are glyphs from a command catalogue (`engine/view/commands.js`),
 never labelled buttons. Its `CLAUDE.md` is still the best statement of that.
+
+## Name and window chrome (2026-11-06)
+
+**The module is called "Engineer CAM Lite"** (was "Engineer CAD/CAM"): it is a
+shop-floor aid — open and check G-code, backplot and simulate the cut, check
+standard cutting speeds, sketch simple parts — not a full CAM system like Mastercam
+or SolidCAM (no 3D fillet, assemblies, STEP, ellipse/spline). The name is in five
+places: the header in `App.jsx`, `MenuBar.jsx` (About), `ToolGallery.jsx`,
+`home_overall.jsx` and the sidebar entry in `menu_sidebar.jsx`. The route, folder
+and `MTC_PATHS.CAM` keep their names.
+
+A SolidWorks-style window is being built in stages (`docs/cadcam_layout_mockup.html`
+is the agreed layout — open it in a browser). **Done:** feature-tree icons per row
+(`TreeIcons.jsx`; a sketch that follows a face shows the link icon; `inverse` icons
+on the selected row, which is drawn on the accent colour) and a **status bar**
+(`StatusBar.jsx`, docked after the working area in `App.jsx`). The status bar shows
+only values the app really holds — what is being edited, what is selected, tree
+up-to-date — never placeholder coordinates. **Not done yet:** the docked Ribbon
+(labelled buttons, tabs by task), the Insert menu and the command search. Until the
+Ribbon lands, the rule in `engine/view/commands.js` still holds — toolbar buttons
+are glyphs named on hover — and the Ribbon is the agreed exception to it: **buttons
+on the Ribbon carry a label under the glyph**, glyph-only stays for the narrow rails.
+The mockup's *Evaluate* tab (Measure, Section, Check part) lists commands that do not
+exist in the app; do not build the tab until there is something real to put in it.
 
 ## Every colour comes from `cam/theme.js`
 
@@ -97,7 +128,8 @@ upgraded. **If it prints "commit it", commit it.**
 
 ## Tests: two runners, disjoint file sets
 
-The 70 CAM test files (1866 tests as of `c781b78`) are **vitest**, and stay that way —
+The CAM tests — 127 files / 2880 tests as of 2026-11-06 (118 `*.test.*` files plus 9
+`*_check.mjs`; it was 70 files / 1866 tests at `c781b78`) — are **vitest**, and stay that way —
 they use per-file `@vitest-environment jsdom` pragmas and `@react-three/test-renderer`.
 A re-sync should leave them all green; that suite passing is the main signal the copy
 landed intact.
@@ -107,9 +139,15 @@ landed intact.
 - `npm test` — CRA jest, with `testMatch` in package.json overridden by
   `"!**/mtc_eng/cam/**"` so it does not try to run them. (`testPathIgnorePatterns`
   is *not* one of the jest keys CRA lets you override; `testMatch` is.)
-- `node --test engine/sketch/planegcs_check.mjs` — the real WASM solver end to
-  end. `*_check.mjs` scripts are cam-web's convention for solver/WASM-level
-  checks and are not picked up by either runner.
+- `*_check.mjs` — cam-web's convention for solver/WASM/engine-level checks (the
+  real planegcs WASM solver end to end, the interpreter, the carvers). They are
+  written against `node:test` and **are run by `npm run test:cam`**: `vitest.config.js`
+  includes them and aliases `node:test` to `vitest`. They still run alone with
+  `node --test <file>`. Before 2026-11-06 *no* runner picked them up, and one
+  (`sim/_node_check.mjs`, drill `cutter`) had silently gone stale when drills gained
+  a shape in `cam/cutters.js`. `engine/cam/cam_check.mjs` is the exception: a demo
+  that writes sample `.nc`/`.stl` into `./nc_program/` (untracked — delete it after
+  running), so it is excluded.
 
 `testTimeout` is raised to 30s in `vitest.config.js`: a few of these are real
 compute (the runaway-macro guard expands a program until it trips) and time out
@@ -293,10 +331,36 @@ behind would mean the tree and the part disagreed the moment it was used.
   camPlanStore`, neither of which learns about features. Putting the tree in
   either would have made the import cycle real — `sketchStore` already imports
   `camPlanStore`.
-- **Topological naming is sidestepped, not solved.** Nothing names a face: a
-  sketch placed on one stores the *resolved plane* (`planeFromFace`), which is
-  numbers and cannot go stale. The price, stated rather than hidden: changing an
-  early feature does **not** move a sketch placed on its face.
+- **Topological naming is sidestepped, not solved — but axis-aligned faces now
+  follow (2026-11-06).** Nothing names a face by index: a sketch placed on one
+  stores the *resolved plane* (`planeFromFace`), which is numbers. When that face
+  is an axis-aligned **end of one feature's own solid** (top of an extrude, floor
+  of a pocket), the plane also carries `ref: { featureId, axis, side }`
+  (`linkFaceToSolids`, made by `featureStore.sketchOnFace` — the panel calls that,
+  not the sketcher's, because the sketcher cannot know about features). Each
+  rebuild re-resolves it against that feature's bounds (`resolvePlaneRef`) and
+  writes the moved plane back onto the sketch, so editing the feature's depth
+  moves the sketch and anything built on it. Three rules: a **cut's** faces point
+  the other way (a pocket floor is the *min* end of the tool that carved it); the
+  link is ignored — numbers stand — if its feature is suppressed, failed, or comes
+  *later* in the tree; and a sketch a feature already built from is resolved at
+  that moment, not again after. **The picked face must be taken back to the raw frame
+before the plane is made OR the link is compared** (`faceToRawFrame` in
+`engine/mesh/datum.js`, reached via `camPlanStore.faceInRawFrame`; passed to the
+sketcher as `sketchOnFace({ face })`): a face comes off the *displayed* mesh — laid
+down, datum-shifted — while feature solids, and the sketch itself, live in the raw
+frame (the Sketch page does not draw the part at all). Before 2026-11-06 the plane
+came from the displayed face and was only right while the frames agreed: with the
+base at 30 mm the lay-down put another face down, and the face that reads as "top"
+on screen is really the solid's x = −10.4 wall, so the old plane was `Top (XY) −10.4`
+— below the whole part — instead of `Right (YZ) −10.4`. Seen in the live app: a
+20×56×10 extrude is displayed quarter-turned about Z (x′=y, y′=−x), and after a
+rebuild to 30 mm it was laid down on a different face entirely (part size `[56,35,20]`);
+compared unconverted, no face ever matched. Unit tests could not show this — they
+share one frame by construction — so re-check face links in the browser, not only in
+vitest. Still NOT followed: angled faces, and faces that
+  are not a bounding-box end (e.g. a boss side wall). `ref` is an additive field
+  of the plane, so project files need no version bump and old ones open as before.
 - **`loadSoup` takes `keepDatum` / `keepPage`.** Clearing the datum is right for
   an imported file and wrong for a rebuild — without it the operator loses
   X0/Y0/Z0 every time they change a dimension. Same for being thrown to the

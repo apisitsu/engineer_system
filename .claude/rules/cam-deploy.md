@@ -11,12 +11,18 @@ The release flow itself is unchanged (`.\git_sync_mtc.ps1 "message"`: mtc → de
 github main). What follows is only what this module adds on top, and the two
 things that behave differently once it is on a real host.
 
+> **Status 2026-11-06: the latest CAM commits (turning cycles, bore/thread bars,
+> standard cutting speeds, menu bar, …) have NOT been released to plbmp118/130.**
+> The DB side is ahead of the code: `cam_saved_work` and the `cam_std_*` migrations
+> are already applied to the shared database, so the live backend cannot save to
+> the library until this ships (see the saved-library note below).
+
 ## What must actually reach the host
 
 | path | why it breaks without it |
 |---|---|
 | `apps/ENG-Frontend/public/wasm/planegcs.{js,wasm}` | the sketch solver loads both at runtime; they are **committed on purpose** — see `cam-web.md` |
-| `apps/ENG-Frontend/src/components/engineer/mtc_eng/cam/**` | the module (169 files) |
+| `apps/ENG-Frontend/src/components/engineer/mtc_eng/cam/**` | the module (254 files as of 2026-11-06; was 169) |
 | `apps/ENG-Frontend/scripts/copy-cam-wasm.js` | `prebuild` keeps the two assets in step with the installed package |
 | `package.json` + `package-lock.json` | five runtime deps: `@salusoft89/planegcs`, `clipper-lib`, `comlink`, and (2026-08-08) `three-bvh-csg`, `three-mesh-bvh` |
 

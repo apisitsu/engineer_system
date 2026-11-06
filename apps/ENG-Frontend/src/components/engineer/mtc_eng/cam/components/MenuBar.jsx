@@ -1,29 +1,37 @@
 /**
- * MenuBar — the File / Edit / View / Window / Help bar a CAD application
- * carries above everything else, which this module never had: every action
- * on the viewport rails is a **command**, reachable only by recognising its
- * glyph (see `engine/view/commands.js`). A menu bar is the other, text-first
- * door to the same handful of actions — the one an operator who does not yet
- * know the glyphs can read their way through.
+ * MenuBar — the File / Edit / View / Insert / Tools / Window / Help bar a CAD
+ * application carries above everything else, plus a search box over the same
+ * commands.
  *
- * It does not duplicate the catalogue: a menu item's label *is* its
- * description, the way a native File/Edit/View menu always has been, so
- * nothing here goes through `CommandButton`/`commands.js` (that pairing is
- * for icon-only rail buttons, which is not what this is).
+ * Every action on the viewport rails is a **command**, reachable only by
+ * recognising its glyph (see `engine/view/commands.js`). A menu bar is the other,
+ * text-first door to the same actions — the one an operator who does not yet know
+ * the glyphs can read their way through. The search box is the third door: type
+ * what you want ("dxf", "rebuild") and run it, the way SolidWorks' command search
+ * does.
  *
- * Deliberately thin on content. This is a first pass at the four menus that
- * cost nothing to get right — reachable actions that already exist as store
- * calls — not a push to cover every rail button. `Edit` only means anything
- * on the Sketch page (undo/redo/delete are sketchStore's alone), so its items
- * are disabled outside it rather than acting on nothing silently.
+ * **The menu is data, and the search reads that same data.** `buildMenuItems`
+ * returns the antd `items`; `flattenMenu` turns them into a flat list of runnable
+ * commands. Search is therefore never a second list that can drift from the menu:
+ * whatever the menu offers, enabled, is what search finds, and what the menu
+ * disables search will not offer.
+ *
+ * A menu item's label *is* its description, the way a native File/Edit/View menu
+ * always has been, so nothing here goes through `CommandButton`/`commands.js`
+ * (that pairing is for icon-only rail buttons).
+ *
+ * Items that only mean something on the Sketch page (undo/redo/delete, New
+ * sketch, Import DXF…) are disabled outside it rather than acting on nothing.
  */
-import { useRef } from 'react';
-import { Menu, Modal } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { Menu, Modal, AutoComplete } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { useCamStore } from '../stores/camStore.js';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { useFeatureStore } from '../stores/featureStore.js';
+import { useCamPlanStore } from '../stores/camPlanStore.js';
 import { useStdStore } from '../stores/stdStore.js';
+import { saveProject, openProjectFile, exportSketchDxf } from '../lib/projectIO.js';
 import { SAMPLE_GCODE, SAMPLE_TURNING } from '../SAMPLE_GCODE.js';
 import { CAD } from '../theme.js';
 
@@ -37,6 +45,132 @@ const VIEW_ITEMS = [
   { value: 'left', label: 'Left' },
   { value: 'right', label: 'Right' },
 ];
+
+/**
+ * The menu, as antd `items`. Pure: everything it needs arrives in `ctx`.
+ *
+ * @param {{libraryOpen:boolean, hasProgram:boolean, sketching:boolean,
+ *   hasSelection:boolean, view:string, treeOpen:boolean, canRestore:boolean,
+ *   hasFace:boolean, hasFeatures:boolean}} ctx
+ */
+export function buildMenuItems(ctx) {
+  const {
+    libraryOpen, hasProgram, sketching, hasSelection, view, treeOpen, canRestore, hasFace, hasFeatures,
+  } = ctx;
+  return [
+    {
+      key: 'file',
+      label: 'File',
+      children: [
+        { key: 'open', label: 'Open program…' },
+        { key: 'sample', label: 'Load sample' },
+        { type: 'divider' },
+        { key: 'open-project', label: 'Open project…' },
+        { key: 'save-project', label: 'Save project' },
+        { key: 'export-dxf', label: 'Export sketch as DXF', disabled: !sketching },
+        { type: 'divider' },
+        { key: 'library', label: libraryOpen ? 'Library ✓' : 'Library…' },
+        { key: 'export', label: 'Export G-code', disabled: !hasProgram },
+      ],
+    },
+    {
+      key: 'edit',
+      label: 'Edit',
+      children: [
+        { key: 'undo', label: 'Undo', disabled: !sketching },
+        { key: 'redo', label: 'Redo', disabled: !sketching },
+        { type: 'divider' },
+        { key: 'rebuild', label: 'Rebuild', disabled: !hasFeatures },
+        { type: 'divider' },
+        { key: 'delete', label: 'Delete', disabled: !sketching || !hasSelection },
+      ],
+    },
+    {
+      key: 'view',
+      label: 'View',
+      children: [
+        { key: 'fit', label: 'Fit to view' },
+        { type: 'divider' },
+        ...VIEW_ITEMS.map((v) => ({
+          key: `view:${v.value}`,
+          label: v.value === view ? `${v.label} ✓` : v.label,
+        })),
+      ],
+    },
+    {
+      key: 'insert',
+      label: 'Insert',
+      children: [
+        { key: 'new-sketch', label: 'New sketch', disabled: !sketching },
+        { key: 'sketch-on-face', label: 'Sketch on picked face', disabled: !sketching || !hasFace },
+        { key: 'import-dxf', label: 'Import DXF…', disabled: !sketching },
+      ],
+    },
+    {
+      key: 'tools',
+      label: 'Tools',
+      children: [
+        { key: 'std', label: 'Standard cutting speeds…', disabled: !hasProgram },
+        { key: 'std-restore', label: 'Restore program', disabled: !canRestore },
+        { key: 'std-edit', label: 'Edit standard…' },
+      ],
+    },
+    {
+      key: 'window',
+      label: 'Window',
+      children: [
+        { key: 'setup', label: 'Setup…' },
+        { key: 'tree', label: treeOpen ? 'Feature tree ✓' : 'Feature tree' },
+      ],
+    },
+    {
+      key: 'help',
+      label: 'Help',
+      children: [
+        { key: 'about', label: 'About Engineer CAM Lite' },
+      ],
+    },
+  ];
+}
+
+/** The menu as a flat list of commands, for search. Dividers are dropped; the group is the menu's name. */
+export function flattenMenu(items) {
+  const out = [];
+  for (const top of items) {
+    for (const child of top.children || []) {
+      if (child.type === 'divider') continue;
+      out.push({
+        key: child.key,
+        // The ellipsis and tick are menu punctuation, not part of the name.
+        label: String(child.label).replace(/[…✓]/g, '').trim(),
+        group: top.label,
+        disabled: !!child.disabled,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Commands matching what was typed: every word must appear in the name or its
+ * menu ("dxf export" and "file dxf" both find Export sketch as DXF). Disabled ones
+ * are left out — offering a command that then does nothing is worse than not
+ * offering it. Name matches rank above menu-only matches.
+ */
+export function searchMenu(flat, query, limit = 8) {
+  const words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const scored = [];
+  for (const c of flat) {
+    if (c.disabled) continue;
+    const name = c.label.toLowerCase();
+    const both = `${name} ${c.group.toLowerCase()}`;
+    if (!words.every((w) => both.includes(w))) continue;
+    scored.push({ c, score: words.every((w) => name.includes(w)) ? 0 : 1 });
+  }
+  scored.sort((a, b) => a.score - b.score);
+  return scored.slice(0, limit).map((s) => s.c);
+}
 
 export default function MenuBar({
   onExportGcode, libraryOpen, onToggleLibrary, onOpenSetup,
@@ -54,9 +188,16 @@ export default function MenuBar({
   const undo = useSketchStore((s) => s.undo);
   const redo = useSketchStore((s) => s.redo);
   const deleteSelected = useSketchStore((s) => s.deleteSelected);
+  const addSketch = useSketchStore((s) => s.addSketch);
+  const importDxf = useSketchStore((s) => s.importDxf);
+  const setError = useSketchStore((s) => s.setError);
 
   const treeOpen = useFeatureStore((s) => s.treeOpen);
   const setTreeOpen = useFeatureStore((s) => s.setTreeOpen);
+  const features = useFeatureStore((s) => s.features);
+  const rebuild = useFeatureStore((s) => s.rebuild);
+  const sketchOnFace = useFeatureStore((s) => s.sketchOnFace);
+  const face = useCamPlanStore((s) => s.selectedFeature);
 
   const canRestore = useStdStore((s) => !!s.undo);
   const checkStd = useStdStore((s) => s.check);
@@ -64,77 +205,44 @@ export default function MenuBar({
   const openStdEditor = useStdStore((s) => s.openEditor);
 
   const fileInput = useRef(null);
+  const projectInput = useRef(null);
+  const dxfInput = useRef(null);
+  const searchRef = useRef(null);
+  const [query, setQuery] = useState('');
 
-  const items = [
-    {
-      key: 'file',
-      label: 'File',
-      children: [
-        { key: 'open', label: 'Open program…' },
-        { key: 'sample', label: 'Load sample' },
-        { type: 'divider' },
-        { key: 'library', label: libraryOpen ? 'Library ✓' : 'Library…' },
-        { key: 'export', label: 'Export G-code', disabled: !gcode },
-      ],
-    },
-    {
-      key: 'edit',
-      label: 'Edit',
-      children: [
-        { key: 'undo', label: 'Undo', disabled: !sketching },
-        { key: 'redo', label: 'Redo', disabled: !sketching },
-        { type: 'divider' },
-        { key: 'delete', label: 'Delete', disabled: !sketching || selection.length === 0 },
-      ],
-    },
-    {
-      key: 'view',
-      label: 'View',
-      children: [
-        { key: 'fit', label: 'Fit to view' },
-        { type: 'divider' },
-        ...VIEW_ITEMS.map((v) => ({
-          key: `view:${v.value}`,
-          label: v.value === view ? `${v.label} ✓` : v.label,
-        })),
-      ],
-    },
-    {
-      key: 'window',
-      label: 'Window',
-      children: [
-        { key: 'setup', label: 'Setup…' },
-        { key: 'tree', label: treeOpen ? 'Feature tree ✓' : 'Feature tree' },
-      ],
-    },
-    {
-      key: 'tools',
-      label: 'Tools',
-      children: [
-        { key: 'std', label: 'Standard cutting speeds…', disabled: !gcode },
-        { key: 'std-restore', label: 'Restore program', disabled: !canRestore },
-        { key: 'std-edit', label: 'Edit standard…' },
-      ],
-    },
-    {
-      key: 'help',
-      label: 'Help',
-      children: [
-        { key: 'about', label: 'About Engineer CAD/CAM' },
-      ],
-    },
-  ];
+  const items = buildMenuItems({
+    libraryOpen,
+    hasProgram: !!gcode,
+    sketching,
+    hasSelection: selection.length > 0,
+    view,
+    treeOpen,
+    canRestore,
+    hasFace: !!(face?.normal && face?.centroid),
+    hasFeatures: features.length > 0,
+  });
 
-  const onClick = ({ key }) => {
+  const guarded = (fn) => async () => {
+    try { await fn(); } catch (e) { setError?.(e?.message || String(e)); }
+  };
+
+  const run = ({ key }) => {
     if (key === 'open') { fileInput.current?.click(); return; }
     if (key === 'sample') { parse(mode === 'turn' ? SAMPLE_TURNING : SAMPLE_GCODE); return; }
+    if (key === 'open-project') { projectInput.current?.click(); return; }
+    if (key === 'save-project') { guarded(saveProject)(); return; }
+    if (key === 'export-dxf') { guarded(exportSketchDxf)(); return; }
     if (key === 'library') { onToggleLibrary(); return; }
     if (key === 'export') { onExportGcode(); return; }
     if (key === 'undo') { undo(); return; }
     if (key === 'redo') { redo(); return; }
+    if (key === 'rebuild') { rebuild(); return; }
     if (key === 'delete') { deleteSelected(); return; }
     if (key === 'fit') { setViewPreset(view); return; }
     if (key.startsWith('view:')) { setViewPreset(key.slice(5)); return; }
+    if (key === 'new-sketch') { addSketch(); return; }
+    if (key === 'sketch-on-face') { sketchOnFace(); return; }
+    if (key === 'import-dxf') { dxfInput.current?.click(); return; }
     if (key === 'std') { checkStd({ manual: true }); return; }
     if (key === 'std-restore') { restoreStd(); return; }
     if (key === 'std-edit') { openStdEditor(); return; }
@@ -142,39 +250,101 @@ export default function MenuBar({
     if (key === 'tree') { setTreeOpen(!treeOpen); return; }
     if (key === 'about') {
       Modal.info({
-        title: 'Engineer CAD/CAM',
+        title: 'Engineer CAM Lite',
         icon: <ThunderboltOutlined style={{ color: CAD.accent }} />,
-        content: 'Browser CAD/CAM: G-code backplot and simulation, STL toolpath planning, and a constraint-solved 2D sketcher.',
+        content: 'A lightweight shop-floor tool in the browser: open and check G-code, backplot and simulate the cut, check standard cutting speeds, and sketch simple parts. It is not a full CAM system — no 3D fillets, assemblies or STEP.',
       });
     }
   };
 
+  // Ctrl/Cmd+K jumps to the search box. SketchLayer's own key handler ignores
+  // keystrokes that originate in an INPUT, so typing a command does not also
+  // pick a drawing tool.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const found = searchMenu(flattenMenu(items), query);
+  const options = found.map((c) => ({
+    value: c.key,
+    label: (
+      <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+        <span>{c.label}</span>
+        <span style={{ color: CAD.dim, fontSize: 11 }}>{c.group}</span>
+      </span>
+    ),
+  }));
+
+  const hiddenInput = (ref, accept, onFile) => (
+    <input
+      ref={ref}
+      type="file"
+      accept={accept}
+      style={{ display: 'none' }}
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // allow re-opening the same file name next time
+        if (file) onFile(file);
+      }}
+    />
+  );
+
   return (
-    <>
-      <input
-        ref={fileInput}
-        type="file"
-        accept={PROGRAM_ACCEPT}
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = ''; // allow re-opening the same file name next time
-          if (file) loadFile(file);
-        }}
-      />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {hiddenInput(fileInput, PROGRAM_ACCEPT, loadFile)}
+      {hiddenInput(projectInput, '.json,.camweb.json', guarded2(openProjectFile, setError))}
+      {hiddenInput(dxfInput, '.dxf', async (file) => {
+        try {
+          // The file's own name becomes the sketch's, so a drawing imported next
+          // to two others is identifiable in the list.
+          importDxf(await file.text(), { name: file.name.replace(/\.[^.]*$/, '') || 'DXF' });
+        } catch (e) {
+          setError?.(e?.message || String(e));
+        }
+      })}
       <Menu
         mode="horizontal"
         selectable={false}
         triggerSubMenuAction="click"
         items={items}
-        onClick={onClick}
+        onClick={run}
         style={{
+          flex: 1,
+          minWidth: 0,
           background: 'transparent',
           borderBottom: 'none',
           lineHeight: '30px',
           fontSize: 12,
         }}
       />
-    </>
+      <AutoComplete
+        ref={searchRef}
+        size="small"
+        value={query}
+        options={options}
+        onChange={setQuery}
+        onSelect={(key) => { run({ key }); setQuery(''); searchRef.current?.blur(); }}
+        filterOption={false}
+        placeholder="Search commands (Ctrl+K)"
+        allowClear
+        style={{ width: 230, flex: '0 0 auto' }}
+        popupMatchSelectWidth={300}
+        data-menu-search
+      />
+    </div>
   );
+}
+
+/** A file handler that reports failure on the sketcher's own error line. */
+function guarded2(fn, setError) {
+  return async (file) => {
+    try { await fn(file); } catch (e) { setError?.(e?.message || String(e)); }
+  };
 }

@@ -55,6 +55,7 @@ import {
 import Viewport from './components/Viewport.jsx';
 import PositionReadout from './components/PositionReadout.jsx';
 import SketchToolbar from './components/SketchToolbar.jsx';
+import StatusBar from './components/StatusBar.jsx';
 import SketchContextMenu from './components/SketchContextMenu.jsx';
 import SketchConfirmCorner from './components/SketchConfirmCorner.jsx';
 import MenuBar from './components/MenuBar.jsx';
@@ -193,6 +194,9 @@ export default function App() {
 
   const [speed, setSpeed] = useState(1);
   const [dragActive, setDragActive] = useState(false);
+  // The docked Ribbon's mount point (below the title bar). A state, not a ref, so
+  // the toolbar re-renders into it the moment it exists.
+  const [ribbonSlot, setRibbonSlot] = useState(null);
   // The setup drawer, opened from the toolbar. Closed by default: it is a job
   // you do once per part, not something to keep on screen while cutting.
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -660,7 +664,7 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0 8px' }}>
             <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 22 }} />
             <Title level={4} style={{ color: CAD.text, margin: 0 }}>
-              Engineer CAD/CAM
+              Engineer CAM Lite
             </Title>
             <Segmented
               value={page}
@@ -675,6 +679,9 @@ export default function App() {
             </Text>
           </div>
         </Header>
+        {/* The Ribbon: the Sketch page's command rail, docked here rather than
+            floating over the viewport. Empty (zero height) on every other page. */}
+        <div ref={setRibbonSlot} data-ribbon-slot style={{ flex: '0 0 auto' }} />
         <Layout>
           {/* The left column is the **feature tree**, the way a CAD lays a part
               window out: the model's structure is the thing that stays on
@@ -1207,7 +1214,7 @@ export default function App() {
           <Content style={{ position: 'relative' }}>
             {/* Sketcher controls float over the viewport — only on the Sketch page,
                 so the design workspace is separate from Milling / Turning. */}
-            {sketching && <SketchToolbar />}
+            {sketching && <SketchToolbar ribbonSlot={ribbonSlot} />}
             {sketching && <SketchContextMenu />}
             {sketching && <SketchConfirmCorner />}
 
@@ -1516,6 +1523,7 @@ export default function App() {
             />
           </Content>
         </Layout>
+        <StatusBar />
       </Layout>
     </div>
   );

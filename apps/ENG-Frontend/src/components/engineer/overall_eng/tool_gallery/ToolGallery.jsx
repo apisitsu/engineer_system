@@ -38,8 +38,8 @@ const ToolGallery = () => {
     },
     {
       id: 'cad-cam',
-      title: 'Engineer CAD/CAM',
-      description: 'In-browser 2D sketch and CAM workspace — draw geometry, generate toolpaths, and save your work to a personal or shared library.',
+      title: 'Engineer CAM Lite',
+      description: 'Lightweight in-browser workspace — open and check G-code, simulate the cut, sketch simple parts, and save your work to a personal or shared library.',
       icon: <DeploymentUnitOutlined style={{ fontSize: '32px', color: '#2f54eb' }} />,
       path: '/eng/mtc_eng/cam',
       category: 'Engineering',

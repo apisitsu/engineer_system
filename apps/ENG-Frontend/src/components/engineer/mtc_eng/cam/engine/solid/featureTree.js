@@ -19,14 +19,19 @@
  *
  * Feature trees classically founder on **topological naming**: a feature that
  * refers to "the seventh face of the previous body" refers to nothing reliable
- * once an earlier feature changes the shape. Nothing here names a face. A sketch
- * placed on a face stores the **resolved plane** — an origin and two axes — which
- * is just numbers and cannot go stale (`planeFromFace`).
+ * once an earlier feature changes the shape. Nothing here names a face by
+ * index. A sketch placed on a face stores the **resolved plane** — numbers that
+ * cannot go stale (`planeFromFace`) — and, when that face is an *axis-aligned end*
+ * of one feature's own solid (the top of an extrude, the floor of a pocket), a
+ * **link** to that end (`plane.ref`, see `linkFaceToSolids`). On replay the link
+ * is re-resolved against the bounds of that feature's solid, so editing the
+ * feature's depth or sketch moves the sketches placed on it.
  *
- * The price is stated rather than hidden: changing an early feature does **not**
- * move a sketch that was placed on its face. That is a limitation, but it is a
- * predictable one, and predictable beats a reference that silently re-binds to
- * the wrong face.
+ * What is still not followed, stated rather than hidden: an **angled** face, and
+ * a face that is not an end of a feature's bounding box, keep their numbers. A
+ * link whose feature is suppressed, failed, or later in the tree also falls back
+ * to the numbers. That is a limitation, but a predictable one, and predictable
+ * beats a reference that silently re-binds to the wrong face.
  *
  * ## Failure is per feature
  *
@@ -41,6 +46,8 @@
 import { sketchRegions } from '../sketch/loops.js';
 import { combineRegions } from './regionBoolean.js';
 import { buildSolid } from './extrude.js';
+import { resolvePlaneRef } from '../sketch/plane.js';
+import { boundsOf } from '../mesh/analyze.js';
 
 /** What a feature can be. `import` is the mesh a file was read into. */
 export const FEATURE_KINDS = {
@@ -110,7 +117,9 @@ export function parseFeatures(raw) {
 }
 
 /** Build the solid one feature describes, on its own. Throws with a message. */
-function makeFeatureSolid(feature, { sketchOf, importOf }) {
+function makeFeatureSolid(feature, {
+  sketchOf, importOf, refBounds, planes, used,
+}) {
   if (feature.kind === 'import') {
     const soup = importOf?.(feature);
     if (!soup?.triangleCount) {
@@ -120,6 +129,13 @@ function makeFeatureSolid(feature, { sketchOf, importOf }) {
   }
   const entry = sketchOf?.(feature.sketchId);
   if (!entry?.doc) throw new Error('its sketch is gone');
+
+  // A sketch placed on an earlier feature's face is moved to where that face is
+  // now. The moved plane is reported back (`planes`) so the store can write it
+  // onto the sketch — the drawing on screen must sit where the solid was built.
+  used?.add(feature.sketchId);
+  const plane = resolvePlaneRef(entry.plane, refBounds);
+  if (plane !== entry.plane) planes?.set(feature.sketchId, plane);
 
   const found = sketchRegions(entry.doc);
   let regions = found.regions;
@@ -131,7 +147,7 @@ function makeFeatureSolid(feature, { sketchOf, importOf }) {
   }
   return buildSolid(regions, {
     op: feature.kind,
-    plane: entry.plane,
+    plane,
     depth: feature.depth,
     base: feature.base,
     axis: feature.axis,
@@ -152,13 +168,23 @@ function makeFeatureSolid(feature, { sketchOf, importOf }) {
  *   rebuilding only from the first changed feature, which is worth adding once
  *   a boolean on a real part is slow enough to notice. Off by default: every
  *   soup is a `Float32Array` and a deep tree of big parts is real memory.
- * @returns {{soup:object|null, steps:object[], errors:object[]}}
+ * @returns {{soup:object|null, steps:object[], errors:object[], planes:Map<number,object>}}
+ *   `planes` maps a sketch id to the plane it was **built on** when that differs
+ *   from the one it stores — i.e. a face link that moved. Each ok step also
+ *   carries `bounds` (its own solid's) and `merge`, which is what a new link to
+ *   its faces is made from.
  */
 export function rebuildFeatures(features, ctx = {}, { keepIntermediates = false } = {}) {
   const { meshBoolean } = ctx;
   let current = null;
   const steps = [];
   const errors = [];
+  // Each built feature's own bounds, by id, filled as the fold goes — so a link
+  // can only ever resolve against a feature that comes EARLIER and built fine.
+  const refBounds = new Map();
+  const planes = new Map();
+  const used = new Set(); // sketches a feature was actually built from
+  const fctx = { ...ctx, refBounds, planes, used };
 
   const fail = (f, message) => {
     const step = {
@@ -178,7 +204,7 @@ export function rebuildFeatures(features, ctx = {}, { keepIntermediates = false 
 
     let made;
     try {
-      made = makeFeatureSolid(f, ctx);
+      made = makeFeatureSolid(f, fctx);
     } catch (e) {
       fail(f, e?.message || String(e));
       continue;
@@ -200,17 +226,32 @@ export function rebuildFeatures(features, ctx = {}, { keepIntermediates = false 
       }
     }
 
+    const bounds = boundsOf(made);
+    refBounds.set(f.id, bounds);
     steps.push({
       id: f.id,
       name: f.name,
       kind: f.kind,
       ok: true,
+      merge: f.merge,
+      bounds: { min: bounds.min, max: bounds.max },
       triangleCount: current.triangleCount,
       ...(keepIntermediates ? { soup: current } : {}),
     });
   }
 
-  return { soup: current, steps, errors };
+  // A sketch placed on a face but not built yet is the usual state — the
+  // operator is about to draw on it. It must sit on the face's new position too,
+  // or the profile gets drawn at the old height. Sketches a feature DID build from
+  // are already settled above, at the moment that feature was built; resolving
+  // them again here could move one after its solid was made.
+  for (const s of ctx.sketchList?.() || []) {
+    if (used.has(s.id)) continue;
+    const plane = resolvePlaneRef(s.plane, refBounds);
+    if (plane !== s.plane) planes.set(s.id, plane);
+  }
+
+  return { soup: current, steps, errors, planes };
 }
 
 /** Whether replaying this tree will need a solid boolean at all. */

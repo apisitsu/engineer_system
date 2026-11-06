@@ -310,7 +310,9 @@ describe('rebuildFeatures — when a feature breaks', () => {
   });
 
   it('is empty for an empty tree', () => {
-    expect(rebuildFeatures([], ctx({}))).toEqual({ soup: null, steps: [], errors: [] });
+    expect(rebuildFeatures([], ctx({}))).toEqual({
+      soup: null, steps: [], errors: [], planes: new Map(),
+    });
     expect(rebuildFeatures(null, ctx({})).soup).toBeNull();
   });
 });

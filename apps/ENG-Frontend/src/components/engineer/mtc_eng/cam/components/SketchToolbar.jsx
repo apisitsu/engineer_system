@@ -15,7 +15,9 @@ import {
   SaveOutlined, FolderOpenOutlined, ExportOutlined, ImportOutlined, DatabaseOutlined,
 } from '@ant-design/icons';
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useSketchStore } from '../stores/sketchStore.js';
+import RibbonButton from './RibbonButton.jsx';
 import { saveProject, openProjectFile, exportSketchDxf } from '../lib/projectIO.js';
 import LibraryPanel from './LibraryPanel.jsx';
 import SketchesPanel from './SketchesPanel.jsx';
@@ -555,7 +557,19 @@ function OffsetInput() {
   );
 }
 
-export default function SketchToolbar() {
+/**
+ * The sketcher's command rail, and the overlays it drives (dimension and chamfer
+ * inputs, which float over the viewport).
+ *
+ * `ribbonSlot` is a DOM node under the title bar. When given, the rail is drawn
+ * there as a docked **Ribbon** with a label under every button, via a portal — so
+ * it leaves the viewport clear, while still being part of this component's React
+ * tree (state, popovers and events all keep working) and the input overlays below
+ * stay where they were, over the viewport they belong to. Without a slot (the
+ * component on its own, as the tests mount it) the rail floats as it always did.
+ */
+export default function SketchToolbar({ ribbonSlot = null }) {
+  const docked = !!ribbonSlot;
   const tool = useSketchStore((s) => s.tool);
   const selection = useSketchStore((s) => s.selection);
   const selectedDims = useSketchStore((s) => s.selectedDims);
@@ -606,15 +620,35 @@ export default function SketchToolbar() {
   const geomSelected = selectedTypes.some((t) => t === 'line' || t === 'circle' || t === 'arc');
   const canMirror = selection.length >= 2 && selectedTypes.filter((t) => t === 'line').length >= 1;
 
-  // `pointerEvents: 'auto'` opts each button back in after the rail container
-  // below turns itself off — see that div's comment for why.
-  const railBtn = () => ({ width: 34, height: 34, pointerEvents: 'auto' });
+  // Each `RibbonButton` opts back into pointer events itself, after the floating
+  // rail container below turns them off — see that div's comment for why.
   // Vertical hairline separating groups in the horizontal rail.
-  const sep = <div style={{ width: 1, height: 24, background: CAD.border, margin: '0 2px' }} />;
+  const sep = docked
+    ? <div style={{ width: 1, alignSelf: 'stretch', background: CAD.border, margin: '4px 4px' }} />
+    : <div style={{ width: 1, height: 24, background: CAD.border, margin: '0 2px' }} />;
 
-  return (
-    <>
-    <div data-cam-overlay="top" style={{
+  // Docked, the rail is the Ribbon: it takes the full width under the title bar,
+  // sits in the page flow (so it no longer needs to be a `data-cam-overlay` — it
+  // covers none of the viewport), and shows labels.
+  const DOCKED_OVERRIDES = {
+    position: 'static',
+    top: 'auto',
+    left: 'auto',
+    zIndex: 'auto',
+    maxWidth: 'none',
+    gap: 2,
+    alignItems: 'stretch',
+    padding: '4px 12px',
+    background: CAD.panelBg,
+    border: 'none',
+    borderBottom: `1px solid ${CAD.border}`,
+    borderRadius: 0,
+    boxShadow: 'none',
+    pointerEvents: 'auto',
+  };
+
+  const rail = (
+    <div {...(docked ? { 'data-sketch-ribbon': true } : { 'data-cam-overlay': 'top' })} style={{
       position: 'absolute', top: 12, left: 12, zIndex: 5,
       display: 'flex', flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap',
       background: CAD.glass, border: `1px solid ${CAD.border}`,
@@ -633,16 +667,17 @@ export default function SketchToolbar() {
       // several rounds of bug reports before this was found. `none` here lets
       // pointer events fall through the empty parts of the rail to the
       // viewport below; each button opts back in with its own
-      // `pointerEvents: 'auto'` (`railBtn()` for the plain ones).
+      // `pointerEvents: 'auto'` (`RibbonButton` does it for the plain ones).
       pointerEvents: 'none',
+      ...(docked ? DOCKED_OVERRIDES : {}),
     }}>
       {TOOLS.map((t) => (
         <Tooltip key={t.value} title={`${t.label} — ${t.hint}`} placement="bottom">
-          <Button
-            type={tool === t.value ? 'primary' : 'text'}
+          <RibbonButton
+            active={tool === t.value}
             icon={<t.Icon />}
+            label={t.label}
             onClick={() => setTool(t.value)}
-            style={{ ...railBtn(), color: tool === t.value ? undefined : CAD.icon }}
           />
         </Tooltip>
       ))}
@@ -670,30 +705,27 @@ export default function SketchToolbar() {
           drawing tools — they change geometry, unlike the relations in the
           popover — so they sit on the rail, acting on the current selection. */}
       <Tooltip title="Construction — toggle the selected lines/circles/arcs to reference geometry (dashed; excluded from the profile)" placement="bottom">
-        <Button
-          type="text"
+        <RibbonButton
           icon={<ConstructionIcon />}
+          label="Construction"
           disabled={!geomSelected}
           onClick={() => toggleConstruction()}
-          style={{ ...railBtn(), color: geomSelected ? CAD.icon : undefined }}
         />
       </Tooltip>
       <Tooltip title="Mirror — reflect the selection about an axis line (make the axis a construction line first)" placement="bottom">
-        <Button
-          type="text"
+        <RibbonButton
           icon={<MirrorIcon />}
+          label="Mirror"
           disabled={!canMirror}
           onClick={() => mirror()}
-          style={{ ...railBtn(), color: canMirror ? CAD.icon : undefined }}
         />
       </Tooltip>
       <Tooltip title="Offset — copy the selected lines/circles/arcs a set distance away (negative flips the side)" placement="bottom">
-        <Button
-          type="text"
+        <RibbonButton
           icon={<OffsetIcon />}
+          label="Offset"
           disabled={!geomSelected}
           onClick={() => beginOffset()}
-          style={{ ...railBtn(), color: geomSelected ? CAD.icon : undefined }}
         />
       </Tooltip>
 
@@ -706,21 +738,21 @@ export default function SketchToolbar() {
         content={<ConstraintsPanel />}
       >
         <Tooltip title="Relations & dimensions" placement="bottom">
-          <Button type="text" icon={<NodeIndexOutlined />} style={{ ...railBtn(), color: CAD.icon }} />
+          <RibbonButton icon={<NodeIndexOutlined />} label="Relations" />
         </Tooltip>
       </Popover>
 
       <Tooltip title="Solve (apply constraints)" placement="bottom">
-        <Button type="text" icon={<ThunderboltOutlined />} onClick={() => solve()} style={{ ...railBtn(), color: CAD.accent }} />
+        <RibbonButton icon={<ThunderboltOutlined />} label="Solve" accent onClick={() => solve()} />
       </Tooltip>
       <Tooltip title="Undo (Ctrl+Z)" placement="bottom">
-        <Button type="text" icon={<UndoOutlined />} disabled={!past.length} onClick={() => undo()} style={{ ...railBtn(), color: CAD.icon }} />
+        <RibbonButton icon={<UndoOutlined />} label="Undo" disabled={!past.length} onClick={() => undo()} />
       </Tooltip>
       <Tooltip title="Redo (Ctrl+Y)" placement="bottom">
-        <Button type="text" icon={<RedoOutlined />} disabled={!future.length} onClick={() => redo()} style={{ ...railBtn(), color: CAD.icon }} />
+        <RibbonButton icon={<RedoOutlined />} label="Redo" disabled={!future.length} onClick={() => redo()} />
       </Tooltip>
       <Tooltip title="Delete selection (Del) — geometry or a selected dimension" placement="bottom">
-        <Button type="text" danger icon={<DeleteOutlined />} disabled={!selection.length && !selectedDims.length} onClick={() => deleteSelected()} style={railBtn()} />
+        <RibbonButton danger icon={<DeleteOutlined />} label="Delete" disabled={!selection.length && !selectedDims.length} onClick={() => deleteSelected()} />
       </Tooltip>
 
       {/* The library, on its own trigger rather than inside the menu below: a
@@ -730,7 +762,7 @@ export default function SketchToolbar() {
       <LibraryPanel
         trigger={(
           <Tooltip title="Library — your own saved work, and the shelf everyone shares" placement="bottom">
-            <Button type="text" icon={<DatabaseOutlined />} style={{ ...railBtn(), color: CAD.icon }} />
+            <RibbonButton icon={<DatabaseOutlined />} label="Library" />
           </Tooltip>
         )}
       />
@@ -745,14 +777,14 @@ export default function SketchToolbar() {
       <SketchesPanel
         trigger={(
           <Tooltip title="Sketches — which one you are drawing, and the plane it sits on" placement="bottom">
-            <Button type="text" icon={<PlanesIcon />} style={{ ...railBtn(), color: CAD.icon }} />
+            <RibbonButton icon={<PlanesIcon />} label="Sketches" />
           </Tooltip>
         )}
       />
       <BuildPanel
         trigger={(
           <Tooltip title="Build — extrude or revolve this sketch into a solid and send it to CAM" placement="bottom">
-            <Button type="text" icon={<ExtrudeIcon />} style={{ ...railBtn(), color: CAD.accent }} />
+            <RibbonButton icon={<ExtrudeIcon />} label="Build" accent />
           </Tooltip>
         )}
       />
@@ -797,7 +829,7 @@ export default function SketchToolbar() {
         )}
       >
         <Tooltip title="More" placement="bottom">
-          <Button type="text" icon={<EllipsisOutlined />} style={{ ...railBtn(), color: CAD.icon }} />
+          <RibbonButton icon={<EllipsisOutlined />} label="More" />
         </Tooltip>
       </Popover>
 
@@ -832,6 +864,11 @@ export default function SketchToolbar() {
         )}
       </Space>
     </div>
+  );
+
+  return (
+    <>
+    {ribbonSlot ? createPortal(rail, ribbonSlot) : rail}
     <DimensionInput />
     <EditDimensionInput />
     <ChamferInput />

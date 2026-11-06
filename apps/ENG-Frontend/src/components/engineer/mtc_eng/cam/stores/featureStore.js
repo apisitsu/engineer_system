@@ -30,6 +30,7 @@ import { create } from 'zustand';
 import {
   createFeature, parseFeatures, rebuildFeatures, needsMeshBoolean, seedFeatureIds,
 } from '../engine/solid/featureTree.js';
+import { linkFaceToSolids } from '../engine/sketch/plane.js';
 import { useSketchStore } from './sketchStore.js';
 import { useCamPlanStore, getMesh } from './camPlanStore.js';
 
@@ -288,14 +289,24 @@ export const useFeatureStore = create((set, get) => ({
           return null;
         }
       }
-      const { soup, steps, errors } = rebuildFeatures(features, {
+      const {
+        soup, steps, errors, planes,
+      } = rebuildFeatures(features, {
         sketchOf: (id) => {
           const entry = sketch.sketches.find((s) => s.id === id);
           return entry ? { doc: entry.doc, plane: entry.plane } : null;
         },
+        sketchList: () => sketch.sketches.map((s) => ({ id: s.id, plane: s.plane })),
         importOf: (f) => get().importSoup(f),
         meshBoolean,
       });
+      // Sketches placed on a feature's face follow it: write the plane they were
+      // just built on back onto them, so what is drawn sits where the solid is.
+      // `setSketchPlane` bumps the sketcher's version, which marks the tree
+      // dirty — hence `dirty: false` is set AFTER this, not before.
+      for (const [sketchId, plane] of planes) {
+        useSketchStore.getState().setSketchPlane(sketchId, plane);
+      }
       set({ steps, errors, dirty: false });
       if (!soup) return null;
       const name = features.filter((f) => !f.suppressed).length > 1
@@ -316,6 +327,43 @@ export const useFeatureStore = create((set, get) => ({
     } finally {
       set({ building: false });
     }
+  },
+
+  /**
+   * "Sketch on the picked face", and link it to the feature that made the face.
+   *
+   * The sketcher's own `sketchOnFace` resolves the face to a plane and stops
+   * there — it cannot know about features (see the note at the top of this file).
+   * This wraps it: when the face is an axis-aligned end of one feature's solid,
+   * the plane also records which, so changing that feature later moves the sketch
+   * with it on the next rebuild. A face that is not (angled, or no feature built
+   * yet) behaves exactly as before.
+   *
+   * @returns the sketch id, or null when no face is picked
+   */
+  sketchOnFace(opts) {
+    // The picked face is in the frame on screen (laid down, datum-shifted); the
+    // solids' bounds — and the sketch itself — are in the raw frame. Both the
+    // plane and the link are made from the RAW face, so they cannot disagree and
+    // the sketch sits where the solid really is however the part is laid down.
+    // (Taking the plane from the displayed face was right only while the two
+    // frames agreed; a taller extrude is laid down on another face entirely.)
+    const cam = useCamPlanStore.getState();
+    const face = cam.faceInRawFrame(cam.selectedFeature);
+    const id = useSketchStore.getState().sketchOnFace({ ...opts, face });
+    if (id == null) return null;
+    // `common` is left out: its result is the overlap of two solids, so neither
+    // solid's bounds are the faces on the part.
+    const solids = get().steps
+      .filter((s) => s.ok && !s.suppressed && s.bounds && s.merge !== 'common')
+      .map((s) => ({ id: s.id, bounds: s.bounds, cut: s.merge === 'cut' }));
+    const ref = linkFaceToSolids(face, solids);
+    if (ref) {
+      const sketch = useSketchStore.getState();
+      const entry = sketch.sketches.find((s) => s.id === id);
+      if (entry) sketch.setSketchPlane(id, { ...entry.plane, ref });
+    }
+    return id;
   },
 
   /** The tree as a project file carries it. Imported soups are not repeated

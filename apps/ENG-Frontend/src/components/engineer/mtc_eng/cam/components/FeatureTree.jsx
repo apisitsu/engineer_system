@@ -28,6 +28,9 @@ import {
   RightOutlined, DownOutlined, MenuOutlined,
 } from '@ant-design/icons';
 import { useFeatureStore, TREE_W_DEFAULT } from '../stores/featureStore.js';
+import {
+  SketchIcon, FeatureIcon, LinkIcon,
+} from './TreeIcons.jsx';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { describeFeature } from '../engine/solid/featureTree.js';
 import { planeLabel } from '../engine/sketch/plane.js';
@@ -203,6 +206,7 @@ export default function FeatureTree({ embedded = false }) {
         style={{
           width: '100%',
           textAlign: 'left',
+          justifyContent: 'flex-start',
           paddingLeft: indented ? 26 : 8,
           height: 24,
           color: sk.id === activeSketchId ? CAD.accent : CAD.icon,
@@ -210,7 +214,11 @@ export default function FeatureTree({ embedded = false }) {
         }}
         data-tree-sketch={sk.id}
       >
-        <span style={{ fontSize: 11 }}>✎ {sk.name}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+          <SketchIcon active={sk.id === activeSketchId} />
+          {sk.name}
+          {sk.plane?.ref && <LinkIcon />}
+        </span>
         <Text style={{ color: CAD.dim, fontSize: 10, marginLeft: 6 }}>{planeLabel(sk.plane)}</Text>
       </Button>
     </Dropdown>
@@ -308,6 +316,8 @@ export default function FeatureTree({ embedded = false }) {
                     style={{
                       flex: 1,
                       textAlign: 'left',
+                      // antd centres a button's content; a tree reads from the left.
+                      justifyContent: 'flex-start',
                       height: 24,
                       opacity: f.suppressed ? 0.45 : 1,
                       textDecoration: f.suppressed ? 'line-through' : undefined,
@@ -315,7 +325,10 @@ export default function FeatureTree({ embedded = false }) {
                     data-feature-item={f.id}
                   >
                     {failed && <Badge status="error" style={{ marginRight: 4 }} />}
-                    <span style={{ fontSize: 11 }}>{f.name}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                      <FeatureIcon kind={f.kind} inverse={isSel} />
+                      {f.name}
+                    </span>
                   </Button>
                   <Tooltip title={f.suppressed ? 'Include again' : 'Leave out of the rebuild'}>
                     <Button

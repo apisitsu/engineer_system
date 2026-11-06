@@ -185,6 +185,45 @@ export function displayedPointToRawFrame(point, orientation, currentPoint) {
 }
 
 /**
+ * A picked face, taken from the frame on screen back into the raw frame.
+ *
+ * A face comes off the **displayed** mesh — laid down, and shifted by the datum
+ * if one is set — while the solids the feature tree builds live in the raw
+ * frame the soup was handed to `loadSoup` in. They only agree when the
+ * orientation happens to be the identity; for an ordinary extrude it is not (a
+ * part laid along X comes back quarter-turned about Z), so comparing a picked
+ * face with a feature's bounds directly says "no match" for a face that plainly
+ * is the top of that feature. Bounds are transformed corner-to-corner and
+ * re-sorted, because a permutation or a sign flip swaps which corner is the min.
+ *
+ * @param {{normal:number[], centroid:number[], bounds?:{min:number[],max:number[]}}} face
+ * @param {object|null} orientation the active lay-down orientation
+ * @param {number[]|null} datumPoint the origin in force (raw frame), or null
+ */
+export function faceToRawFrame(face, orientation, datumPoint) {
+  if (!face?.normal || !face?.centroid) return face;
+  const out = {
+    ...face,
+    // A direction: rotation only, no shift.
+    normal: pointToRawFrame(face.normal, orientation),
+    centroid: displayedPointToRawFrame(face.centroid, orientation, datumPoint),
+  };
+  // `facing` is a word for the displayed frame ("up"); once the part has been
+  // laid down it would name the wrong side, and a plane built from this face
+  // takes its label from it.
+  if (orientation) delete out.facing;
+  if (face.bounds?.min && face.bounds?.max) {
+    const a = displayedPointToRawFrame(face.bounds.min, orientation, datumPoint);
+    const b = displayedPointToRawFrame(face.bounds.max, orientation, datumPoint);
+    out.bounds = {
+      min: a.map((v, i) => Math.min(v, b[i])),
+      max: a.map((v, i) => Math.max(v, b[i])),
+    };
+  }
+  return out;
+}
+
+/**
  * Set the work origin along ONE axis from a point picked on the model, leaving
  * the other two axes exactly where they were.
  *

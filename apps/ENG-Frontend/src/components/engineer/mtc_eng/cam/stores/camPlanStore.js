@@ -25,7 +25,7 @@ import {
 import * as recipeOps from '../engine/cam/recipe.js';
 import { normalizeAngle } from '../engine/mesh/rotate.js';
 import {
-  pointToRawFrame, pointFromRawFrame, displayedPointToRawFrame,
+  pointToRawFrame, pointFromRawFrame, displayedPointToRawFrame, faceToRawFrame,
   originFromAxisPick, originFromAxisValue,
 } from '../engine/mesh/datum.js';
 import { encodeFloat32, decodeFloat32 } from '../engine/projectFile.js';
@@ -583,6 +583,16 @@ export const useCamPlanStore = create((set, get) => ({
     set({ datum: NO_DATUM, datumPickMode: null });
     get().prepare();
     if (get().recipe.length) get().rebuild();
+  },
+
+  /**
+   * A picked face in the raw frame the feature tree's solids live in — see
+   * `faceToRawFrame`. Unchanged when nothing is laid down (turning, or no part).
+   */
+  faceInRawFrame(face) {
+    if (!face || !_ctx) return face;
+    const orientation = _ctx.mode === 'mill' ? _ctx.orientation : null;
+    return faceToRawFrame(face, orientation, get().datum.point);
   },
 
   /** The current datum point in the frame on screen, or `null` if unset — what the numeric fields show. */

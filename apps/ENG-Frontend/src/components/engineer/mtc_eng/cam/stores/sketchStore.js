@@ -273,9 +273,16 @@ export const useSketchStore = create((set, get) => ({
    * click on the part sets; nothing new has to be picked. `onto` re-planes the
    * *current* sketch instead of starting a new one, for a sketch drawn before
    * the operator realised which face it belonged on.
+   *
+   * `face` overrides the picked face. **The feature tree passes it in the raw
+   * frame** (`featureStore.sketchOnFace`): a sketch lives where the solids are
+   * built — the Sketch page does not even draw the part — and a picked face is in
+   * the *displayed* frame, laid down and re-laid every time the part's shape
+   * changes. A plane taken from the displayed face was right only while the two
+   * frames happened to agree.
    */
-  sketchOnFace({ onto = null } = {}) {
-    const face = useCamPlanStore.getState().selectedFeature;
+  sketchOnFace({ onto = null, face: given = null } = {}) {
+    const face = given || useCamPlanStore.getState().selectedFeature;
     if (!face?.normal || !face?.centroid) {
       set({ error: 'Pick a face on the part first — click it in the viewport.' });
       return null;

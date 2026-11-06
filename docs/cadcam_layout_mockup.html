@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAD/CAM workspace — proposed layout</title>
+<style>
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;color:#1f2933}
+button{font-family:inherit;color:inherit}
+.rb{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;width:66px;padding:6px 3px 5px;background:transparent;border:1px solid transparent;border-radius:3px;cursor:pointer;font-size:11px;line-height:1.15;text-align:center}
+.rb:hover{background:#dbe9fa;border-color:#9ec2ee}
+.rb[disabled]{opacity:.55;cursor:default}
+.rb[disabled]:hover{background:transparent;border-color:transparent}
+.rs{width:1px;align-self:stretch;margin:4px 5px;background:#c5ccd6}
+.rt{padding:5px 14px 6px;border:1px solid transparent;border-bottom:0;border-radius:3px 3px 0 0;font-size:12px;cursor:pointer}
+.rt:hover{background:#e3e9f0}
+.mi{padding:4px 10px;background:transparent;border:0;font-size:12px;cursor:pointer;border-radius:2px}
+.mi:hover{background:#dbe9fa}
+.row{display:flex;align-items:center;gap:6px;width:100%;box-sizing:border-box;padding:3px 8px;border:0;background:transparent;font-size:12px;text-align:left;cursor:pointer;border-radius:2px}
+.row:hover{background:#e6eef8}
+.hud{width:30px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:3px;cursor:pointer}
+.hud:hover{background:#dbe9fa;border-color:#9ec2ee}
+.chip{padding:3px 10px;border-radius:12px;font-size:11px;cursor:pointer;white-space:nowrap}
+.pt{padding:5px 12px;border:0;background:transparent;font-size:12px;cursor:pointer}
+</style>
+</head>
+<body>
+<div style="--accent: #1668c8; width:100%; height:100vh; min-height:720px; display:flex; flex-direction:column; background:#e9edf2; overflow:hidden">
+
+  <!-- 1. MENU BAR — the same File/Edit/View…, plus Insert (Sketch / Feature live here), a name that is always visible, search at the right -->
+  <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:3px 10px; background:#f4f6f9; border-bottom:1px solid #c5ccd6">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="4" fill="var(--accent)"/><path d="M6 15l6-9 6 9M8.5 11.5h7" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span style="font-weight:600; font-size:13px; margin:0 12px 0 4px"><span class="b-appName"></span></span>
+    <button class="mi">File</button><button class="mi">Edit</button><button class="mi">View</button><button class="mi">Insert</button><button class="mi">Tools</button><button class="mi">Window</button><button class="mi">Help</button>
+    <span style="flex-grow:1"></span>
+    <label style="display:flex; align-items:center; gap:6px; padding:2px 8px; background:#fff; border:1px solid #c5ccd6; border-radius:3px; font-size:12px; color:#55606e; min-width:200px">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#55606e" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+      <span style="width:0;height:0;overflow:hidden">Search commands</span>
+      <input type="text" placeholder="Search commands (Ctrl+K)" style="border:0;outline:0;font:inherit;width:100%;background:transparent">
+    </label>
+    <span style="font-size:12px; color:#55606e; margin-left:10px">LE485</span>
+  </div>
+
+  <!-- 2. COMMAND MANAGER — tabs by task; big labelled buttons (the thing that is hard to read now) -->
+  <div style="background:#e9edf2; padding:4px 10px 0; display:flex; gap:2px; border-bottom:1px solid #c5ccd6">
+    <div id="tabs" style="display:contents"></div>
+  </div>
+
+  <div style="background:#f4f6f9; border-bottom:1px solid #b6bec9; min-height:78px; padding:4px 10px; display:flex; flex-wrap:wrap; align-items:flex-start; gap:2px">
+
+    <div data-set="isFeatures" style="display:contents">
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M5 19l10 5 10-5v-7L15 17 5 12z" fill="#cfd9e4"/><path d="M15 17v7"/><path d="M15 3v8M12 6l3-3 3 3" stroke="var(--accent)"/></svg>Extruded Boss/Base</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 5v20" stroke-dasharray="3 2"/><path d="M8 8h8c4 0 6 3 6 7s-2 7-6 7H8" fill="#cfd9e4"/><path d="M19 4l3 3-4 1" stroke="var(--accent)"/></svg>Revolved Boss/Base</button>
+      <div class="rs"></div>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M5 19l10 5 10-5v-7L15 17 5 12z" fill="#cfd9e4"/><path d="M11 11l4 2 4-2-4-2z" fill="var(--accent)" stroke="var(--accent)"/><path d="M15 15v8"/></svg>Extruded Cut</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 5v20" stroke-dasharray="3 2"/><path d="M8 8h8c4 0 6 3 6 7s-2 7-6 7H8" fill="#cfd9e4"/><circle cx="17" cy="15" r="3" fill="var(--accent)" stroke="var(--accent)"/></svg>Revolved Cut</button>
+      <div class="rs"></div>
+      <button class="rb" disabled title="Planned — needs B-rep (the wall in the roadmap)"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 24V12q0-6 6-6h12" fill="none"/><path d="M6 24h18V6" opacity=".35"/></svg>Fillet <span style="color:#55606e">· soon</span></button>
+      <button class="rb" disabled title="Planned — next on the roadmap (3–4 days)"><svg width="30" height="30" viewBox="0 0 30 30" fill="#cfd9e4" stroke="#2b3a4a" stroke-width="1.6" aria-hidden="true"><rect x="4" y="9" width="6" height="12"/><rect x="12" y="9" width="6" height="12"/><rect x="20" y="9" width="6" height="12"/></svg>Pattern <span style="color:#55606e">· soon</span></button>
+      <button class="rb" disabled title="Planned — next on the roadmap"><svg width="30" height="30" viewBox="0 0 30 30" fill="#cfd9e4" stroke="#2b3a4a" stroke-width="1.6" aria-hidden="true"><path d="M13 7L4 22h9z"/><path d="M17 7l9 15h-9z" opacity=".6"/><path d="M15 4v22" stroke-dasharray="2 2" fill="none"/></svg>Mirror <span style="color:#55606e">· soon</span></button>
+      <div class="rs"></div>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M24 11a9 9 0 10.5 6" stroke="var(--accent)"/><path d="M24 5v6h-6" stroke="var(--accent)"/></svg>Rebuild</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" aria-hidden="true"><path d="M3 15s4.5-8 12-8 12 8 12 8-4.5 8-12 8S3 15 3 15z"/><path d="M5 25L25 5" stroke="var(--accent)"/></svg>Suppress</button>
+    </div>
+
+    <div data-set="isSketch" style="display:contents">
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="9" width="20" height="14" fill="#cfd9e4"/><path d="M5 5l6 4M25 5l-6 4" stroke="var(--accent)"/></svg>Sketch on Face</button>
+      <div class="rs"></div>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 24L25 6"/><circle cx="5" cy="24" r="2" fill="var(--accent)" stroke="var(--accent)"/><circle cx="25" cy="6" r="2" fill="var(--accent)" stroke="var(--accent)"/></svg>Line</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.8" aria-hidden="true"><rect x="5" y="8" width="20" height="14"/><circle cx="5" cy="8" r="2" fill="var(--accent)" stroke="var(--accent)"/></svg>Rectangle</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.8" aria-hidden="true"><circle cx="15" cy="15" r="9"/><circle cx="15" cy="15" r="1.8" fill="var(--accent)" stroke="var(--accent)"/></svg>Circle</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 22A12 12 0 0125 22"/><circle cx="5" cy="22" r="2" fill="var(--accent)" stroke="var(--accent)"/></svg>Arc</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.8" aria-hidden="true"><rect x="4" y="10" width="22" height="10" rx="5"/></svg>Slot</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M15 4l9.5 6.9-3.6 11.2H9.1L5.5 10.9z"/></svg>Polygon</button>
+      <div class="rs"></div>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 20h20M5 16v8M25 16v8"/><path d="M5 9h20" stroke="var(--accent)"/></svg>Smart Dimension</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 6l20 18M5 24L25 6" /><path d="M20 15h6" stroke="var(--accent)"/></svg>Trim</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 24V12q0-6 6-6h12"/></svg>Sketch Fillet</button>
+      <div class="rs"></div>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h10l5 5v17H8z" fill="#cfd9e4"/><path d="M18 4v5h5"/><path d="M12 19l3 3 3-3M15 14v8" stroke="var(--accent)"/></svg>Import DXF</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h10l5 5v17H8z" fill="#cfd9e4"/><path d="M18 4v5h5"/><path d="M12 19l3-3 3 3M15 16v7" stroke="var(--accent)"/></svg>Export DXF</button>
+    </div>
+
+    <div data-set="isEvaluate" style="display:contents">
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 21l17-14 5 5L9 26z" fill="#cfd9e4"/><path d="M10 17l2 2M14 13l2 2M18 9l2 2" stroke="var(--accent)"/></svg>Measure</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M5 19l10 5 10-5v-7L15 7 5 12z" fill="#cfd9e4"/><path d="M3 15h24" stroke="var(--accent)" stroke-dasharray="3 2"/></svg>Section View</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" aria-hidden="true"><circle cx="15" cy="15" r="10"/><path d="M15 9v7l4 3" stroke="var(--accent)" stroke-linecap="round"/></svg>Cycle Time</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 25V5M5 25h20"/><path d="M8 20l5-6 4 3 7-9" stroke="var(--accent)"/></svg>Check Part</button>
+    </div>
+
+    <div data-set="isMill" style="display:contents">
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="16" width="22" height="8" fill="#cfd9e4"/><path d="M15 4v10" stroke="var(--accent)" stroke-linecap="round"/><path d="M12 14h6l-3 4z" fill="var(--accent)" stroke="var(--accent)"/></svg>Setup</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 23V7M7 23h16"/><circle cx="7" cy="23" r="3" fill="var(--accent)" stroke="var(--accent)"/></svg>Work Origin</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 4h8v10l-4 5-4-5z" fill="#cfd9e4"/><path d="M15 19v7" stroke="var(--accent)"/></svg>Tool Table</button>
+      <div class="rs"></div>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l15 9-15 9z" fill="var(--accent)" stroke="var(--accent)"/></svg>Simulate</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 9h20M5 15h14M5 21h18"/><path d="M22 14l3 3-3 3" stroke="var(--accent)"/></svg>Post G-code</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 22a10 10 0 0120 0"/><path d="M15 22l5-8" stroke="var(--accent)"/></svg>Standard Vc</button>
+    </div>
+
+    <div data-set="isTurn" style="display:contents">
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" aria-hidden="true"><rect x="4" y="11" width="22" height="9" fill="#cfd9e4"/><path d="M4 15.5h22" stroke="var(--accent)" stroke-dasharray="3 2"/></svg>Billet</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h12l3-4h6v4" fill="#cfd9e4"/><path d="M20 16l4-7" stroke="var(--accent)" stroke-linecap="round"/></svg>Turning Tools</button>
+      <div class="rs"></div>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 22h20M5 22V10h8v-4h12"/><path d="M8 18h14M8 14h10" stroke="var(--accent)"/></svg>G71 Rough</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h22M4 20h22"/><path d="M7 10l2 5-2 5M13 10l2 5-2 5M19 10l2 5-2 5" stroke="var(--accent)"/></svg>G76 Thread</button>
+      <div class="rs"></div>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" aria-hidden="true"><path d="M9 6l15 9-15 9z" fill="var(--accent)" stroke="var(--accent)"/></svg>Simulate</button>
+      <button class="rb"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 9h20M5 15h14M5 21h18"/><path d="M22 14l3 3-3 3" stroke="var(--accent)"/></svg>Post G-code</button>
+    </div>
+  </div>
+
+  <!-- 3. WORKSPACE — FeatureManager left, graphics area right -->
+  <div style="flex:1 1 0; min-height:0; display:flex; flex-wrap:wrap">
+
+    <div style="flex:0 0 300px; display:flex; flex-direction:column; background:#f4f6f9; border-right:1px solid #b6bec9; min-height:0">
+      <div style="display:flex; gap:2px; padding:4px 6px 0; border-bottom:1px solid #c5ccd6; background:#e9edf2">
+        <button class="hud" aria-label="FeatureManager tree" style="background:#f4f6f9; border-color:#c5ccd6; border-bottom-color:#f4f6f9"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.6" aria-hidden="true"><path d="M2 3h12M5 8h9M5 13h9M2 3v10"/></svg></button>
+        <button class="hud" aria-label="Property manager"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.6" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 6h6M5 10h4"/></svg></button>
+        <button class="hud" aria-label="Program listing"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h8M2 12h10"/></svg></button>
+        <span style="flex-grow:1"></span>
+        <span style="font-size:11px; color:#55606e; align-self:center; padding-right:4px">Out of date · press Rebuild</span>
+      </div>
+
+      <div style="flex:1 1 0; min-height:0; overflow:auto; padding:6px 4px">
+        <div id="rows" style="display:contents"></div>
+      </div>
+
+      <div style="border-top:1px solid #c5ccd6; padding:8px 10px; font-size:11px; color:#3a4654; background:#eef1f5; line-height:1.4">
+        <b style="font-weight:600">Boss-Extrude2</b> is built on the top of Extrude1.<br>Change Extrude1 and the sketch follows.
+      </div>
+    </div>
+
+    <div style="flex:1 1 520px; min-width:0; position:relative; display:flex; flex-direction:column">
+      <div style="flex:1 1 0; min-height:0; position:relative; background:linear-gradient(180deg,#8ba3bf 0%,#c9d6e4 55%,#eef3f8 100%)">
+
+        <!-- heads-up view toolbar -->
+        <div style="position:absolute; top:8px; left:50%; transform:translateX(-50%); display:flex; gap:1px; padding:2px; background:rgba(255,255,255,.94); border:1px solid #b6bec9; border-radius:4px; z-index:2">
+          <button class="hud" aria-label="Zoom to fit"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+          <button class="hud" aria-label="Zoom to area"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4M7 5v4"/></svg></button>
+          <button class="hud" aria-label="View orientation"><svg width="17" height="17" viewBox="0 0 16 16" fill="#cfd9e4" stroke="#2b3a4a" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M2 5l6-3 6 3v6l-6 3-6-3z"/><path d="M8 8v6M2 5l6 3 6-3" fill="none"/></svg></button>
+          <button class="hud" aria-label="Section view"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/><path d="M8 1v14" stroke="var(--accent)" stroke-dasharray="2 1.5"/></svg></button>
+          <button class="hud" aria-label="Display style"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2 5l6-3 6 3v6l-6 3-6-3z"/><path d="M2 5l6 3 6-3M8 8v6" stroke-dasharray="2 1.5"/></svg></button>
+          <button class="hud" aria-label="Show or hide items"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.5" aria-hidden="true"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg></button>
+        </div>
+
+        <!-- confirmation corner, as SolidWorks shows while a sketch is open -->
+        <div data-set="isSketch" style="display:contents">
+          <div style="position:absolute; top:8px; right:12px; display:flex; gap:6px; z-index:2">
+            <button class="hud" aria-label="Confirm sketch" style="width:34px; height:34px; background:var(--accent); border-radius:50%"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg></button>
+            <button class="hud" aria-label="Cancel sketch" style="width:34px; height:34px; background:#fff; border:1px solid #b6bec9; border-radius:50%"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3a4654" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+          </div>
+        </div>
+
+        <!-- the part -->
+        <svg viewBox="0 0 700 440" preserveAspectRatio="xMidYMid meet" style="position:absolute; inset:0; width:100%; height:100%" role="img" aria-label="Isometric view of a slab with a boss standing on its top face">
+          <ellipse cx="350" cy="330" rx="250" ry="62" fill="#1f2933" opacity=".10"/>
+          <polygon points="140,266 360,376 360,340 140,230" fill="#9fb0c2" stroke="#4a5a6c" stroke-width="1.2" stroke-linejoin="round"/>
+          <polygon points="360,376 560,276 560,240 360,340" fill="#7f93a8" stroke="#4a5a6c" stroke-width="1.2" stroke-linejoin="round"/>
+          <polygon points="140,230 340,130 560,240 360,340" fill="#c9d3de" stroke="#4a5a6c" stroke-width="1.2" stroke-linejoin="round"/>
+          <polygon points="300,225 360,255 360,207 300,177" fill="#9fb0c2" stroke="#4a5a6c" stroke-width="1.2" stroke-linejoin="round"/>
+          <polygon points="360,255 440,215 440,167 360,207" fill="#7f93a8" stroke="#4a5a6c" stroke-width="1.2" stroke-linejoin="round"/>
+          <polygon points="300,177 380,137 440,167 360,207" id="bossTop" fill="#d6dee8" stroke="#4a5a6c" stroke-width="1.2" stroke-linejoin="round"/>
+          <line x1="410" y1="152" x2="520" y2="86" stroke="#2b3a4a" stroke-width="1"/>
+          <circle cx="410" cy="152" r="2.5" fill="#2b3a4a"/>
+          <rect x="520" y="70" width="150" height="34" rx="3" fill="#fff" stroke="#b6bec9"/>
+          <text x="530" y="85" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600" fill="#1f2933"><tspan class="b-selLabel"></tspan></text>
+          <text x="530" y="99" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#55606e">click a feature to edit</text>
+        </svg>
+
+        <!-- triad -->
+        <svg width="64" height="64" viewBox="0 0 64 64" style="position:absolute; left:14px; bottom:12px" role="img" aria-label="Axis triad">
+          <path d="M14 48V12" stroke="#2f6fb5" stroke-width="2"/><path d="M14 48l30 14" stroke="#c0392b" stroke-width="2" transform="translate(0,-14)"/><path d="M14 48l22-14" stroke="#2e8b57" stroke-width="2"/>
+          <text x="10" y="9" font-size="10" fill="#1f2933" font-family="Segoe UI, sans-serif">Z</text><text x="46" y="52" font-size="10" fill="#1f2933" font-family="Segoe UI, sans-serif">X</text><text x="40" y="33" font-size="10" fill="#1f2933" font-family="Segoe UI, sans-serif">Y</text>
+        </svg>
+      </div>
+
+      <!-- model tabs, like SolidWorks' Model | Motion Study -->
+      <div style="display:flex; gap:0; background:#e9edf2; border-top:1px solid #b6bec9; padding:0 6px">
+        <button class="pt" style="background:#f4f6f9; font-weight:600; border-top:2px solid var(--accent)">Model</button>
+        <button class="pt">Program</button>
+        <button class="pt">Simulation</button>
+        <button class="pt">Library</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. STATUS BAR -->
+  <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:center; padding:3px 12px; background:#dfe5ec; border-top:1px solid #b6bec9; font-size:11px; color:#3a4654">
+    <span><b style="font-weight:600"><span class="b-statusMode"></span></b></span>
+    <span>Selected: <span class="b-selLabel"></span></span>
+    <span style="flex-grow:1"></span>
+    <span>X 20.55 &nbsp; Y 15.00 &nbsp; Z 10.00</span>
+    <span>MMGS</span>
+    <span>Rebuild: 2 features</span>
+  </div>
+
+  <!-- Name explorer: not part of the app, just to see candidate names in the title -->
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:6px 12px; background:#1f2933; color:#e9edf2; font-size:12px">
+    <span style="color:#c5ccd6">Try a name in the title bar:</span>
+    <div id="names" style="display:contents"></div>
+  </div>
+
+</div>
+<script>
+(function () {
+  'use strict';
+
+  var NAMES = ['MTC Program Bench', 'MTC Quick CAM', 'MTC CAM Lite', 'MTC Shop Assist', 'MTC Sketch & Sim', 'G-Code Studio'];
+  var TABS = [['features', 'Features'], ['sketch', 'Sketch'], ['evaluate', 'Evaluate'], ['mill', 'Mill'], ['turn', 'Turn']];
+  var ACCENT = '#1668c8';
+
+  var state = { tab: 'features', nameIdx: 0, originOpen: false, sel: 'boss2' };
+
+  var ICONS = {
+    part: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M2 5l6-3 6 3v6l-6 3-6-3z" fill="#cfd9e4"/><path d="M8 8v6M2 5l6 3 6-3"/></svg>',
+    folder: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.4" aria-hidden="true"><path d="M2 4h4l1 1.5h7V13H2z" fill="#e3e9f0"/></svg>',
+    plane: '<svg width="16" height="16" viewBox="0 0 16 16" fill="#dbe9fa" stroke="' + ACCENT + '" stroke-width="1.2" aria-hidden="true"><path d="M2 11l3-7h9l-3 7z"/></svg>',
+    sketch: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="' + ACCENT + '" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="4.5" width="9" height="7"/><path d="M10 13l4-6" stroke="#2b3a4a"/></svg>',
+    extrude: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#2b3a4a" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l6 3 6-3V6L8 9 2 6z" fill="#cfd9e4"/><path d="M8 9v3M2 6l6-3 6 3"/></svg>',
+    chevron: function (open) {
+      return '<svg width="10" height="10" viewBox="0 0 10 10" style="flex:0 0 auto;' + (open ? 'transform:rotate(90deg)' : '') + '" fill="none" stroke="#55606e" stroke-width="1.6" aria-hidden="true"><path d="M3 1l4 4-4 4"/></svg>';
+    },
+    link: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="' + ACCENT + '" stroke-width="1.8" stroke-linecap="round" role="img" aria-label="Linked to Extrude1 face"><path d="M7 9a3 3 0 004 0l2-2a3 3 0 00-4-4l-1 1M9 7a3 3 0 00-4 0L3 9a3 3 0 004 4l1-1"/></svg>'
+  };
+
+  function defs() {
+    var d = [
+      { id: 'part', label: 'Blank-RE33 (Part1)', depth: 0, kind: 'part' },
+      { id: 'origin', label: 'Origin', depth: 1, kind: 'folder', folder: true }
+    ];
+    if (state.originOpen) {
+      d.push({ id: 'front', label: 'Front Plane', depth: 2, kind: 'plane' });
+      d.push({ id: 'top', label: 'Top Plane', depth: 2, kind: 'plane' });
+      d.push({ id: 'right', label: 'Right Plane', depth: 2, kind: 'plane' });
+    }
+    d.push({ id: 'sketch1', label: 'Sketch1', depth: 1, kind: 'sketch', note: 'Top' });
+    d.push({ id: 'extrude1', label: 'Extrude1', depth: 1, kind: 'extrude', note: '10 mm' });
+    d.push({ id: 'sketch2', label: 'Sketch2', depth: 1, kind: 'sketch', note: 'on Extrude1', linked: true });
+    d.push({ id: 'boss2', label: 'Boss-Extrude2', depth: 1, kind: 'extrude', note: '5 mm · add' });
+    return d;
+  }
+
+  function setText(cls, text) {
+    var els = document.getElementsByClassName(cls);
+    for (var i = 0; i < els.length; i++) els[i].textContent = text;
+  }
+
+  function render() {
+    var i;
+
+    // Ribbon tabs
+    var tabs = document.getElementById('tabs');
+    tabs.innerHTML = '';
+    TABS.forEach(function (t) {
+      var b = document.createElement('button');
+      b.className = 'rt';
+      b.setAttribute('style', state.tab === t[0]
+        ? 'background:#f4f6f9;border-color:#b6bec9;font-weight:600;color:#1f2933;margin-bottom:-1px'
+        : 'background:transparent;color:#3a4654');
+      b.textContent = t[1];
+      b.addEventListener('click', function () { state.tab = t[0]; render(); });
+      tabs.appendChild(b);
+    });
+
+    // Ribbon command sets
+    var sets = document.querySelectorAll('[data-set]');
+    for (i = 0; i < sets.length; i++) {
+      var key = sets[i].getAttribute('data-set').replace(/^is/, '').toLowerCase();
+      sets[i].style.display = key === state.tab ? 'contents' : 'none';
+    }
+
+    // Feature tree
+    var rowsEl = document.getElementById('rows');
+    rowsEl.innerHTML = '';
+    var all = defs();
+    all.forEach(function (d) {
+      var b = document.createElement('button');
+      b.className = 'row';
+      if (state.sel === d.id) b.setAttribute('style', 'background:#dbe9fa;color:#0f4f9e;font-weight:600');
+      var html = '<span style="width:' + (d.depth * 14) + 'px;flex:0 0 auto"></span>';
+      if (d.folder) html += ICONS.chevron(state.originOpen);
+      html += ICONS[d.kind];
+      html += '<span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>';
+      if (d.linked) html += ICONS.link;
+      html += '<span style="flex:0 0 auto;font-size:11px;color:#55606e"></span>';
+      b.innerHTML = html;
+      var spans = b.querySelectorAll('span');
+      spans[1].textContent = d.label;
+      spans[spans.length - 1].textContent = d.note || '';
+      b.addEventListener('click', function () {
+        if (d.folder) state.originOpen = !state.originOpen;
+        state.sel = d.id;
+        render();
+      });
+      rowsEl.appendChild(b);
+    });
+
+    var selDef = all.filter(function (d) { return d.id === state.sel; })[0] || all[all.length - 1];
+    var bossSelected = state.sel === 'boss2';
+    var boss = document.getElementById('bossTop');
+    boss.setAttribute('fill', bossSelected ? '#9ec2ee' : '#d6dee8');
+    boss.setAttribute('stroke', bossSelected ? ACCENT : '#4a5a6c');
+    boss.setAttribute('stroke-width', bossSelected ? '2.4' : '1.2');
+
+    setText('b-selLabel', selDef.label);
+    setText('b-appName', NAMES[state.nameIdx]);
+    setText('b-statusMode', state.tab === 'sketch' ? 'Editing Sketch2' : 'Fully defined');
+    document.title = NAMES[state.nameIdx] + ' — proposed layout';
+
+    // Name chips
+    var chips = document.getElementById('names');
+    chips.innerHTML = '';
+    NAMES.forEach(function (label, idx) {
+      var b = document.createElement('button');
+      b.className = 'chip';
+      b.setAttribute('style', idx === state.nameIdx
+        ? 'background:' + ACCENT + ';color:#fff;border:1px solid ' + ACCENT
+        : 'background:transparent;color:#e9edf2;border:1px solid #6b7785');
+      b.textContent = label;
+      b.addEventListener('click', function () { state.nameIdx = idx; render(); });
+      chips.appendChild(b);
+    });
+  }
+
+  render();
+}());
+
+</script>
+</body>
+</html>

@@ -16,6 +16,7 @@ import {
 import { PlusOutlined, DeleteOutlined, BorderOuterOutlined } from '@ant-design/icons';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
+import { useFeatureStore } from '../stores/featureStore.js';
 import { PLANE_PRESETS, planeLabel } from '../engine/sketch/plane.js';
 import { CAD } from '../theme.js';
 
@@ -32,7 +33,9 @@ export default function SketchesPanel({ trigger }) {
   const removeSketch = useSketchStore((s) => s.removeSketch);
   const renameSketch = useSketchStore((s) => s.renameSketch);
   const setSketchPlane = useSketchStore((s) => s.setSketchPlane);
-  const sketchOnFace = useSketchStore((s) => s.sketchOnFace);
+  // Through the feature store, not the sketcher: it links the new plane to the
+  // feature that made the face, so the sketch follows when that feature changes.
+  const sketchOnFace = useFeatureStore((s) => s.sketchOnFace);
   // The face a click on the part selected — what "sketch on this face" acts on.
   const pickedFace = useCamPlanStore((s) => (s.selectedFeature?.normal ? s.selectedFeature : null));
 

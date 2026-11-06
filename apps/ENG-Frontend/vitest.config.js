@@ -24,7 +24,17 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   test: {
-    include: ['src/components/engineer/mtc_eng/cam/**/*.test.{js,jsx}'],
+    // `*_check.mjs` are the solver / WASM / engine checks written against
+    // `node:test`. They are aliased onto vitest below so one command runs them;
+    // they still run standalone with `node --test <file>`.
+    // `cam_check.mjs` is NOT among them: it is a demo that writes sample .nc/.stl
+    // files, not a test.
+    include: [
+      'src/components/engineer/mtc_eng/cam/**/*.test.{js,jsx}',
+      'src/components/engineer/mtc_eng/cam/**/*_check.mjs',
+    ],
+    exclude: ['**/node_modules/**', '**/cam_check.mjs'],
+    alias: { 'node:test': 'vitest' },
     // Engine and store suites are plain Node. Component suites opt into a DOM
     // per file with `@vitest-environment jsdom`, so the fast majority stays fast.
     environment: 'node',
