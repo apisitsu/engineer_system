@@ -27,7 +27,9 @@ import { normalizeAngle } from '../engine/mesh/rotate.js';
 import {
   pointToRawFrame, pointFromRawFrame, displayedPointToRawFrame, faceToRawFrame,
   originFromAxisPick, originFromAxisValue, originFromAxisOffset, flipOf, toggledFlip,
+  realignAxisPick, originFromCircle,
 } from '../engine/mesh/datum.js';
+import { circleAtPick } from '../engine/mesh/circlePick.js';
 import { encodeFloat32, decodeFloat32 } from '../engine/projectFile.js';
 import { useCamStore } from './camStore.js';
 
@@ -48,6 +50,9 @@ const _raw = { soup: null, welded: null };
 
 const NO_DATUM = {
   planeNormal: null, point: null, rotaryCenter: null, rotaryZero: null,
+  // The axis layout a pick on a flat face turned the part to (see
+  // `realignedAxes`), replacing the automatic lay-down. `null` keeps that.
+  axes: null,
   // Which of X/Y/Z read reversed — always two or none, see `toggledFlip`.
   flip: [false, false, false],
   // How much of `point` is a typed distance from the picked plane rather than
@@ -95,7 +100,8 @@ export const useCamPlanStore = create((set, get) => ({
   // the mesh as imported (mill: laid down automatically, indexed about its
   // own frame origin; turn: as measured).
   datum: NO_DATUM,
-  datumPickMode: null, // null | 'x' | 'y' | 'z' | 'rotary' | 'zero'
+  datumPickMode: null, // null | 'x' | 'y' | 'z' | 'circle' | 'rotary' | 'zero'
+  datumPickHint: null, // why the last click on the part set nothing
 
   // ---- The operator's editable plan ----
   // An ordered list of `{key, kind, toolId, enabled, target}`. Empty until a
@@ -283,7 +289,7 @@ export const useCamPlanStore = create((set, get) => ({
     // currently holds — otherwise picking a plane, then a point, then
     // clearing the datum would compound transforms instead of each landing
     // where it should.
-    const activeDatum = (datum.planeNormal || datum.point || datum.rotaryCenter
+    const activeDatum = (datum.axes || datum.planeNormal || datum.point || datum.rotaryCenter
       || datum.rotaryZero || flipOf(datum).some(Boolean))
       ? datum : null;
     _ctx = planContext(_raw.soup, _raw.welded, {
@@ -524,6 +530,34 @@ export const useCamPlanStore = create((set, get) => ({
    */
   startPickAxis(axis) { set({ datumPickMode: 'xyz'[axis] ?? null }); },
 
+  /** Arm the next click to put the origin on the centre of a circle instead. */
+  startPickCircle() { set({ datumPickMode: 'circle', datumPickHint: null }); },
+
+  /**
+   * A click on or beside a circle puts the origin on its centre. A click that finds
+   * no circle stays armed and says so, rather than setting an origin nobody asked for.
+   */
+  pickCircleCenter(point, normal) {
+    if (!_ctx) return null;
+    const circle = circleAtPick(_mesh.welded, point, normal);
+    if (!circle) {
+      set({ datumPickHint: 'No circle found there. Click a round wall, or a flat face beside a circle.' });
+      return null;
+    }
+    const orientation = _ctx.mode === 'mill' ? _ctx.orientation : null;
+    const current = get().datum;
+    const rawPoint = originFromCircle(current.point, current.offset, orientation, circle.axis, circle.center);
+    const axesSet = current.axesSet.map((locked, i) => locked || i !== circle.axis);
+    set({
+      datum: { ...current, point: rawPoint, axesSet },
+      datumPickMode: null,
+      datumPickHint: null,
+    });
+    get().prepare();
+    if (get().recipe.length) get().rebuild();
+    return get().datum;
+  },
+
   /** Arm the next click to set where the physical A-axis passes through instead. */
   startPickRotaryCenter() { set({ datumPickMode: 'rotary' }); },
 
@@ -534,15 +568,28 @@ export const useCamPlanStore = create((set, get) => ({
 
   /**
    * A click on the part sets the origin of a single axis, leaving the other two
-   * where they are and never touching the part's orientation. `axis` is 0/1/2;
-   * `point` is the clicked location in the frame currently drawn. The per-axis
-   * arithmetic — and the conversion back to the raw import frame that survives a
-   * later re-lay-down — lives in `engine/mesh/datum.js`.
+   * where they are. `axis` is 0/1/2; `point` is the clicked location in the frame
+   * currently drawn. `normal`, the clicked face's outward normal in that frame,
+   * also turns the part when the face is flat and square to a different axis, so
+   * picking Z0 on an end face stands the part up on it (see `realignedAxes`). That
+   * is only ever asked for through an armed Pick button, and a part with an A0 face
+   * set stays as it is: its angle is measured from the layout this would change.
+   * The arithmetic — and the conversion back to the raw import frame that survives
+   * a later re-lay-down — lives in `engine/mesh/datum.js`.
    */
-  pickAxisOrigin(axis, point) {
+  pickAxisOrigin(axis, point, normal) {
     if (!_ctx) return null;
     const orientation = _ctx.mode === 'mill' ? _ctx.orientation : null;
     const current = get().datum;
+    const realigned = normal && orientation && !current.rotaryZero
+      ? realignAxisPick(current, orientation, axis, point, normal)
+      : null;
+    if (realigned) {
+      set({ datum: { ...current, ...realigned }, datumPickMode: null });
+      get().prepare();
+      if (get().recipe.length) get().rebuild();
+      return get().datum;
+    }
     const offset = pointFromRawFrame(current.offset ?? NO_DATUM.offset, orientation)[axis];
     const rawPoint = originFromAxisPick(current.point, orientation, axis, point, offset);
     const axesSet = [...current.axesSet];

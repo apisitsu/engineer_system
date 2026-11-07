@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   translate, orientToNormal, angleToFaceUp, pointToRawFrame, pointFromRawFrame,
   displayedPointToRawFrame, applyDatum, originFromAxisPick, originFromAxisValue,
-  originFromAxisOffset, toggledFlip,
+  originFromAxisOffset, toggledFlip, realignedAxes, realignAxisPick, originFromCircle,
 } from './datum.js';
 import { boundsOf, meshVolume, shellReport } from './analyze.js';
 import { reorient } from './orient.js';
@@ -239,6 +239,110 @@ describe('toggledFlip', () => {
 
   it('undoes itself', () => {
     expect(toggledFlip(toggledFlip([true, true, false], 1), 1)).toEqual([true, true, false]);
+  });
+});
+
+describe('originFromCircle', () => {
+  it('moves the two axes across the circle and leaves the one along it', () => {
+    expect(originFromCircle([1, 2, 3], null, null, 2, [10, 20, 99])).toEqual([11, 22, 3]);
+  });
+
+  it('adds any offset to the axes it moves', () => {
+    expect(originFromCircle(null, [0.5, 0, 1], null, 2, [10, 20, 0])).toEqual([10.5, 20, 0]);
+  });
+
+  it('reads the centre in the frame on screen', () => {
+    const orientation = { ...orientToNormal([1, 0, 0]), flip: [true, true, false] };
+    const raw = originFromCircle(null, null, orientation, 2, [4, 5, 0]);
+    const shown = pointFromRawFrame(raw, orientation);
+    expect(shown[0]).toBeCloseTo(4);
+    expect(shown[1]).toBeCloseTo(5);
+    expect(shown[2]).toBeCloseTo(0);
+  });
+});
+
+describe('realignedAxes', () => {
+  const IDENTITY = { order: [0, 1, 2], signs: [1, 1, 1] };
+  const handedness = ({ order, signs }) => {
+    const m = order.map((raw, i) => [0, 1, 2].map((c) => (c === raw ? signs[i] : 0)));
+    return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+      - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+      + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+  };
+
+  it.each([
+    [[1, 0, 0], 2], [[-1, 0, 0], 2], [[0, 1, 0], 2], [[0, -1, 0], 2],
+    [[0, 0, 1], 0], [[0, 0, -1], 0], [[0, 1, 0], 0], [[1, 0, 0], 1], [[0, 0, 1], 1],
+  ])('puts a face with normal %j on + of axis %i, as a rotation', (normal, axis) => {
+    const axes = realignedAxes(IDENTITY, normal, axis);
+    const turned = pointFromRawFrame(normal, axes);
+    expect(turned[axis]).toBeCloseTo(1);
+    expect(handedness(axes)).toBe(1);
+  });
+
+  it('leaves the third axis where it is', () => {
+    const axes = realignedAxes(IDENTITY, [0, 1, 0], 0);
+    expect(pointFromRawFrame([0, 0, 1], axes)[2]).toBeCloseTo(1);
+  });
+
+  it.each([[[0, 0, 1]], [[0, 0, -1]]])('stays put for a face already square to the axis: %j', (normal) => {
+    expect(realignedAxes(IDENTITY, normal, 2)).toBeNull();
+  });
+
+  it('stays put for a curved or angled surface', () => {
+    expect(realignedAxes(IDENTITY, [0.7071, 0.7071, 0], 2)).toBeNull();
+    expect(realignedAxes(IDENTITY, [Math.cos(0.05), Math.sin(0.05), 0], 2)).toBeNull();
+  });
+
+  it('reads the normal in the frame on screen, through a lay-down and a flip', () => {
+    const orientation = { ...orientToNormal([0, -1, 0]), flip: [false, true, true] };
+    const axes = realignedAxes(orientation, [1, 0, 0], 2);
+    const rawNormal = pointToRawFrame([1, 0, 0], orientation);
+    expect(pointFromRawFrame(rawNormal, axes)[2]).toBeCloseTo(1);
+    expect(handedness(axes)).toBe(1);
+  });
+});
+
+describe('realignAxisPick', () => {
+  const IDENTITY = { order: [0, 1, 2], signs: [1, 1, 1] };
+  const FREE = {
+    point: null, offset: [0, 0, 0], flip: [false, false, false], axesSet: [false, false, false],
+  };
+
+  it('stands a part up on the clicked end face, with that face on Z0', () => {
+    const patch = realignAxisPick(FREE, IDENTITY, 2, [60, 3, 4], [1, 0, 0]);
+    expect(pointFromRawFrame(patch.point, patch.axes)[2]).toBeCloseTo(60);
+    expect(patch.axesSet).toEqual([false, false, true]);
+  });
+
+  it('moves an earlier lock with the plane it was set on', () => {
+    const datum = { ...FREE, point: [10, 0, 0], axesSet: [true, false, false] };
+    // X was set on the end at x = 10, and turning that end up makes it read on Z.
+    const patch = realignAxisPick(datum, IDENTITY, 2, [50, 0, 5], [1, 0, 0]);
+    expect(patch.axesSet).toEqual([false, false, true]);
+  });
+
+  it('keeps an earlier origin on the same spot of the part', () => {
+    const datum = { ...FREE, point: [0, 7, 0], axesSet: [false, true, false] };
+    const patch = realignAxisPick(datum, IDENTITY, 2, [60, -7, 0], [1, 0, 0]);
+    expect(patch.point[1]).toBeCloseTo(7);
+    expect(patch.axesSet).toEqual([false, true, true]);
+  });
+
+  it('adds the offset along the axis being set', () => {
+    const datum = { ...FREE, offset: pointToRawFrame([0, 0, 0.5], realignedAxes(IDENTITY, [1, 0, 0], 2)) };
+    const patch = realignAxisPick(datum, IDENTITY, 2, [60, 0, 0], [1, 0, 0]);
+    expect(pointFromRawFrame(patch.point, patch.axes)[2]).toBeCloseTo(60.5);
+  });
+
+  it('clears the flip, which the new layout already includes', () => {
+    const orientation = { ...IDENTITY, flip: [true, true, false] };
+    const patch = realignAxisPick({ ...FREE, flip: [true, true, false] }, orientation, 2, [0, 0, 0], [1, 0, 0]);
+    expect(patch.flip).toEqual([false, false, false]);
+  });
+
+  it('is null when the part stays put', () => {
+    expect(realignAxisPick(FREE, IDENTITY, 2, [0, 0, 10], [0, 0, 1])).toBeNull();
   });
 });
 

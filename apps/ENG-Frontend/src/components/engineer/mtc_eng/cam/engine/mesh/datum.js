@@ -30,6 +30,9 @@ import { rotateAboutX, normalizeAngle } from './rotate.js';
 const AXIS_NAME = ['X', 'Y', 'Z'];
 const NO_FLIP = [false, false, false];
 
+/** cos 1°: a face further off an axis than this is curved or genuinely angled. */
+const SQUARE_TO_AXIS = 0.99985;
+
 /**
  * Which displayed axes a datum reverses, as `[x, y, z]` booleans.
  *
@@ -282,6 +285,107 @@ export function originFromAxisPick(currentRawPoint, orientation, axis, clickedDi
 }
 
 /**
+ * Put the origin on a circle's centre: the two axes across the circle move, and
+ * the one along it stays, since a centre says nothing about depth.
+ *
+ * @param {number[]|null} currentRawPoint the origin in force (raw frame), or null
+ * @param {number[]|null} currentRawOffset the offset in force (raw frame), or null
+ * @param {object|null} orientation the active lay-down orientation
+ * @param {0|1|2} circleAxis the displayed axis the circle runs along
+ * @param {number[]} center the centre, in the displayed frame
+ * @returns {number[]} the new origin, in the raw import frame
+ */
+export function originFromCircle(currentRawPoint, currentRawOffset, orientation, circleAxis, center) {
+  const g = currentRawPoint ? pointFromRawFrame(currentRawPoint, orientation) : [0, 0, 0];
+  const d = currentRawOffset ? pointFromRawFrame(currentRawOffset, orientation) : [0, 0, 0];
+  const next = g.map((v, i) => (i === circleAxis ? v : v + center[i] + d[i]));
+  return pointToRawFrame(next, orientation);
+}
+
+/**
+ * The axis layout that brings a clicked flat face square to the axis being set,
+ * or `null` when the part should stay as it is.
+ *
+ * It stays put for a face already square to that axis, on either side: clicking
+ * the far side of a block for X0 is an ordinary touch-off, not a request to turn
+ * it round. It also stays put for a curved or angled surface, which has no axis to
+ * bring square, so such a click only sets the origin as it always did.
+ *
+ * Otherwise the part takes the one 90° turn that puts the face's outward normal on
+ * +axis, about the third axis, which therefore stays where it is: standing a part
+ * up on Z and then squaring a side to X leaves it standing. Everything already
+ * applied, flips included, is folded into the result, so it needs no flip of its
+ * own and the operator can flip again from there.
+ *
+ * @param {object} orientation the active lay-down orientation
+ * @param {number[]} normal the clicked face's outward normal, in the displayed frame
+ * @param {0|1|2} axis the displayed axis being set
+ * @returns {{order:number[], signs:number[], changed:boolean, description:string}|null}
+ */
+export function realignedAxes(orientation, normal, axis) {
+  const abs = normal.map(Math.abs);
+  const from = abs.indexOf(Math.max(...abs));
+  if (from === axis || abs[from] < SQUARE_TO_AXIS * Math.hypot(...normal)) return null;
+  const sign = normal[from] < 0 ? -1 : 1;
+
+  const order = [0, 0, 0];
+  const signs = [1, 1, 1];
+  for (let raw = 0; raw < 3; raw += 1) {
+    const unit = [0, 0, 0];
+    unit[raw] = 1;
+    const shown = pointFromRawFrame(unit, orientation);
+    const turned = [...shown];
+    turned[axis] = sign * shown[from];
+    turned[from] = -sign * shown[axis];
+    const to = turned.findIndex((v) => Math.abs(v) > 0.5);
+    order[to] = raw;
+    signs[to] = turned[to] < 0 ? -1 : 1;
+  }
+  return {
+    order,
+    signs,
+    changed: order.some((raw, i) => raw !== i) || signs.some((s) => s !== 1),
+    description: `Set the part with the picked face square to ${AXIS_NAME[axis]}, facing +${AXIS_NAME[axis]}.`,
+  };
+}
+
+/**
+ * What a pick on a flat face changes when it also turns the part, as a patch for
+ * the datum, or `null` when `realignedAxes` says the part stays put.
+ *
+ * The clicked point is taken back to the raw frame before the layout changes and
+ * re-read in the new one. Whatever else was already set stays on the same spot of
+ * the part, so its lock has to follow it to the axis it now reads on.
+ *
+ * @param {object} datum the datum in force
+ * @param {object} orientation the active lay-down orientation
+ * @param {0|1|2} axis the displayed axis being set
+ * @param {number[]} clicked the picked point, in the displayed frame
+ * @param {number[]} normal the clicked face's outward normal, in the displayed frame
+ */
+export function realignAxisPick(datum, orientation, axis, clicked, normal) {
+  const axes = realignedAxes(orientation, normal, axis);
+  if (!axes) return null;
+  const clickedRaw = displayedPointToRawFrame(clicked, orientation, datum.point);
+  const next = datum.point ? [...pointFromRawFrame(datum.point, axes)] : [0, 0, 0];
+  const offset = datum.offset ? pointFromRawFrame(datum.offset, axes)[axis] : 0;
+  next[axis] = pointFromRawFrame(clickedRaw, axes)[axis] + offset;
+
+  const axesSet = [false, false, false];
+  datum.axesSet.forEach((locked, was) => {
+    const unit = [0, 0, 0];
+    unit[was] = 1;
+    const now = pointFromRawFrame(pointToRawFrame(unit, orientation), axes);
+    axesSet[now.findIndex((v) => Math.abs(v) > 0.5)] = locked;
+  });
+  axesSet[axis] = true;
+
+  return {
+    axes, flip: NO_FLIP, point: pointToRawFrame(next, axes), axesSet,
+  };
+}
+
+/**
  * Set how far ONE axis's zero sits from the plane it was picked on.
  *
  * `datum.point` always holds the effective origin, offset included, so nothing
@@ -325,8 +429,8 @@ export function originFromAxisValue(currentRawPoint, orientation, axis, value) {
 /**
  * Apply an operator-picked datum to the pristine imported mesh.
  *
- * For milling, `datum.planeNormal` overrides `orientForMilling`'s automatic
- * shortest-extent decision; leaving it unset keeps that automatic behaviour
+ * For milling, `datum.axes` (see `realignedAxes`) or `datum.planeNormal` overrides
+ * `orientForMilling`'s automatic shortest-extent decision; leaving both unset keeps that automatic behaviour
  * exactly as it is today (this is what makes the feature invisible to a part
  * nobody has picked a datum for). `datum.rotaryZero` — a second, independent
  * face pick — then turns the part about that same (now-established) rotary
@@ -365,7 +469,8 @@ export function applyDatum(raw, datum, { mode }) {
     return { soup, welded, orientation: null };
   }
 
-  const override = datum?.planeNormal ? orientToNormal(datum.planeNormal) : undefined;
+  const override = datum?.axes
+    ?? (datum?.planeNormal ? orientToNormal(datum.planeNormal) : undefined);
   const laid = orientForMilling(raw.soup, raw.welded, override);
   let { soup, welded } = laid;
   let orientation = laid.orientation;

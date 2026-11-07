@@ -413,6 +413,16 @@ describe('indexing and picking, on screen', () => {
     expect(container.textContent).not.toMatch(/Flip [XYZ]/);
   });
 
+  it('offers the circle centre on a mill job', async () => {
+    await planned(box(60, 40, 20));
+    expect(container.textContent).toContain('Pick circle centre');
+  });
+
+  it('has no circle centre on a lathe job', async () => {
+    await planned(turnedShaft());
+    expect(container.textContent).not.toContain('Pick circle centre');
+  });
+
   it('lists the faces and edges of the part to pick from', async () => {
     // eslint-disable-next-line testing-library/render-result-naming-convention
     const el = await planned(box(60, 40, 20));

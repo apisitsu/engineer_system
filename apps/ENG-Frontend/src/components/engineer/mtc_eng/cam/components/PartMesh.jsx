@@ -70,6 +70,7 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
   const hoverIdRef = useRef(null);
   const datumPickMode = useCamPlanStore((s) => s.datumPickMode);
   const pickAxisOrigin = useCamPlanStore((s) => s.pickAxisOrigin);
+  const pickCircleCenter = useCamPlanStore((s) => s.pickCircleCenter);
   const pickRotaryCenter = useCamPlanStore((s) => s.pickRotaryCenter);
   const pickRotaryZero = useCamPlanStore((s) => s.pickRotaryZero);
   const geometry = useMemo(() => {
@@ -117,11 +118,16 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
     const localPoint = () => event.object.worldToLocal(event.point.clone()).toArray();
 
     // An armed axis pick ('x'/'y'/'z') sets just that axis's zero at the clicked
-    // point — no plane, no reorientation, the other two axes left alone.
+    // point, and the normal lets a flat face turn square to that axis.
     const axis = { x: 0, y: 1, z: 2 }[datumPickMode];
     if (axis !== undefined) {
       event.stopPropagation();
-      pickAxisOrigin(axis, localPoint());
+      pickAxisOrigin(axis, localPoint(), event.face?.normal?.toArray());
+      return;
+    }
+    if (datumPickMode === 'circle') {
+      event.stopPropagation();
+      if (event.face?.normal) pickCircleCenter(localPoint(), event.face.normal.toArray());
       return;
     }
     if (datumPickMode === 'rotary') {

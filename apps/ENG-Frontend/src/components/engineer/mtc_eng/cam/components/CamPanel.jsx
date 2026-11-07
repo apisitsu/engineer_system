@@ -324,6 +324,8 @@ export default function CamPanel() {
   const clearRotaryZero = useCamPlanStore((s) => s.clearRotaryZero);
   const rotaryZeroAngle = useCamPlanStore((s) => s.rotaryZeroAngle);
   const toggleFlip = useCamPlanStore((s) => s.toggleFlip);
+  const startPickCircle = useCamPlanStore((s) => s.startPickCircle);
+  const datumPickHint = useCamPlanStore((s) => s.datumPickHint);
   const setAxisOffset = useCamPlanStore((s) => s.setAxisOffset);
   const displayedDatumOffset = useCamPlanStore((s) => s.displayedDatumOffset);
 
@@ -674,10 +676,11 @@ export default function CamPanel() {
             </Text>
             <div style={{ marginTop: 4 }}>
               {/* One axis at a time — like touching off on the machine. Picking
-                  X sets only X0 and leaves Y and Z where they are; the part is
-                  never reoriented by a pick. Each axis locks independently. */}
+                  X sets only X0 and leaves Y and Z where they are, and a flat face
+                  on another axis turns square to X first. Each axis locks
+                  independently. */}
               <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
-                Pick one axis, click the part to set its zero, then lock the next
+                Pick one axis and click a face: it turns square to that axis and becomes its zero
               </Text>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {['X', 'Y', 'Z'].map((label, i) => {
@@ -686,7 +689,7 @@ export default function CamPanel() {
                   return (
                     <div key={label}>
                     <Space size={6} wrap>
-                      <Tooltip title={`Click the part to set ${label}0 there — only ${label} moves, nothing rotates`}>
+                      <Tooltip title={`Click a flat face to turn it square to ${label} and set ${label}0 on it. A face already square to ${label}, or a curved surface, only sets ${label}0.`}>
                         <Button
                           size="small"
                           style={{ width: 96 }}
@@ -762,7 +765,25 @@ export default function CamPanel() {
                   );
                 })}
               </div>
-              {(datum.point || flipOf(datum).some(Boolean)) && (
+              {mode === 'mill' && (
+                <div style={{ marginTop: 6 }}>
+                  <Tooltip title="Click a round wall, or a flat face beside a circle, to put the origin on its centre. The axis along the circle stays where it is.">
+                    <Button
+                      size="small"
+                      type={datumPickMode === 'circle' ? 'primary' : 'default'}
+                      onClick={() => (datumPickMode === 'circle' ? cancelPickDatum() : startPickCircle())}
+                    >
+                      {datumPickMode === 'circle' ? 'Click a circle…' : 'Pick circle centre'}
+                    </Button>
+                  </Tooltip>
+                  {datumPickMode === 'circle' && datumPickHint && (
+                    <Text type="warning" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                      {datumPickHint}
+                    </Text>
+                  )}
+                </div>
+              )}
+              {(datum.point || datum.axes || flipOf(datum).some(Boolean)) && (
                 <CommandButton
                   id="clearDatum" size="small" type="text"
                   icon={<RollbackOutlined />}
