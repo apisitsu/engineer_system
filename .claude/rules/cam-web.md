@@ -63,9 +63,11 @@ Fillet, Pattern, G71, Billet and the rest stay out until they do, and the *Evalu
 tab (Measure, Section, Check part) is not built until there is something real to put
 in it. **Project saving, opening, DXF and the library are in the File menu, not the
 Ribbon** — the operator's decision, 2026-11-07, overriding the mockup's Sketch tab.
-**Not done yet:** the view toolbar across the top of the viewport (the bottom rail
-still holds view toggles and playback), and the bottom tabs Model / Program /
-Simulation / Library.
+The **view toolbar** (`data-cam-hud`, top centre of the viewport) holds framing, the
+show/hide toggles and Simulate; the bottom rail keeps Setup, Parse and playback, which
+the mockup has no place for. `WorkspaceTabs.jsx` under the viewport only reaches panels
+that already exist, and it reads what is open rather than holding state of its own.
+The mockup's Zoom to area, Section view and Display style are not built.
 
 ## Every colour comes from `cam/theme.js`
 
@@ -199,9 +201,13 @@ Setup is a **drawer**, and a drawer covers the viewport. So the split is not
 cosmetic: anything pressed or read *while looking at the cut* has to be on the
 rail, or using it means opening a panel over the thing it is about.
 
+"The rail" now means the two floating bars together: since 2026-11-07 the toggles and
+Simulate sit on the view toolbar at the top, still side by side, and Parse and playback
+stay on the bottom one.
+
 | on the rail | in the drawer |
 |---|---|
-| Parse — pressed after every edit, and it redraws the backplot | Open file / Load sample — how a program *arrives*, once |
+| Parse — pressed after every edit, and it redraws the backplot | Open file — how a program *arrives*, once |
 | Simulate — **milling and turning both**, beside the toggles the result is judged by | the grid sizes it is judged AT (height-field cell, voxel edge) |
 | the show/hide toggles (part, arbor, toolpath) | the voxel run — the deliberate second opinion, not the mid-job press |
 | Cycle time · Cutting length · Rapid · Segments (top-left, `data-cam-overlay="stats"`) | machine settings, tool table, stock, warnings |

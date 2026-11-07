@@ -97,11 +97,11 @@ function siderCommands() {
   return [...el.querySelectorAll('button[data-cmd]')].map((b) => b.dataset.cmd);
 }
 
-/** The same, for the rail that floats over the viewport. */
+/** The same, for the two rails that float over the viewport: the view toolbar, then the bottom one. */
 function railCommands() {
-  const el = document.querySelector('[data-cam-overlay="bottom"]');
-  if (!el) return [];
-  return [...el.querySelectorAll('button[data-cmd]')].map((b) => b.dataset.cmd);
+  return [...document.querySelectorAll('[data-cam-hud], [data-cam-overlay="bottom"]')]
+    .flatMap((el) => [...el.querySelectorAll('button[data-cmd]')])
+    .map((b) => b.dataset.cmd);
 }
 
 /** A command button anywhere in the app, by id. */
@@ -183,6 +183,79 @@ describe('the sidebar while setting up', () => {
   it('shows the program listing', async () => {
     await mount();
     expect(sider().textContent).toContain('Program');
+  });
+});
+
+describe('the rails over the viewport', () => {
+  const inHud = (id) => q(`[data-cam-hud] button[data-cmd="${id}"]`);
+  const onBottom = (id) => q(`[data-cam-overlay="bottom"] button[data-cmd="${id}"]`);
+
+  it('puts framing, what is drawn, and Simulate in the view toolbar', async () => {
+    await mount();
+    for (const id of ['fitView', 'showToolpath', 'simulate']) {
+      // eslint-disable-next-line jest/valid-expect
+      expect(inHud(id), id).not.toBeNull();
+    }
+    expect(onBottom('showToolpath')).toBeNull();
+  });
+
+  it('keeps Parse and playback on the bottom rail', async () => {
+    await mount();
+    for (const id of ['parse', 'restart', 'play']) {
+      // eslint-disable-next-line jest/valid-expect
+      expect(onBottom(id), id).not.toBeNull();
+    }
+    expect(inHud('play')).toBeNull();
+  });
+
+  it('declares the view toolbar as top chrome, so Fit leaves room for it', async () => {
+    await mount();
+    expect(q('[data-cam-hud]').getAttribute('data-cam-overlay')).toBe('top');
+  });
+});
+
+describe('the tabs under the viewport', () => {
+  const tab = (value) => q(`[data-workspace-tab="${value}"]`);
+  const selected = () => [...document.querySelectorAll('[data-workspace-tab][aria-selected="true"]')]
+    .map((b) => b.dataset.workspaceTab);
+  const press = (value) => act(async () => { tab(value).click(); });
+
+  it('starts on Model', async () => {
+    await mount({ setup: false });
+    expect(selected()).toEqual(['model']);
+  });
+
+  it('shows the program in the left column from Program', async () => {
+    await mount({ setup: false });
+    await press('program');
+    expect(selected()).toEqual(['program']);
+    expect(q('[data-column-tabs] .ant-segmented-item-selected').textContent).toContain('Program');
+  });
+
+  it('follows the left column when playback moves it to the program', async () => {
+    await mount({ setup: false });
+    await setStore({ playing: true });
+    expect(selected()).toEqual(['program']);
+  });
+
+  it('lights Simulation for the Setup drawer however it was opened', async () => {
+    await mount();
+    expect(selected()).toEqual(['simulation']);
+  });
+
+  it('opens the drawer from Library, and Model closes it again', async () => {
+    await mount({ setup: false });
+    await press('library');
+    expect(selected()).toEqual(['library']);
+    await press('model');
+    expect(selected()).toEqual(['model']);
+  });
+
+  it('opens Setup from Simulation', async () => {
+    await mount({ setup: false });
+    await press('simulation');
+    expect(selected()).toEqual(['simulation']);
+    expect(sider().textContent).toContain('Material removal');
   });
 });
 

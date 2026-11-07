@@ -61,6 +61,7 @@ import SketchContextMenu from './components/SketchContextMenu.jsx';
 import SketchConfirmCorner from './components/SketchConfirmCorner.jsx';
 import MenuBar from './components/MenuBar.jsx';
 import CommandRibbon from './components/CommandRibbon.jsx';
+import WorkspaceTabs from './components/WorkspaceTabs.jsx';
 import StdVcDialog from './components/StdVcDialog.jsx';
 import CustomTurnToolDialog from './components/CustomTurnToolDialog.jsx';
 import StdEditorDialog from './components/StdEditorDialog.jsx';
@@ -191,12 +192,15 @@ export default function App() {
   // The docked Ribbon's mount point (below the title bar). A state, not a ref, so
   // the toolbar re-renders into it the moment it exists.
   const [ribbonSlot, setRibbonSlot] = useState(null);
+  // Which pane the left column shows, here because the tabs under the viewport set it too.
+  const [leftTab, setLeftTab] = useState('model');
   // The setup drawer, opened from the toolbar. Closed by default: it is a job
   // you do once per part, not something to keep on screen while cutting.
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Drives the feature-tree column's width; the tree itself owns the toggle.
   const treeOpen = useFeatureStore((s) => s.treeOpen);
   const treeWidth = useFeatureStore((s) => s.treeWidth);
+  const setTreeOpen = useFeatureStore((s) => s.setTreeOpen);
   const { treeResizing, startTreeResize } = useTreeResize();
   const sketching = page === 'sketch';
   const turning = page === 'turn';
@@ -231,6 +235,31 @@ export default function App() {
   // Whether the library is open in the sidebar. It is a place to work, not a
   // menu, so it stays put until it is closed again.
   const [libraryOpen, setLibraryOpen] = useState(false);
+
+  /** Open Setup and bring one of its sections into view, once the drawer has slid in. */
+  const openSetupAt = (selector) => {
+    setLibraryOpen(false);
+    setSettingsOpen(true);
+    setTimeout(() => {
+      document.querySelector(selector)?.scrollIntoView?.({ block: 'start' });
+    }, 350);
+  };
+
+  // The strip under the viewport reads what is open rather than keeping its own
+  // state, so opening Setup or the library any other way moves it as well.
+  let workspaceTab = leftTab;
+  if (libraryOpen) workspaceTab = 'library';
+  else if (settingsOpen) workspaceTab = 'simulation';
+
+  const selectWorkspaceTab = (value) => {
+    if (value === 'simulation') { openSetupAt('[data-cam-removal]'); return; }
+    if (value === 'library') { setSettingsOpen(false); setLibraryOpen(true); return; }
+    setSettingsOpen(false);
+    setLibraryOpen(false);
+    setTreeOpen(true);
+    setLeftTab(value);
+  };
+
   useAutoSimulate({
     gcode, stockEnabled, stockSize, stockOrigin, partDatum, aIndex, mode,
     autoSimEnabled, playing, simStatus, sketching, simulate,
@@ -672,14 +701,7 @@ export default function App() {
         <CommandRibbon
           setRibbonSlot={setRibbonSlot}
           onSetup={() => { setLibraryOpen(false); setSettingsOpen(true); }}
-          onWorkOrigin={() => {
-            setLibraryOpen(false);
-            setSettingsOpen(true);
-            // After the drawer has slid in, or the scroll has nothing to scroll.
-            setTimeout(() => {
-              document.querySelector('[data-cam-origin]')?.scrollIntoView?.({ block: 'start' });
-            }, 350);
-          }}
+          onWorkOrigin={() => openSetupAt('[data-cam-origin]')}
           onExportGcode={onExportGcode}
         />
         <Layout>
@@ -700,7 +722,7 @@ export default function App() {
               position: 'relative',
             }}
           >
-            <LeftColumn activeLine={activeLine} />
+            <LeftColumn activeLine={activeLine} tab={leftTab} onTab={setLeftTab} />
             {treeOpen && (
               // Drag the column edge to trade viewport for program/tree width.
               <div
@@ -949,6 +971,7 @@ export default function App() {
 
               {/* ---- Phase 1: material removal ---- */}
               {show.removal && <>
+              <span data-cam-removal />
               <Divider style={{ margin: '4px 0', borderColor: CAD.border }}>
                 <Text style={{ color: CAD.muted }}>Material removal</Text>
               </Divider>
@@ -1262,7 +1285,9 @@ export default function App() {
                 bottom bar is measured against. */}
             {!sketching && statRows.length > 0 && (
               <div data-cam-overlay="stats" style={{
-                position: 'absolute', top: 12, left: 12, zIndex: 5,
+                // Under the view toolbar's row, which reaches this corner when the
+                // viewport is narrow.
+                position: 'absolute', top: 52, left: 12, zIndex: 5,
                 display: 'flex', gap: 16, alignItems: 'baseline', flexWrap: 'wrap',
                 background: CAD.glass, border: `1px solid ${CAD.border}`,
                 padding: '6px 12px', borderRadius: 4,
@@ -1293,42 +1318,17 @@ export default function App() {
               </div>
             )}
 
-            {/* Bottom toolbar: view/plan selector and playback controls in one row. */}
-            <div data-cam-overlay="bottom" style={{
-              position: 'absolute', bottom: 12, left: 12, right: 12, zIndex: 5,
-              display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+            {/* The view toolbar across the top of the viewport: how the part is
+                framed and what is drawn. */}
+            <div data-cam-overlay="top" data-cam-hud style={{
+              position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 5,
+              display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center',
+              maxWidth: 'calc(100% - 24px)',
               background: CAD.glass, border: `1px solid ${CAD.border}`,
-              padding: '6px 12px', borderRadius: 4,
-              // On the old near-black viewport a pale panel lifted off the
-              // background by contrast alone. On a light one it does not, so the
-              // rails that float over the model carry a shadow instead.
+              padding: '3px 6px', borderRadius: 4,
               boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
               backdropFilter: 'blur(2px)',
             }}>
-              <Tooltip title="Setup — files, machine, tooling, stock and the removal simulation">
-                <Button
-                  size="small"
-                  icon={<SettingOutlined />}
-                  onClick={() => { setLibraryOpen(false); setSettingsOpen(true); }}
-                  data-open-setup
-                >
-                  Setup
-                </Button>
-              </Tooltip>
-              {/* Parse sits next to Setup because it is the other thing done *to* the
-                  program rather than to the view: edit the file, press it, watch the
-                  backplot redraw. In the drawer it was behind the very picture it
-                  redraws. */}
-              {!sketching && (
-                <CommandButton
-                  id="parse"
-                  size="small"
-                  type="primary"
-                  icon={<ThunderboltOutlined />}
-                  loading={status === 'parsing'}
-                  onClick={() => parse()}
-                />
-              )}
               <Segmented size="small" value={view} onChange={setViewPreset} options={VIEWS} />
               <CommandButton
                 id="fitView" size="small"
@@ -1438,6 +1438,44 @@ export default function App() {
                   onClick={() => setRotaryFrame(rotaryFrame === 'machine' ? 'part' : 'machine')}
                 />
               )}
+            </div>
+
+            {/* Bottom toolbar: what is done to the program, and playing it back. */}
+            <div data-cam-overlay="bottom" style={{
+              position: 'absolute', bottom: 12, left: 12, right: 12, zIndex: 5,
+              display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+              background: CAD.glass, border: `1px solid ${CAD.border}`,
+              padding: '6px 12px', borderRadius: 4,
+              // On the old near-black viewport a pale panel lifted off the
+              // background by contrast alone. On a light one it does not, so the
+              // rails that float over the model carry a shadow instead.
+              boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
+              backdropFilter: 'blur(2px)',
+            }}>
+              <Tooltip title="Setup — files, machine, tooling, stock and the removal simulation">
+                <Button
+                  size="small"
+                  icon={<SettingOutlined />}
+                  onClick={() => { setLibraryOpen(false); setSettingsOpen(true); }}
+                  data-open-setup
+                >
+                  Setup
+                </Button>
+              </Tooltip>
+              {/* Parse sits next to Setup because it is the other thing done *to* the
+                  program rather than to the view: edit the file, press it, watch the
+                  backplot redraw. In the drawer it was behind the very picture it
+                  redraws. */}
+              {!sketching && (
+                <CommandButton
+                  id="parse"
+                  size="small"
+                  type="primary"
+                  icon={<ThunderboltOutlined />}
+                  loading={status === 'parsing'}
+                  onClick={() => parse()}
+                />
+              )}
               {!sketching && <>
               <div style={{ width: 1, alignSelf: 'stretch', background: CAD.border }} />
               <CommandButton
@@ -1523,6 +1561,13 @@ export default function App() {
             />
           </Content>
         </Layout>
+        <WorkspaceTabs
+          // Lined up under the viewport rather than the whole window, without
+          // moving the viewport into a column of its own that its height depends on.
+          indent={treeOpen ? treeWidth : TREE_SIZE.TREE_STRIP + 8}
+          active={workspaceTab}
+          onSelect={selectWorkspaceTab}
+        />
         <StatusBar />
       </Layout>
     </div>
