@@ -14,6 +14,7 @@ import Backplot from './Backplot.jsx';
 import StockMesh from './StockMesh.jsx';
 import StockPreview from './StockPreview.jsx';
 import PartMesh, { FeatureHighlight, DatumPickHighlight, OriginMarker, RotaryAxisLine } from './PartMesh.jsx';
+import { CHUCK, chuckBodyRadius } from '../engine/view/setup.js';
 import SketchLayer from './SketchLayer.jsx';
 import { getBuf, setView } from '../engine/bufferCache.js';
 import { sliceUpTo } from '../engine/gcode/path.js';
@@ -449,9 +450,9 @@ function LatheTool({ radius = 0.8, shape }) {
  * raw bar behind it (extending −Z) rather than swallowing the machined part.
  */
 function Chuck({ zEnd, od }) {
-  const bodyR = Math.max(od * 2.2, od + 20);
-  const bodyLen = 30;
-  const jawProtrude = 12;            // jaws stick forward (+Z) of the body face
+  const bodyR = chuckBodyRadius(od);
+  const bodyLen = CHUCK.bodyLength;
+  const jawProtrude = CHUCK.jawProtrude; // jaws stick forward (+Z) of the body face
   const bodyFace = zEnd - jawProtrude; // body front face, behind the jaws
   const jawOuter = bodyR * 0.95;     // jaws reach out nearly to the body rim
   const rMid = (od + jawOuter) / 2;
@@ -656,7 +657,7 @@ export function SceneContents({
         <>
           {mode === 'turn' && <SpindleAxis bounds={bounds} />}
           {mode === 'turn' && turnChuck && (
-            <Chuck zEnd={turnChuck.z - 5} od={turnChuck.od} />
+            <Chuck zEnd={turnChuck.z - CHUCK.clearance} od={turnChuck.od} />
           )}
 
           {/* The backplot is never rotated: it is where the tool went, and in

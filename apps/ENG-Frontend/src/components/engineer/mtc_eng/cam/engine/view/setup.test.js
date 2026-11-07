@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { fitBoundsFor, fitBoundsForPart, chuckFromBounds, TURN_RADIAL } from './setup.js';
+import {
+  fitBoundsFor, fitBoundsForPart, chuckFromBounds, chuckFitBounds, chuckBodyRadius, CHUCK, TURN_RADIAL,
+} from './setup.js';
 import {
   playbackStep, perTick, wallClockSeconds, SPEEDS, PLAY_BASE_SECONDS, TICK_SECONDS,
 } from './playback.js';
@@ -144,6 +146,22 @@ describe('playback pacing', () => {
   it('survives a zero-length program without dividing by zero', () => {
     expect(Number.isFinite(perTick(0, 1))).toBe(true);
     expect(perTick(0, 1)).toBeGreaterThan(0);
+  });
+});
+
+describe('chuckFitBounds', () => {
+  it('holds the whole chuck, wider than the fit a bar gets on its own', () => {
+    const chuck = { z: -40, od: 10 };
+    const box = chuckFitBounds(chuck);
+    expect(box.max[0]).toBeCloseTo(chuckBodyRadius(10));
+    expect(box.max[0]).toBeGreaterThan(fitBoundsFor('turn', turnBounds).max[0]);
+    expect(box.min[1]).toBeCloseTo(-chuckBodyRadius(10));
+    expect(box.max[2]).toBeCloseTo(-40 - CHUCK.clearance);
+    expect(box.min[2]).toBeCloseTo(-40 - CHUCK.clearance - CHUCK.jawProtrude - CHUCK.bodyLength);
+  });
+
+  it('is nothing with no chuck, so milling is framed as before', () => {
+    expect(chuckFitBounds(null)).toBeNull();
   });
 });
 

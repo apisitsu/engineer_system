@@ -12,6 +12,7 @@ import { serialize as serializeSketch } from '../engine/sketch/model.js';
 import { sketchToDxf, sketchHasGeometry } from '../engine/sketch/dxf.js';
 import {
   buildProject, serializeProject, parseProject, projectFileName, programFileName, namedProjectFile,
+  isProjectText,
 } from '../engine/projectFile.js';
 import { clearDraft } from './autosave.js';
 
@@ -290,4 +291,21 @@ export async function openProjectFile(file) {
   // so Save knows its name but still has to ask where it goes.
   projectFile = { name: file.name, handle: null };
   return project;
+}
+
+/**
+ * Open a file taken for a program, unless it turns out to be a project.
+ *
+ * Without this a project reaching the program door is read as G-code, line by line,
+ * and fails on its own first brace with the whole JSON document in the error.
+ *
+ * @returns {Promise<boolean>} whether it was a project
+ */
+export async function openProgramFile(file) {
+  if (isProjectText(await file.text())) {
+    await openProjectFile(file);
+    return true;
+  }
+  await useCamStore.getState().loadFile(file);
+  return false;
 }

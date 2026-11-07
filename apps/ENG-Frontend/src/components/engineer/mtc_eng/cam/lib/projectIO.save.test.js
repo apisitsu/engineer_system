@@ -8,7 +8,9 @@ import {
 } from 'vitest';
 import {
   saveProject, saveProjectAs, canPickSaveLocation, currentProjectFileName, newProject,
+  openProgramFile, currentProject,
 } from './projectIO.js';
+import { serializeProject } from '../engine/projectFile.js';
 import { useCamStore } from '../stores/camStore.js';
 
 const fakeHandle = (name) => {
@@ -59,6 +61,31 @@ describe('with no Save dialog (plain HTTP)', () => {
     expect(currentProjectFileName()).toBe('OP10 rev.2.camweb.json');
     await saveProject();
     expect(downloads).toEqual(['OP10 rev.2.camweb.json', 'OP10 rev.2.camweb.json']);
+  });
+});
+
+describe('opening a file through the program door', () => {
+  const file = (name, text) => ({ name, text: async () => text });
+
+  it('opens a project as a project, whatever it is called', async () => {
+    useCamStore.setState({ gcode: 'G0 X1', loadFile: vi.fn() });
+    const text = serializeProject(currentProject());
+    expect(await openProgramFile(file('saved.txt', text))).toBe(true);
+    expect(useCamStore.getState().loadFile).not.toHaveBeenCalled();
+    expect(useCamStore.getState().parse).toHaveBeenLastCalledWith('G0 X1', expect.anything());
+    expect(currentProjectFileName()).toBe('saved.txt');
+  });
+
+  it('opens anything else as a program', async () => {
+    useCamStore.setState({ loadFile: vi.fn() });
+    const nc = file('part.nc', '%\nO0001\nG0 X0\n%');
+    expect(await openProgramFile(nc)).toBe(false);
+    expect(useCamStore.getState().loadFile).toHaveBeenCalledWith(nc);
+  });
+
+  it('does not mistake other JSON for a project', async () => {
+    useCamStore.setState({ loadFile: vi.fn() });
+    expect(await openProgramFile(file('other.json', '{"kind":"something-else"}'))).toBe(false);
   });
 });
 

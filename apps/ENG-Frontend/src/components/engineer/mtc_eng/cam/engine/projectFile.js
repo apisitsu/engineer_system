@@ -107,6 +107,22 @@ export function serializeProject(project) {
  * the user — a wrong file dropped on the app should say so, not blow up deep in
  * a store. Returns { gcode, fileName, sketch, settings }.
  */
+/**
+ * Whether a file's text is one of our projects, whatever the file is called.
+ *
+ * A name cannot be trusted for this: a Save dialog lets the operator type one, and
+ * the program picker takes any file. No G-code starts with `{`, so a program costs
+ * one character to rule out rather than a JSON parse of the whole file.
+ */
+export function isProjectText(text) {
+  if (!String(text ?? '').trimStart().startsWith('{')) return false;
+  try {
+    return JSON.parse(text)?.kind === PROJECT_KIND;
+  } catch {
+    return false;
+  }
+}
+
 export function parseProject(text) {
   let doc;
   try {

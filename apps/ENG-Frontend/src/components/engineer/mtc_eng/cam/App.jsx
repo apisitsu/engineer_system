@@ -31,10 +31,12 @@ import { useCamPlanStore } from './stores/camPlanStore.js';
 import { PART_FORMATS } from './engine/mesh/import.js';
 import CamPanel from './components/CamPanel.jsx';
 import { useSketchStore } from './stores/sketchStore.js';
-import { exportGcode, openProjectFile } from './lib/projectIO.js';
+import { exportGcode, openProjectFile, openProgramFile } from './lib/projectIO.js';
 import { useLibraryStore } from './stores/libraryStore.js';
 import LibraryPanel from './components/LibraryPanel.jsx';
-import { fitBoundsFor, fitBoundsForPart, chuckFromBounds } from './engine/view/setup.js';
+import {
+  fitBoundsFor, fitBoundsForPart, chuckFromBounds, chuckFitBounds,
+} from './engine/view/setup.js';
 import { unionBounds } from './engine/view/camera.js';
 import { simMethodFor } from './engine/sim/method.js';
 import { SPEEDS } from './engine/view/playback.js';
@@ -137,7 +139,6 @@ export default function App() {
   const simFrameA   = useCamStore((s) => s.simFrameA);
   // Actions are stable references defined once in the store.
   const parse    = useCamStore((s) => s.parse);
-  const loadFile = useCamStore((s) => s.loadFile);
   const setPlayhead = useCamStore((s) => s.setPlayhead);
   const togglePlay  = useCamStore((s) => s.togglePlay);
   const stepBlock   = useCamStore((s) => s.stepBlock);
@@ -300,9 +301,17 @@ export default function App() {
           useLibraryStore.getState().setOpenItem(null);
           return file.name;
         }, (n) => `Opened project ${n}`);
-      } else loadFile(file);
+      } else {
+        // Anything else is taken for a program, unless its contents say otherwise:
+        // a project saved under a name of the operator's own still opens as one.
+        report(async () => {
+          const isProject = await openProgramFile(file);
+          if (isProject) useLibraryStore.getState().setOpenItem(null);
+          return isProject;
+        }, (isProject) => (isProject ? `Opened project ${file.name}` : null));
+      }
     },
-    [loadFile, loadPart, report]
+    [loadPart, report]
   );
 
   // Read large buffers from cache (not from React state). Viewport slices the
@@ -400,14 +409,19 @@ export default function App() {
     const cut = fitBoundsFor(turning ? 'turn' : 'mill', bounds);
     return unionBounds(
       unionBounds(
-        rotaryFrame === 'machine' ? sweptFitBox(cut, rotaryCenter) : cut,
-        // The blank is framed too. Without it, sizing stock on an empty
-        // viewport draws a 50 mm block the camera is nowhere near.
-        billetFit,
+        unionBounds(
+          rotaryFrame === 'machine' ? sweptFitBox(cut, rotaryCenter) : cut,
+          // The blank is framed too. Without it, sizing stock on an empty
+          // viewport draws a 50 mm block the camera is nowhere near.
+          billetFit,
+        ),
+        fitBoundsForPart(turning ? 'turn' : 'mill', partAnalysis?.bounds ?? null),
       ),
-      fitBoundsForPart(turning ? 'turn' : 'mill', partAnalysis?.bounds ?? null),
+      // The chuck is far wider than the bar it grips, and would otherwise run off
+      // the top of the window and under the view toolbar.
+      chuckFitBounds(chuckFromBounds(turning ? 'turn' : 'mill', bounds, stockOversize)),
     );
-  }, [bounds, turning, partAnalysis, rotaryFrame, rotaryCenter, billetFit]);
+  }, [bounds, turning, partAnalysis, rotaryFrame, rotaryCenter, billetFit, stockOversize]);
 
   // Chuck placement uses the *real* cutting bounds (not the padded fit), so the
   // 5 mm clearance to the deepest cut is preserved regardless of framing. The
@@ -1285,9 +1299,7 @@ export default function App() {
                 bottom bar is measured against. */}
             {!sketching && statRows.length > 0 && (
               <div data-cam-overlay="stats" style={{
-                // Under the view toolbar's row, which reaches this corner when the
-                // viewport is narrow.
-                position: 'absolute', top: 52, left: 12, zIndex: 5,
+                position: 'absolute', top: 8, left: 12, zIndex: 5,
                 display: 'flex', gap: 16, alignItems: 'baseline', flexWrap: 'wrap',
                 background: CAD.glass, border: `1px solid ${CAD.border}`,
                 padding: '6px 12px', borderRadius: 4,

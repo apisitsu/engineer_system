@@ -33,7 +33,8 @@ import { useCamPlanStore } from '../stores/camPlanStore.js';
 import { useStdStore } from '../stores/stdStore.js';
 import { useLibraryStore } from '../stores/libraryStore.js';
 import {
-  saveProject, saveProjectAs, canPickSaveLocation, currentProjectFileName, openProjectFile, exportSketchDxf,
+  saveProject, saveProjectAs, canPickSaveLocation, currentProjectFileName, openProjectFile, openProgramFile,
+  exportSketchDxf,
 } from '../lib/projectIO.js';
 import { CAD } from '../theme.js';
 
@@ -182,7 +183,6 @@ export default function MenuBar({
   const page = useCamStore((s) => s.page);
   const view = useCamStore((s) => s.view);
   const gcode = useCamStore((s) => s.gcode);
-  const loadFile = useCamStore((s) => s.loadFile);
   const setViewPreset = useCamStore((s) => s.setViewPreset);
 
   const sketching = page === 'sketch';
@@ -345,8 +345,16 @@ export default function MenuBar({
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {brand}
-      {hiddenInput(fileInput, PROGRAM_ACCEPT, loadFile)}
-      {hiddenInput(projectInput, '.json,.camweb.json', guarded2(openFromFile, setError))}
+      {hiddenInput(fileInput, PROGRAM_ACCEPT, (file) => announced(async () => {
+        if (!await openProgramFile(file)) return null;
+        useLibraryStore.getState().setOpenItem(null);
+        return `Opened project ${file.name}`;
+      }))}
+      {hiddenInput(projectInput, '.json,.camweb.json', (file) => announced(async () => {
+        await openProjectFile(file);
+        useLibraryStore.getState().setOpenItem(null);
+        return `Opened project ${file.name}`;
+      }))}
       <Modal
         open={saveAsName !== null}
         title="Save project as"
@@ -422,15 +430,3 @@ export default function MenuBar({
   );
 }
 
-/** Open a project file. It is no library item, so Save must not write back to one. */
-async function openFromFile(file) {
-  await openProjectFile(file);
-  useLibraryStore.getState().setOpenItem(null);
-}
-
-/** A file handler that reports failure on the sketcher's own error line. */
-function guarded2(fn, setError) {
-  return async (file) => {
-    try { await fn(file); } catch (e) { setError?.(e?.message || String(e)); }
-  };
-}
