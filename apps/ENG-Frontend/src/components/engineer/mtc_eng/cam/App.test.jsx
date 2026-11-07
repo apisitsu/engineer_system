@@ -104,6 +104,13 @@ function railCommands() {
     .map((b) => b.dataset.cmd);
 }
 
+/** The same, for the Ribbon. */
+function ribbonCommands() {
+  const el = document.querySelector('[data-cam-ribbon]');
+  if (!el) return [];
+  return [...el.querySelectorAll('button[data-cmd]')].map((b) => b.dataset.cmd);
+}
+
 /** A command button anywhere in the app, by id. */
 const cmd = (id) => q(`button[data-cmd="${id}"]`);
 
@@ -149,22 +156,23 @@ describe('the sidebar while setting up', () => {
     );
   });
 
-  it('keeps Parse on the viewport rail — it is pressed after every edit', async () => {
+  it('keeps Parse on the Ribbon, on screen and once only — it is pressed after every edit', async () => {
     // Parse is pressed after every edit and redraws the backplot; from the drawer
-    // it was behind the picture it redraws. Opening a file and loading the sample
-    // are not mid-session actions — see the File menu, `MenuBar.test.jsx`.
+    // it was behind the picture it redraws. Opening a file is not a mid-session
+    // action — see the File menu, `MenuBar.test.jsx`.
     await mount();
     expect(siderCommands()).not.toContain('parse');
-    expect(railCommands()).toContain('parse');
+    expect(ribbonCommands()).toContain('parse');
+    expect(railCommands()).not.toContain('parse');
   });
 
-  it('keeps Simulate on the viewport rail and its grid size in the drawer', async () => {
-    // The button is pressed with the show/hide toggles the result is judged by;
-    // the number it is judged AT is a setting typed once per job. Splitting them
-    // that way is the point — a rail you press and a drawer you fill in.
+  it('keeps Simulate on the Ribbon and its grid size in the drawer', async () => {
+    // The number it is judged AT is a setting typed once per job. Splitting them
+    // that way is the point — a button on screen and a drawer you fill in.
     await mount();
     expect(siderCommands()).not.toContain('simulate');
-    expect(railCommands()).toContain('simulate');
+    expect(ribbonCommands()).toContain('simulate');
+    expect(railCommands()).not.toContain('simulate');
     // The height-field grid box is still in the drawer, and now says which
     // resolution it is now that the glyph beside it has gone.
     expect(sider().textContent).toContain('Height field');
@@ -190,22 +198,36 @@ describe('the rails over the viewport', () => {
   const inHud = (id) => q(`[data-cam-hud] button[data-cmd="${id}"]`);
   const onBottom = (id) => q(`[data-cam-overlay="bottom"] button[data-cmd="${id}"]`);
 
-  it('puts framing, what is drawn, and Simulate in the view toolbar', async () => {
+  it('keeps only framing and what is drawn in the view toolbar', async () => {
     await mount();
-    for (const id of ['fitView', 'showToolpath', 'simulate']) {
+    for (const id of ['fitView', 'showToolpath']) {
       // eslint-disable-next-line jest/valid-expect
       expect(inHud(id), id).not.toBeNull();
     }
     expect(onBottom('showToolpath')).toBeNull();
+    expect(inHud('simulate')).toBeNull();
   });
 
-  it('keeps Parse and playback on the bottom rail', async () => {
+  it('keeps only playback on the bottom rail', async () => {
     await mount();
-    for (const id of ['parse', 'restart', 'play']) {
+    for (const id of ['restart', 'play']) {
       // eslint-disable-next-line jest/valid-expect
       expect(onBottom(id), id).not.toBeNull();
     }
+    expect(q('[data-cam-overlay="bottom"] [data-open-setup]')).toBeNull();
     expect(inHud('play')).toBeNull();
+  });
+
+  it('has no bottom rail on the Sketch page, where there is nothing to play', async () => {
+    await setStore({ page: 'sketch' });
+    await mount({ setup: false });
+    expect(q('[data-cam-overlay="bottom"]')).toBeNull();
+  });
+
+  it('offers Setup once, on the Ribbon', async () => {
+    await mount({ setup: false });
+    expect(document.querySelectorAll('[data-open-setup]')).toHaveLength(1);
+    expect(q('[data-cam-ribbon] [data-open-setup]')).not.toBeNull();
   });
 
   it('declares the view toolbar as top chrome, so Fit leaves room for it', async () => {
@@ -229,7 +251,7 @@ describe('the tabs under the viewport', () => {
     await mount({ setup: false });
     await press('program');
     expect(selected()).toEqual(['program']);
-    expect(q('[data-column-tabs] .ant-segmented-item-selected').textContent).toContain('Program');
+    expect(q('[data-column-pane]').getAttribute('data-column-pane')).toBe('program');
   });
 
   it('follows the left column when playback moves it to the program', async () => {
@@ -238,9 +260,10 @@ describe('the tabs under the viewport', () => {
     expect(selected()).toEqual(['program']);
   });
 
-  it('lights Simulation for the Setup drawer however it was opened', async () => {
+  it('does not light Simulation for Setup opened from the Ribbon', async () => {
     await mount();
-    expect(selected()).toEqual(['simulation']);
+    expect(sider()).not.toBeNull();
+    expect(selected()).toEqual(['model']);
   });
 
   it('opens the drawer from Library, and Model closes it again', async () => {
@@ -468,36 +491,22 @@ describe('the toolpath toggle', () => {
   });
 });
 
-describe('Simulate sits beside the toolpath toggle in both modes', () => {
-  // Milling's Simulate moved to the rail because carving the material and then
-  // hiding the backplot to look at what came off is one motion. Turning was left
-  // behind in the drawer, which made the lathe the one mode where that motion
-  // crossed the whole screen. Same act, same place.
-  const railSim = () => railCommands().find((c) => c.startsWith('simulate'));
+describe('Simulate is on the Ribbon in both modes', () => {
+  // Carving the material and then hiding the backplot to look at what came off is
+  // one motion, so neither end of it may be behind the drawer. Turning was once left
+  // there, which made the lathe the one mode where that motion crossed the screen.
+  const ribbonSim = () => ribbonCommands().find((c) => c.startsWith('simulate'));
 
-  it('is on the rail for milling', async () => {
+  it('is on the Ribbon for milling', async () => {
     await mount();
-    expect(railSim()).toBe('simulate');
+    expect(ribbonSim()).toBe('simulate');
   });
 
-  it('is on the rail for turning, not in the drawer', async () => {
+  it('is on the Ribbon for turning, not in the drawer', async () => {
     await setStore({ page: 'turn', mode: 'turn' });
     await mount();
-    expect(railCommands()).toContain('simulateTurning');
+    expect(ribbonSim()).toBe('simulateTurning');
     expect(siderCommands()).not.toContain('simulateTurning');
-  });
-
-  it('lands next to the toolpath toggle when milling', async () => {
-    await mount();
-    const rail = railCommands();
-    expect(Math.abs(rail.indexOf('simulate') - rail.indexOf('showToolpath'))).toBe(1);
-  });
-
-  it('lands next to the toolpath toggle when turning', async () => {
-    await setStore({ page: 'turn', mode: 'turn' });
-    await mount();
-    const rail = railCommands();
-    expect(Math.abs(rail.indexOf('simulateTurning') - rail.indexOf('showToolpath'))).toBe(1);
   });
 
   it('names itself for the lathe', async () => {

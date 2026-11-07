@@ -102,6 +102,14 @@ describe('CommandRibbon', () => {
     expect(props.onExportGcode).toHaveBeenCalledTimes(1);
   });
 
+  it('names Simulate after the run it will be', async () => {
+    useCamStore.setState({ gcode: 'G0 X0' });
+    props.simulateCommand = { id: 'simulateUndercut', icon: null };
+    await render();
+    const btn = q('button[data-cmd="simulateUndercut"]');
+    expect(btn.textContent).toContain('Simulate the undercut');
+  });
+
   it('turns off what has nothing to act on', async () => {
     await render();
     expect(button('Simulate').disabled).toBe(true);

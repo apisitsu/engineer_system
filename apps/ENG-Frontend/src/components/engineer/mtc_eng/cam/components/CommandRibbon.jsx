@@ -24,6 +24,7 @@ import { useCamStore } from '../stores/camStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
 import { useFeatureStore } from '../stores/featureStore.js';
 import { useStdStore } from '../stores/stdStore.js';
+import { command } from '../engine/view/commands.js';
 import { CAD } from '../theme.js';
 
 const TABS = [
@@ -52,7 +53,9 @@ function Command({ tip, ...button }) {
 }
 
 /** The buttons for a machine page. The two differ only in what they say about simulating. */
-function MachineCommands({ turning, onSetup, onWorkOrigin, onExportGcode }) {
+function MachineCommands({
+  onSetup, onWorkOrigin, onExportGcode, simulateCommand = { id: 'simulate', icon: <SimulateIcon /> },
+}) {
   const gcode = useCamStore((s) => s.gcode);
   const status = useCamStore((s) => s.status);
   const simStatus = useCamStore((s) => s.simStatus);
@@ -64,7 +67,7 @@ function MachineCommands({ turning, onSetup, onWorkOrigin, onExportGcode }) {
   return (
     <>
       <Command
-        icon={<SettingOutlined />} label="Setup" onClick={onSetup}
+        icon={<SettingOutlined />} label="Setup" onClick={onSetup} data-open-setup
         tip="Files, machine, tooling, stock and the removal simulation"
       />
       <Command
@@ -73,13 +76,13 @@ function MachineCommands({ turning, onSetup, onWorkOrigin, onExportGcode }) {
       />
       <Sep />
       <Command
-        icon={<ThunderboltOutlined />} label="Parse" onClick={() => parse()} loading={status === 'parsing'}
-        tip="Read the program in the editor and rebuild the backplot"
+        icon={<ThunderboltOutlined />} label={command('parse').label} data-cmd="parse"
+        aria-label={command('parse').label} onClick={() => parse()} loading={status === 'parsing'} tip={command('parse').hint}
       />
       <Command
-        icon={<SimulateIcon />} label="Simulate" accent onClick={() => simulate()}
-        loading={simStatus === 'running'} disabled={!gcode}
-        tip={turning ? 'Turn a raw bar down to the programmed profile' : 'Carve the stock along the program'}
+        icon={simulateCommand.icon} label={command(simulateCommand.id).label} data-cmd={simulateCommand.id}
+        aria-label={command(simulateCommand.id).label} accent onClick={() => simulate()} loading={simStatus === 'running'} disabled={!gcode}
+        tip={command(simulateCommand.id).hint}
       />
       <Command
         icon={<PostIcon />} label="Post G-code" onClick={onExportGcode} disabled={!gcode}
@@ -126,7 +129,7 @@ function FeatureCommands() {
 }
 
 export default function CommandRibbon({
-  setRibbonSlot, onSetup, onWorkOrigin, onExportGcode,
+  setRibbonSlot, onSetup, onWorkOrigin, onExportGcode, simulateCommand,
 }) {
   const page = useCamStore((s) => s.page);
   const setPage = useCamStore((s) => s.setPage);
@@ -194,10 +197,10 @@ export default function CommandRibbon({
         {tab === 'features' && <FeatureCommands />}
         {(tab === 'mill' || tab === 'turn') && (
           <MachineCommands
-            turning={tab === 'turn'}
             onSetup={onSetup}
             onWorkOrigin={onWorkOrigin}
             onExportGcode={onExportGcode}
+            simulateCommand={simulateCommand}
           />
         )}
         <div

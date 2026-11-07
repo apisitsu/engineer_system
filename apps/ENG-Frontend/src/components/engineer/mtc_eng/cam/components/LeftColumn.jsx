@@ -4,8 +4,8 @@
  * Two things belong on screen while you work, and they are not the same thing:
  * the **model's structure** (the feature tree) while you are building it, and
  * the **program listing** while it runs, scrolling to the executing line. They
- * are tabs of one column rather than two panels, because a viewport is small and
- * you are never reading both at once.
+ * are two panes of one column rather than two panels, because a viewport is small
+ * and you are never reading both at once. `WorkspaceTabs` is what switches them.
  *
  * ## Why the program is here and not in Setup
  *
@@ -22,7 +22,7 @@
  * how a panel loses your place.
  */
 import { useEffect } from 'react';
-import { Segmented, Button, Tooltip, Alert } from 'antd';
+import { Button, Tooltip, Alert } from 'antd';
 import { ApartmentOutlined, CodeOutlined, MenuOutlined } from '@ant-design/icons';
 import FeatureTree, { TREE_SIZE } from './FeatureTree.jsx';
 import GcodePanel from './GcodePanel.jsx';
@@ -31,13 +31,6 @@ import { useFeatureStore } from '../stores/featureStore.js';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { describeFeature } from '../engine/solid/featureTree.js';
 import { CAD } from '../theme.js';
-
-// The words stay beside the icons: a column that lost them would have to be hovered
-// to be read, which is what the Ribbon's labels were added to get away from.
-const TABS = [
-  { label: 'Model', value: 'model', icon: <ApartmentOutlined /> },
-  { label: 'Program', value: 'program', icon: <CodeOutlined /> },
-];
 
 export default function LeftColumn({ activeLine = 0, tab, onTab: setTab }) {
   const open = useFeatureStore((s) => s.treeOpen);
@@ -77,24 +70,25 @@ export default function LeftColumn({ activeLine = 0, tab, onTab: setTab }) {
   }
 
   return (
-    <div style={{
-      height: '100%', background: CAD.panelBg,
-      display: 'flex', flexDirection: 'column', minWidth: 0,
-    }}
+    <div
+      data-column-pane={tab}
+      style={{
+        height: '100%', background: CAD.panelBg,
+        display: 'flex', flexDirection: 'column', minWidth: 0,
+      }}
     >
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 4,
-        padding: 6, borderBottom: `1px solid ${CAD.border}`,
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '4px 6px 4px 10px', borderBottom: `1px solid ${CAD.border}`,
       }}
       >
-        <Segmented
-          size="small"
-          value={tab}
-          onChange={setTab}
-          options={TABS}
-          style={{ flex: 1 }}
-          data-column-tabs
-        />
+        {/* Says which pane this is; the tabs under the viewport are what switch it. */}
+        {tab === 'model'
+          ? <ApartmentOutlined style={{ color: CAD.icon }} />
+          : <CodeOutlined style={{ color: CAD.icon }} />}
+        <span style={{ flex: 1, color: CAD.text, fontSize: 12, fontWeight: 600 }}>
+          {tab === 'model' ? 'Model' : 'Program'}
+        </span>
         <Tooltip title="Collapse">
           <Button
             size="small"

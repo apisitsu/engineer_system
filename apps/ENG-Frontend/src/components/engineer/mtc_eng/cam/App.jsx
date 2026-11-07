@@ -16,7 +16,7 @@ import {
   PlayCircleFilled, PauseCircleFilled, StepBackwardOutlined,
   StepForwardOutlined, FastBackwardOutlined, RollbackOutlined,
   ExpandOutlined,
-  SettingOutlined, EditOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import CommandButton from './components/CommandButton.jsx';
 import {
@@ -89,7 +89,6 @@ export default function App() {
   const { notification } = AntdApp.useApp();
   // Small scalar state from Zustand — large buffers live in bufferCache.
   const gcode = useCamStore((s) => s.gcode);
-  const status   = useCamStore((s) => s.status);
   const bufVer   = useCamStore((s) => s.bufVer);  // version counter — triggers re-render
   const playhead = useCamStore((s) => s.playhead);
   const playT    = useCamStore((s) => s.playT);
@@ -237,23 +236,29 @@ export default function App() {
   // menu, so it stays put until it is closed again.
   const [libraryOpen, setLibraryOpen] = useState(false);
 
+  // Setup is one drawer with several jobs in it, so the Simulation tab lights only
+  // when that is what it was opened for.
+  const [setupForSimulation, setSetupForSimulation] = useState(false);
+
   /** Open Setup and bring one of its sections into view, once the drawer has slid in. */
-  const openSetupAt = (selector) => {
+  const openSetupAt = (selector, forSimulation = false) => {
     setLibraryOpen(false);
     setSettingsOpen(true);
+    setSetupForSimulation(forSimulation);
+    if (!selector) return;
     setTimeout(() => {
       document.querySelector(selector)?.scrollIntoView?.({ block: 'start' });
     }, 350);
   };
 
   // The strip under the viewport reads what is open rather than keeping its own
-  // state, so opening Setup or the library any other way moves it as well.
+  // state, so opening the library any other way moves it as well.
   let workspaceTab = leftTab;
   if (libraryOpen) workspaceTab = 'library';
-  else if (settingsOpen) workspaceTab = 'simulation';
+  else if (settingsOpen && setupForSimulation) workspaceTab = 'simulation';
 
   const selectWorkspaceTab = (value) => {
-    if (value === 'simulation') { openSetupAt('[data-cam-removal]'); return; }
+    if (value === 'simulation') { openSetupAt('[data-cam-removal]', true); return; }
     if (value === 'library') { setSettingsOpen(false); setLibraryOpen(true); return; }
     setSettingsOpen(false);
     setLibraryOpen(false);
@@ -698,7 +703,7 @@ export default function App() {
             // the other, the way `data-open-setup` below already did before
             // Library had a drawer of its own to collide with.
             onToggleLibrary={() => { setSettingsOpen(false); setLibraryOpen((v) => !v); }}
-            onOpenSetup={() => { setLibraryOpen(false); setSettingsOpen(true); }}
+            onOpenSetup={() => openSetupAt()}
             brand={(
               <>
                 <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 18 }} />
@@ -714,9 +719,16 @@ export default function App() {
         </Header>
         <CommandRibbon
           setRibbonSlot={setRibbonSlot}
-          onSetup={() => { setLibraryOpen(false); setSettingsOpen(true); }}
+          onSetup={() => openSetupAt()}
           onWorkOrigin={() => openSetupAt('[data-cam-origin]')}
           onExportGcode={onExportGcode}
+          // Which run this will be depends on the program and the cutter, and it says
+          // so in the button's name, so an undercut is not carved as a height field.
+          simulateCommand={turning
+            ? { id: 'simulateTurning', icon: <TurningIcon /> }
+            : simPlan.method === 'voxel'
+              ? { id: rotaryIndices.length > 1 ? 'simulateFaces' : 'simulateUndercut', icon: <VoxelIcon /> }
+              : { id: 'simulate', icon: <StockCutIcon /> }}
         />
         <Layout>
           {/* The left column is the **feature tree**, the way a CAD lays a part
@@ -1404,36 +1416,6 @@ export default function App() {
                   onClick={toggleToolpath}
                 />
               )}
-              {/* **Simulate lives here, with the toggles it is judged by.**
-                  Cutting the material and then hiding the holder or the
-                  toolpath to look at what came off is one motion, and it used
-                  to cross the whole screen: press a button in a drawer, close
-                  the drawer, then reach for these. The NUMBERS stay in the
-                  drawer — a grid size is a setting you type once per job, not
-                  something to keep on a rail you press mid-run.
-
-                  **Turning is here too.** It is the same act on the same rail; it
-                  only ever differed in which glyph names it, and leaving it in the
-                  drawer made the lathe the one mode where this motion crossed the
-                  screen. The voxel run keeps its own button in the drawer — that is
-                  the deliberate second opinion, not the one reached for mid-job. */}
-              {!sketching && (
-                <CommandButton
-                  id={turning
-                    ? 'simulateTurning'
-                    : simPlan.method === 'voxel'
-                      ? (rotaryIndices.length > 1 ? 'simulateFaces' : 'simulateUndercut')
-                      : 'simulate'}
-                  size="small"
-                  type="primary"
-                  ghost
-                  icon={turning
-                    ? <TurningIcon />
-                    : simPlan.method === 'voxel' ? <VoxelIcon /> : <StockCutIcon />}
-                  loading={simStatus === 'running'}
-                  onClick={() => simulate()}
-                />
-              )}
               {/* 4th axis: which end of the same rigid motion to watch. A rotary
                   table turns the WORK — that is what a 4-axis machine selects by
                   default — but the part frame, which keeps the workpiece still
@@ -1452,7 +1434,8 @@ export default function App() {
               )}
             </div>
 
-            {/* Bottom toolbar: what is done to the program, and playing it back. */}
+            {/* Bottom toolbar: playing the program back. A sketch has nothing to play. */}
+            {!sketching && (
             <div data-cam-overlay="bottom" style={{
               position: 'absolute', bottom: 12, left: 12, right: 12, zIndex: 5,
               display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
@@ -1464,32 +1447,6 @@ export default function App() {
               boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
               backdropFilter: 'blur(2px)',
             }}>
-              <Tooltip title="Setup — files, machine, tooling, stock and the removal simulation">
-                <Button
-                  size="small"
-                  icon={<SettingOutlined />}
-                  onClick={() => { setLibraryOpen(false); setSettingsOpen(true); }}
-                  data-open-setup
-                >
-                  Setup
-                </Button>
-              </Tooltip>
-              {/* Parse sits next to Setup because it is the other thing done *to* the
-                  program rather than to the view: edit the file, press it, watch the
-                  backplot redraw. In the drawer it was behind the very picture it
-                  redraws. */}
-              {!sketching && (
-                <CommandButton
-                  id="parse"
-                  size="small"
-                  type="primary"
-                  icon={<ThunderboltOutlined />}
-                  loading={status === 'parsing'}
-                  onClick={() => parse()}
-                />
-              )}
-              {!sketching && <>
-              <div style={{ width: 1, alignSelf: 'stretch', background: CAD.border }} />
               <CommandButton
                 id="restart"
                 size="small" shape="circle"
@@ -1536,8 +1493,8 @@ export default function App() {
               }}>
                 {formatDuration(elapsed)} / {formatDuration(stats?.cycleTime ?? 0)}
               </Text>
-              </>}
             </div>
+            )}
 
             <Viewport
               bounds={bounds}
