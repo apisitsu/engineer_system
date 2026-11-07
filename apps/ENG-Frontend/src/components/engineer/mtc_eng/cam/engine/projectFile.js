@@ -164,6 +164,16 @@ export function projectFileName(fileName) {
   return `${base}.camweb.json`;
 }
 
+/**
+ * The file a name typed into Save As lands in. Unlike `projectFileName`, nothing
+ * after a dot is taken for an extension, because "OP10 rev.2" is a whole name.
+ */
+export function namedProjectFile(typed) {
+  const clean = String(typed ?? '').replace(/[\\/:*?"<>|]/g, '').trim();
+  if (!clean) return 'untitled.camweb.json';
+  return /\.json$/i.test(clean) ? clean : `${clean}.camweb.json`;
+}
+
 /** Extensions that already say "this is a program" — a control reads them all. */
 const GCODE_EXT = ['.nc', '.gcode', '.gc', '.tap', '.cnc', '.ngc', '.txt', '.mpf'];
 

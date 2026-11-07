@@ -40,6 +40,14 @@ describe('buildMenuItems', () => {
     expect(leaf(buildMenuItems(ctx({ hasFeatures: true })), 'rebuild').disabled).toBe(false);
   });
 
+  it('keeps every way of saving and opening a project in the File menu', () => {
+    const file = buildMenuItems(ctx()).find((m) => m.key === 'file').children.map((c) => c.key);
+    for (const key of ['open-project', 'save-project', 'save-project-as', 'library']) {
+      // eslint-disable-next-line jest/valid-expect
+      expect(file, key).toContain(key);
+    }
+  });
+
   it('gives every command a unique key', () => {
     const keys = buildMenuItems(ctx()).flatMap((t) => t.children).filter((c) => c.type !== 'divider').map((c) => c.key);
     expect(new Set(keys).size).toBe(keys.length);

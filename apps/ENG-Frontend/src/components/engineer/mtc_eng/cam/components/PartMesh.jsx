@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { getMesh, useCamPlanStore } from '../stores/camPlanStore.js';
 import { faceOfTriangle } from '../engine/mesh/features.js';
 import { featureAtPoint } from '../engine/mesh/pickEdge.js';
+import { circlesAt, nearestCircle } from '../engine/mesh/circlePick.js';
 import { originMarkerSize, rotaryAxisLength } from '../engine/view/originMarker.js';
 import { CAD } from '../theme.js';
 
@@ -73,6 +74,8 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
   const pickCircleCenter = useCamPlanStore((s) => s.pickCircleCenter);
   const pickRotaryCenter = useCamPlanStore((s) => s.pickRotaryCenter);
   const pickRotaryZero = useCamPlanStore((s) => s.pickRotaryZero);
+  const setDatumHover = useCamPlanStore((s) => s.setDatumHover);
+  const circleCache = useRef(null);
   const geometry = useMemo(() => {
     const { soup } = getMesh();
     if (!soup || soup.triangleCount === 0) return null;
@@ -173,7 +176,8 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
    * same feature would re-render the panel and the overlay for nothing.
    */
   const onPointerMove = (event) => {
-    if (datumPickMode) return;   // the cursor means an origin right now, not a feature
+    // The cursor means an origin right now, not a feature, so show that instead.
+    if (datumPickMode) { hoverDatum(event); return; }
     const picked = featureUnder(event);
     if (picked === undefined) return;
     if ((picked?.id ?? null) !== (hoverIdRef.current ?? null)) {
@@ -182,7 +186,39 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
     }
   };
 
+  /**
+   * What a click would take while a pick is armed: the flat face for an axis or A0
+   * pick, and the circle for a centre pick, by the same rule the click itself uses.
+   *
+   * The sections behind a circle are cut once per facet, not once per pixel. The
+   * nearest one is still chosen on every move, because one end face holds both a
+   * bore and a boss and which is meant depends on where in that facet the cursor is.
+   */
+  const hoverDatum = (event) => {
+    if (datumPickMode === 'circle') {
+      if (!event.face?.normal) return;
+      const point = event.object.worldToLocal(event.point.clone()).toArray();
+      const key = `${meshVer}:${event.faceIndex}`;
+      if (circleCache.current?.key !== key) {
+        circleCache.current = {
+          key,
+          circles: circlesAt(getMesh().welded, point, event.face.normal.toArray()),
+        };
+      }
+      const circle = nearestCircle(circleCache.current.circles, point);
+      if (!circle) { setDatumHover(null); return; }
+      const across = circle.center.filter((_, i) => i !== circle.axis).map((v) => v.toFixed(3));
+      setDatumHover({ id: `circle:${circle.axis}:${across.join(',')}:${circle.radius.toFixed(3)}`, circle });
+      return;
+    }
+    if (datumPickMode === 'rotary') return;
+    const detected = features();
+    const face = detected?.faces?.length ? faceOfTriangle(detected, event.faceIndex) : null;
+    setDatumHover(face ? { id: `face:${face.id}`, face } : null);
+  };
+
   const onPointerOut = () => {
+    setDatumHover(null);
     if (hoverIdRef.current === null) return;
     hoverIdRef.current = null;
     previewFeatureAt(null);
@@ -262,6 +298,67 @@ export function FeatureHighlight({ meshVer }) {
         depthWrite={false}
       />
     </mesh>
+  );
+}
+
+/** A ring and a centre dot, as one geometry per part, for a circle in the mesh's own frame. */
+function circleMarkerGeometry({ axis, center, radius }, size) {
+  // A real tube rather than a line, because WebGL draws every line one pixel wide
+  // however it is asked, and one pixel is what could not be seen on the part.
+  const tube = Math.max(radius * 0.04, size * 0.02);
+  const ring = new THREE.TorusGeometry(radius, tube, 8, 72);
+  if (axis === 0) ring.rotateY(Math.PI / 2);
+  if (axis === 1) ring.rotateX(Math.PI / 2);
+  ring.translate(center[0], center[1], center[2]);
+  const dot = new THREE.SphereGeometry(tube * 2.5, 12, 8);
+  dot.translate(center[0], center[1], center[2]);
+  return [ring, dot];
+}
+
+/**
+ * What the next click would take while a pick is armed, drawn over the part.
+ *
+ * Not `FeatureHighlight`: that one shows a selected face in preference to a hover,
+ * so an operator with a face selected would see nothing change under the cursor.
+ */
+export function DatumPickHighlight({ meshVer }) {
+  const hover = useCamPlanStore((s) => (s.datumPickMode ? s.datumHover : null));
+  const bounds = useCamPlanStore((s) => s.analysis?.bounds);
+  const size = originMarkerSize(bounds);
+  const geometries = useMemo(() => {
+    if (hover?.circle) return circleMarkerGeometry(hover.circle, size);
+    if (hover?.face) {
+      const built = highlightGeometry(hover.face, getMesh().soup);
+      return built ? [built.geometry] : [];
+    }
+    return [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hover, size, meshVer]);
+
+  useEffect(() => () => geometries.forEach((g) => g.dispose()), [geometries]);
+
+  if (!geometries.length) return null;
+
+  return (
+    <group name="datum-pick-highlight">
+      {geometries.map((g) => (
+        <mesh key={g.uuid} geometry={g} renderOrder={10}>
+          {/* A circle draws over the part, so a bore is still marked from a view
+              that hides its far edge. A face keeps its depth test and only lifts
+              off the facets it covers, so it shows which side is being picked. */}
+          <meshBasicMaterial
+            color={CAD.skHover}
+            transparent
+            opacity={hover?.circle ? 0.95 : 0.75}
+            side={THREE.DoubleSide}
+            depthTest={!hover?.circle}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-2}
+          />
+        </mesh>
+      ))}
+    </group>
   );
 }
 

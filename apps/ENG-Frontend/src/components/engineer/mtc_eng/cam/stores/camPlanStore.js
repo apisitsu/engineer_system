@@ -102,6 +102,9 @@ export const useCamPlanStore = create((set, get) => ({
   datum: NO_DATUM,
   datumPickMode: null, // null | 'x' | 'y' | 'z' | 'circle' | 'rotary' | 'zero'
   datumPickHint: null, // why the last click on the part set nothing
+  // What a click would take right now, while a pick is armed: `{id, face}` or
+  // `{id, circle}`. Kept apart from `previewFeature`, which a selected face hides.
+  datumHover: null,
 
   // ---- The operator's editable plan ----
   // An ordered list of `{key, kind, toolId, enabled, target}`. Empty until a
@@ -528,7 +531,15 @@ export const useCamPlanStore = create((set, get) => ({
    * down so every axis jumped at once — the behaviour operators kept triggering
    * by accident. Touch-off is per axis on a real machine, and now here too.
    */
-  startPickAxis(axis) { set({ datumPickMode: 'xyz'[axis] ?? null }); },
+  startPickAxis(axis) { set({ datumPickMode: 'xyz'[axis] ?? null, datumHover: null }); },
+
+  /**
+   * Say what the cursor is over while a pick is armed. Guarded on the id, because
+   * a pointer move fires on every pixel and most of them change nothing.
+   */
+  setDatumHover(hover) {
+    if ((hover?.id ?? null) !== (get().datumHover?.id ?? null)) set({ datumHover: hover ?? null });
+  },
 
   /**
    * Turn the part 90° about one axis on screen, about the origin. Milling only, and
@@ -544,7 +555,7 @@ export const useCamPlanStore = create((set, get) => ({
   },
 
   /** Arm the next click to put the origin on the centre of a circle instead. */
-  startPickCircle() { set({ datumPickMode: 'circle', datumPickHint: null }); },
+  startPickCircle() { set({ datumPickMode: 'circle', datumPickHint: null, datumHover: null }); },
 
   /**
    * A click on or beside a circle puts the origin on its centre. A click that finds
@@ -575,7 +586,7 @@ export const useCamPlanStore = create((set, get) => ({
   startPickRotaryCenter() { set({ datumPickMode: 'rotary' }); },
 
   /** Arm the next click to say "this face reads as A0" instead. */
-  startPickRotaryZero() { set({ datumPickMode: 'zero' }); },
+  startPickRotaryZero() { set({ datumPickMode: 'zero', datumHover: null }); },
 
   cancelPickDatum() { set({ datumPickMode: null }); },
 

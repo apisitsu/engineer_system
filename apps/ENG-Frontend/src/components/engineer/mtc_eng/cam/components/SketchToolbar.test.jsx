@@ -81,10 +81,12 @@ describe('SketchToolbar — docked as the Ribbon', () => {
     const labels = [...slot.querySelectorAll('[data-ribbon-button]')].map((b) => b.getAttribute('data-ribbon-button'));
     for (const name of ['Select', 'Line', 'Rectangle', 'Circle', 'Arc', 'Dimension', 'Trim',
       'Construction', 'Mirror', 'Offset', 'Relations', 'Solve', 'Undo', 'Redo', 'Delete',
-      'Library', 'Sketches', 'Build', 'More']) {
+      'Sketches', 'Build', 'More']) {
       // eslint-disable-next-line jest/valid-expect
       expect(labels, name).toContain(name);
     }
+    // Saving, opening and the library all live in the File menu.
+    expect(labels).not.toContain('Library');
     // The visible text is the name, so the accessible name is too.
     const line = slot.querySelector('[data-ribbon-button="Line"]');
     expect(line.textContent).toBe('Line');

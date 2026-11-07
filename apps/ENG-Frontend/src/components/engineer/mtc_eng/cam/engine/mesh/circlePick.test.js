@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { fitCircle, circleAtPick } from './circlePick.js';
+import {
+  fitCircle, circleAtPick, circlesAt, nearestCircle,
+} from './circlePick.js';
 import { translate } from './datum.js';
 import { weld } from './stl.js';
 import { box, cylinder, tube } from './fixtures.js';
@@ -87,6 +89,12 @@ describe('circleAtPick', () => {
     expect(c.axis).toBe(0);
     expect(c.center[1]).toBeCloseTo(0, 2);
     expect(c.center[2]).toBeCloseTo(0, 2);
+  });
+
+  it('chooses again from one set of sections as the cursor moves across a facet', () => {
+    const circles = circlesAt(part(), [20, 7, 30], [0, 0, 1]);
+    expect(nearestCircle(circles, [16, 7, 30]).radius).toBeCloseTo(10, 0);
+    expect(nearestCircle(circles, [24, 7, 30]).radius).toBeCloseTo(20, 0);
   });
 
   it('finds nothing on a plain block', () => {

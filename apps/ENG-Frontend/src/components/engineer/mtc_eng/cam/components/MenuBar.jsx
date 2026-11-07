@@ -24,14 +24,17 @@
  * sketch, Import DXF…) are disabled outside it rather than acting on nothing.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Menu, Modal, AutoComplete } from 'antd';
+import { Menu, Modal, AutoComplete, Input, message } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { useCamStore } from '../stores/camStore.js';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { useFeatureStore } from '../stores/featureStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
 import { useStdStore } from '../stores/stdStore.js';
-import { saveProject, openProjectFile, exportSketchDxf } from '../lib/projectIO.js';
+import { useLibraryStore } from '../stores/libraryStore.js';
+import {
+  saveProject, saveProjectAs, canPickSaveLocation, currentProjectFileName, openProjectFile, exportSketchDxf,
+} from '../lib/projectIO.js';
 import { SAMPLE_GCODE, SAMPLE_TURNING } from '../SAMPLE_GCODE.js';
 import { CAD } from '../theme.js';
 
@@ -67,6 +70,7 @@ export function buildMenuItems(ctx) {
         { type: 'divider' },
         { key: 'open-project', label: 'Open project…' },
         { key: 'save-project', label: 'Save project' },
+        { key: 'save-project-as', label: 'Save project as…' },
         { key: 'export-dxf', label: 'Export sketch as DXF', disabled: !sketching },
         { type: 'divider' },
         { key: 'library', label: libraryOpen ? 'Library ✓' : 'Library…' },
@@ -209,6 +213,8 @@ export default function MenuBar({
   const dxfInput = useRef(null);
   const searchRef = useRef(null);
   const [query, setQuery] = useState('');
+  // The name being typed into Save As, where the browser has no dialog of its own.
+  const [saveAsName, setSaveAsName] = useState(null);
 
   const items = buildMenuItems({
     libraryOpen,
@@ -226,11 +232,50 @@ export default function MenuBar({
     try { await fn(); } catch (e) { setError?.(e?.message || String(e)); }
   };
 
+  /**
+   * Run a save and say how it went. Saving leaves nothing else on screen to show
+   * that it happened, and these can run from any page, where the sketcher's error
+   * line is not showing.
+   */
+  const announced = async (fn) => {
+    try {
+      const said = await fn();
+      if (said) message.success(said);
+    } catch (e) {
+      message.error(e?.message || String(e));
+    }
+  };
+
+  // Save goes back where the project came from: over your own library item if one
+  // is open, otherwise to its file.
+  const saveCurrent = async () => {
+    const library = useLibraryStore.getState();
+    if (library.canSaveOpen()) {
+      const saved = await library.saveOpen();
+      return `Saved “${saved.name}” to your library`;
+    }
+    const name = await saveProject();
+    return name && `Saved ${name}`;
+  };
+
+  // A file saved under a new name is what is open from here on, so the next Save
+  // must not write back over the library item this began as.
+  const saveAsFile = async (name) => {
+    const saved = await saveProjectAs(name);
+    if (saved) useLibraryStore.getState().setOpenItem(null);
+    return saved && `Saved ${saved}`;
+  };
+
   const run = ({ key }) => {
+    if (key === 'save-project') { announced(saveCurrent); return; }
+    if (key === 'save-project-as') {
+      if (canPickSaveLocation()) announced(() => saveAsFile());
+      else setSaveAsName(currentProjectFileName());
+      return;
+    }
     if (key === 'open') { fileInput.current?.click(); return; }
     if (key === 'sample') { parse(mode === 'turn' ? SAMPLE_TURNING : SAMPLE_GCODE); return; }
     if (key === 'open-project') { projectInput.current?.click(); return; }
-    if (key === 'save-project') { guarded(saveProject)(); return; }
     if (key === 'export-dxf') { guarded(exportSketchDxf)(); return; }
     if (key === 'library') { onToggleLibrary(); return; }
     if (key === 'export') { onExportGcode(); return; }
@@ -299,7 +344,28 @@ export default function MenuBar({
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {hiddenInput(fileInput, PROGRAM_ACCEPT, loadFile)}
-      {hiddenInput(projectInput, '.json,.camweb.json', guarded2(openProjectFile, setError))}
+      {hiddenInput(projectInput, '.json,.camweb.json', guarded2(openFromFile, setError))}
+      <Modal
+        open={saveAsName !== null}
+        title="Save project as"
+        okText="Save"
+        okButtonProps={{ disabled: !saveAsName?.trim(), 'data-save-as-confirm': true }}
+        onOk={() => { announced(() => saveAsFile(saveAsName)); setSaveAsName(null); }}
+        onCancel={() => setSaveAsName(null)}
+        destroyOnHidden
+        width={420}
+      >
+        <Input
+          value={saveAsName ?? ''}
+          autoFocus
+          aria-label="File name"
+          data-save-as-name
+          onChange={(e) => setSaveAsName(e.target.value)}
+          onPressEnter={() => {
+            if (saveAsName?.trim()) { announced(() => saveAsFile(saveAsName)); setSaveAsName(null); }
+          }}
+        />
+      </Modal>
       {hiddenInput(dxfInput, '.dxf', async (file) => {
         try {
           // The file's own name becomes the sketch's, so a drawing imported next
@@ -340,6 +406,12 @@ export default function MenuBar({
       />
     </div>
   );
+}
+
+/** Open a project file. It is no library item, so Save must not write back to one. */
+async function openFromFile(file) {
+  await openProjectFile(file);
+  useLibraryStore.getState().setOpenItem(null);
 }
 
 /** A file handler that reports failure on the sketcher's own error line. */

@@ -32,6 +32,7 @@ import { PART_FORMATS } from './engine/mesh/import.js';
 import CamPanel from './components/CamPanel.jsx';
 import { useSketchStore } from './stores/sketchStore.js';
 import { exportGcode, openProjectFile } from './lib/projectIO.js';
+import { useLibraryStore } from './stores/libraryStore.js';
 import LibraryPanel from './components/LibraryPanel.jsx';
 import { fitBoundsFor, fitBoundsForPart, chuckFromBounds } from './engine/view/setup.js';
 import { unionBounds } from './engine/view/camera.js';
@@ -273,6 +274,8 @@ export default function App() {
         // parser — which would read a JSON document as a program and fail.
         report(async () => {
           await openProjectFile(file);
+          // It is no library item, so Save must not write back to one.
+          useLibraryStore.getState().setOpenItem(null);
           return file.name;
         }, (n) => `Opened project ${n}`);
       } else loadFile(file);

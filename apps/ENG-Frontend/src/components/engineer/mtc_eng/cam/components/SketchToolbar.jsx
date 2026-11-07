@@ -12,14 +12,13 @@ import { Button, Tooltip, Popover, InputNumber, Space, Tag, Typography, Divider,
 import {
   UndoOutlined, RedoOutlined, DeleteOutlined, ThunderboltOutlined,
   NodeIndexOutlined, EllipsisOutlined, BulbOutlined, ClearOutlined,
-  SaveOutlined, FolderOpenOutlined, ExportOutlined, ImportOutlined, DatabaseOutlined,
+  ExportOutlined, ImportOutlined,
 } from '@ant-design/icons';
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSketchStore } from '../stores/sketchStore.js';
 import RibbonButton from './RibbonButton.jsx';
-import { saveProject, openProjectFile, exportSketchDxf } from '../lib/projectIO.js';
-import LibraryPanel from './LibraryPanel.jsx';
+import { exportSketchDxf } from '../lib/projectIO.js';
 import SketchesPanel from './SketchesPanel.jsx';
 import BuildPanel from './BuildPanel.jsx';
 // The helper this rail introduced now serves the whole app — see `glyph.jsx`.
@@ -593,13 +592,7 @@ export default function SketchToolbar({ ribbonSlot = null }) {
   const setPolygonSides = useSketchStore((s) => s.setPolygonSides);
 
   const setError = useSketchStore((s) => s.setError);
-  // Save/open failures land on the sketcher's own error line.
-  const onSaveProject = useCallback(async () => {
-    try { await saveProject(); } catch (e) { setError?.(e?.message || String(e)); }
-  }, [setError]);
-  const onOpenProject = useCallback(async (file) => {
-    try { await openProjectFile(file); } catch (e) { setError?.(e?.message || String(e)); }
-  }, [setError]);
+  // Export failures land on the sketcher's own error line.
   const onExportDxf = useCallback(async () => {
     try { await exportSketchDxf(); } catch (e) { setError?.(e?.message || String(e)); }
   }, [setError]);
@@ -755,25 +748,13 @@ export default function SketchToolbar({ ribbonSlot = null }) {
         <RibbonButton danger icon={<DeleteOutlined />} label="Delete" disabled={!selection.length && !selectedDims.length} onClick={() => deleteSelected()} />
       </Tooltip>
 
-      {/* The library, on its own trigger rather than inside the menu below: a
-          popover nested in a popover closes the outer one as you reach for it.
-          The Sketch page hides the sidebar, so without this a sketch could be
-          saved to a file and never to the library that keeps it. */}
-      <LibraryPanel
-        trigger={(
-          <Tooltip title="Library — your own saved work, and the shelf everyone shares" placement="bottom">
-            <RibbonButton icon={<DatabaseOutlined />} label="Library" />
-          </Tooltip>
-        )}
-      />
-
       {sep}
 
       {/* The 2D→3D pair. Which sketch and which plane comes first because it is
           what the drawing lands on; Build is next to it because it is what the
-          drawing is for. Both are their own triggers for the same reason the
-          library is — a popover nested inside the "More" popover closes the
-          outer one as you reach for it. */}
+          drawing is for. Both are their own triggers because a popover nested
+          inside the "More" popover closes the outer one as you reach for it.
+          Saving and opening projects, and the library, are in the File menu. */}
       <SketchesPanel
         trigger={(
           <Tooltip title="Sketches — which one you are drawing, and the plane it sits on" placement="bottom">
@@ -795,19 +776,6 @@ export default function SketchToolbar({ ribbonSlot = null }) {
         placement="bottomLeft"
         content={(
           <Space direction="vertical" size={4}>
-            {/* The sketch only exists in memory until it's saved, so the save /
-                open pair belongs here too — the Sketch page hides the sidebar
-                where the CAM copies of these buttons live. */}
-            <Button size="small" icon={<SaveOutlined />} onClick={onSaveProject} block>
-              Save project
-            </Button>
-            <Upload
-              accept=".json,.camweb.json"
-              showUploadList={false}
-              beforeUpload={(file) => { onOpenProject(file); return false; }}
-            >
-              <Button size="small" icon={<FolderOpenOutlined />} block>Open project</Button>
-            </Upload>
             <Tooltip title="DXF is the format SolidWorks, CATIA, AutoCAD and other CAM packages all read">
               <Button size="small" icon={<ExportOutlined />} onClick={onExportDxf} block>
                 Export DXF

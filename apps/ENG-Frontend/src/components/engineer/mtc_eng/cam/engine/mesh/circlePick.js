@@ -86,24 +86,24 @@ export function fitCircle(flat) {
 }
 
 /**
- * The circle nearest a click on a mesh.
+ * Every circle in the sections worth cutting at a facet.
  *
- * The clicked facet says which sections are worth cutting: a flat face is cut just
- * under itself, so clicking an end face finds the bores and bosses that meet it,
- * and a wall is cut through the click along each axis that lies in its plane. Only
- * axis-aligned circles are found, the same assumption the rest of the origin
- * tools make.
+ * The facet says which those are: a flat face is cut just under itself, so an end
+ * face finds the bores and bosses that meet it, and a wall is cut through the point
+ * along each axis that lies in its plane. Only axis-aligned circles are found, the
+ * same assumption the rest of the origin tools make.
+ *
+ * This is the expensive half, kept apart so a hover can hold the answer for as long
+ * as the cursor stays on one facet rather than slicing on every pixel.
  *
  * @param {object} mesh a welded mesh, in the same frame as `point` and `normal`
- * @param {number[]} point the clicked location
- * @param {number[]} normal the clicked facet's outward normal
- * @returns {{axis:0|1|2, center:number[], radius:number}|null} `axis` is the
- *   circle's own axis; `center` has the clicked coordinate along it
+ * @param {number[]} point a location on the facet
+ * @param {number[]} normal the facet's outward normal
+ * @returns {{axis:0|1|2, u:number, v:number, center:[number,number], radius:number}[]}
  */
-export function circleAtPick(mesh, point, normal) {
+export function circlesAt(mesh, point, normal) {
   const len = Math.hypot(...normal) || 1;
-  let best = null;
-  let bestMiss = Infinity;
+  const circles = [];
   for (let axis = 0; axis < 3; axis += 1) {
     const along = normal[axis] / len;
     let coord = null;
@@ -113,20 +113,38 @@ export function circleAtPick(mesh, point, normal) {
       const [u, v] = [0, 1, 2].filter((k) => k !== axis);
       for (const loop of sliceLoops(mesh, axis, coord).loops) {
         const circle = fitCircle(Array.from(loop.points));
-        if (circle) {
-          const miss = Math.abs(
-            Math.hypot(point[u] - circle.center[0], point[v] - circle.center[1]) - circle.radius,
-          );
-          if (miss < bestMiss) {
-            bestMiss = miss;
-            const center = [...point];
-            center[u] = circle.center[0];
-            center[v] = circle.center[1];
-            best = { axis, center, radius: circle.radius };
-          }
-        }
+        if (circle) circles.push({ axis, u, v, ...circle });
       }
     }
   }
+  return circles;
+}
+
+/**
+ * Which of those circles a point is nearest, measured to the circle's edge.
+ *
+ * @param {ReturnType<typeof circlesAt>} circles
+ * @param {number[]} point
+ * @returns {{axis:0|1|2, center:number[], radius:number}|null} `axis` is the
+ *   circle's own axis; `center` has the point's coordinate along it
+ */
+export function nearestCircle(circles, point) {
+  let best = null;
+  let bestMiss = Infinity;
+  for (const c of circles) {
+    const miss = Math.abs(Math.hypot(point[c.u] - c.center[0], point[c.v] - c.center[1]) - c.radius);
+    if (miss < bestMiss) {
+      bestMiss = miss;
+      const center = [...point];
+      center[c.u] = c.center[0];
+      center[c.v] = c.center[1];
+      best = { axis: c.axis, center, radius: c.radius };
+    }
+  }
   return best;
+}
+
+/** The circle a click on a mesh means. A hover shows the same answer, from the same two steps. */
+export function circleAtPick(mesh, point, normal) {
+  return nearestCircle(circlesAt(mesh, point, normal), point);
 }

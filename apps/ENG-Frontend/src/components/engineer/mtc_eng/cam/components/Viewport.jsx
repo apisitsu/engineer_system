@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import Backplot from './Backplot.jsx';
 import StockMesh from './StockMesh.jsx';
 import StockPreview from './StockPreview.jsx';
-import PartMesh, { FeatureHighlight, OriginMarker, RotaryAxisLine } from './PartMesh.jsx';
+import PartMesh, { FeatureHighlight, DatumPickHighlight, OriginMarker, RotaryAxisLine } from './PartMesh.jsx';
 import SketchLayer from './SketchLayer.jsx';
 import { getBuf, setView } from '../engine/bufferCache.js';
 import { sliceUpTo } from '../engine/gcode/path.js';
@@ -678,6 +678,7 @@ export function SceneContents({
           <WorkGroup name="part-work" t={partT}>
             <PartMesh meshVer={partVer} visible={showPart} />
             {showPart && <FeatureHighlight meshVer={partVer} />}
+            {showPart && <DatumPickHighlight meshVer={partVer} />}
             {showPart && <OriginMarker meshVer={partVer} />}
             {showPart && <RotaryAxisLine meshVer={partVer} />}
           </WorkGroup>
