@@ -76,27 +76,42 @@ function describe({ regions, open, branches }, combineOp) {
   return { ok: false, text: 'Draw a closed profile first.' };
 }
 
-export default function BuildPanel({ trigger }) {
+/**
+ * A feature already in the tree is what makes "cut this out of it" mean anything:
+ * the part on the machine is whatever the tree last built.
+ */
+export function useHasBuiltPart() {
+  const featureCount = useFeatureStore((s) => s.features.length);
+  const loaded = useCamPlanStore((s) => s.status === 'ready' && Boolean(s.stlName));
+  return loaded && featureCount > 0;
+}
+
+/**
+ * @param {object} props
+ * @param {React.ReactNode} props.trigger what opens the panel
+ * @param {{name:string, op:'extrude'|'revolve', cut:boolean}} [props.preset] one
+ *   named feature, as the Ribbon offers them, so the panel asks only for its sizes
+ *   and not again for what the button already said. Without it the panel offers
+ *   every choice, including New and Common, which have no button of their own.
+ */
+export default function BuildPanel({ trigger, preset }) {
   // `version` is what the store bumps on every edit; reading it is how this
   // recomputes as the sketch is drawn rather than only when it is opened.
   const version = useSketchStore((s) => s.version);
   const regionsOf = useSketchStore((s) => s.regions);
   const build = useFeatureStore((s) => s.buildFromSketch);
-  const featureCount = useFeatureStore((s) => s.features.length);
   const sketches = useSketchStore((s) => s.sketches);
   const activeId = useSketchStore((s) => s.activeId);
 
-  const [op, setOp] = useState('extrude');
+  const [chosenOp, setOp] = useState('extrude');
+  const op = preset?.op ?? chosenOp;
   const [depth, setDepth] = useState(10);
   const [axis, setAxis] = useState('x');
   const [angle, setAngle] = useState(360);
   const [combine, setCombine] = useState('none');
   const [merge, setMerge] = useState('new');
   const [busy, setBusy] = useState(false);
-  // A feature already in the tree is what makes "cut this out of it" mean
-  // anything — the part on the machine is whatever the tree last built.
-  const hasPart = useCamPlanStore((s) => s.status === 'ready' && Boolean(s.stlName))
-    && featureCount > 0;
+  const hasPart = useHasBuiltPart();
 
   const active = sketches.find((s) => s.id === activeId) || sketches[0];
   // eslint-disable-next-line no-unused-vars
@@ -109,7 +124,12 @@ export default function BuildPanel({ trigger }) {
   const summary = describe(state, combineOp);
   const multi = regionsOf(null).regions.length > 1;
 
-  const mergeOp = hasPart ? merge : 'new';
+  // A boss on an empty tree is the first body, so it has nothing to join yet.
+  let mergeOp = hasPart ? merge : 'new';
+  if (preset) {
+    if (preset.cut) mergeOp = 'cut';
+    else mergeOp = hasPart ? 'add' : 'new';
+  }
 
   const onBuild = async () => {
     setBusy(true);
@@ -126,28 +146,39 @@ export default function BuildPanel({ trigger }) {
   const content = (
     <Space direction="vertical" size={8} style={{ minWidth: 260 }}>
       <Text style={{ color: CAD.dim, fontSize: 11 }}>
-        Build a solid from “{active?.name}” on {planeLabel(active?.plane)}
+        {preset ? preset.name : 'Build a solid'} from “{active?.name}” on {planeLabel(active?.plane)}
       </Text>
 
-      <Segmented
-        size="small"
-        block
-        value={op}
-        onChange={setOp}
-        options={[{ label: 'Extrude', value: 'extrude' }, { label: 'Revolve', value: 'revolve' }]}
-      />
+      {!preset && (
+        <Segmented
+          size="small"
+          block
+          value={op}
+          onChange={setOp}
+          options={[{ label: 'Extrude', value: 'extrude' }, { label: 'Revolve', value: 'revolve' }]}
+        />
+      )}
 
       {op === 'extrude' ? (
-        <Tooltip title="Distance along the plane's normal. Negative extrudes the other way.">
-          <InputNumber
-            size="small"
-            value={depth}
-            onChange={(v) => setDepth(Number(v) || 0)}
-            addonBefore="Depth"
-            addonAfter="mm"
-            style={{ width: '100%' }}
-          />
-        </Tooltip>
+        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+          <Tooltip title="Distance along the plane's normal. Negative extrudes the other way.">
+            <InputNumber
+              size="small"
+              value={depth}
+              onChange={(v) => setDepth(Number(v) || 0)}
+              addonBefore="Depth"
+              addonAfter="mm"
+              style={{ width: '100%' }}
+            />
+          </Tooltip>
+          {/* A cut pointing away from the part removes nothing and raises nothing,
+              and which way that is depends on the plane, so it has to be said. */}
+          {preset?.cut && (
+            <Text style={{ color: CAD.dim, fontSize: 10 }}>
+              The cut runs along the plane&apos;s normal. If nothing is removed, make the depth negative.
+            </Text>
+          )}
+        </Space>
       ) : (
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
           <Segmented
@@ -195,8 +226,12 @@ export default function BuildPanel({ trigger }) {
       {/* Only when there is something on the machine to combine with. */}
       {hasPart && (
         <Space direction="vertical" size={2} style={{ width: '100%' }}>
-          <Text style={{ color: CAD.dim, fontSize: 11 }}>Against what the tree has built</Text>
-          <Segmented size="small" block value={merge} onChange={setMerge} options={MERGE_OPTIONS} />
+          {!preset && (
+            <>
+              <Text style={{ color: CAD.dim, fontSize: 11 }}>Against what the tree has built</Text>
+              <Segmented size="small" block value={merge} onChange={setMerge} options={MERGE_OPTIONS} />
+            </>
+          )}
           {mergeOp !== 'new' && (
             <Text style={{ color: CAD.dim, fontSize: 10 }}>
               A boolean between solids is approximate — where both shapes share a plane,

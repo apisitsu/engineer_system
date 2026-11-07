@@ -721,6 +721,8 @@ export default function App() {
           setRibbonSlot={setRibbonSlot}
           onSetup={() => openSetupAt()}
           onWorkOrigin={() => openSetupAt('[data-cam-origin]')}
+          onToolTable={() => openSetupAt('[data-cam-tools]')}
+          hasTools={detectedTools.length > 0}
           onExportGcode={onExportGcode}
           // Which run this will be depends on the program and the cutter, and it says
           // so in the button's name, so an undercut is not carved as a height field.
@@ -900,6 +902,7 @@ export default function App() {
 
               {show.tools && detectedTools.length > 0 && (
                 <>
+                  <span data-cam-tools />
                   <Divider style={{ margin: '4px 0', borderColor: CAD.border }}>
                     <Text style={{ color: CAD.muted }}>
                       Tool table{currentTool ? ` — cutting: T${currentTool.n}` : ''}

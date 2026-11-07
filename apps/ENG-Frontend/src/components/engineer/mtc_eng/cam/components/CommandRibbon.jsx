@@ -13,12 +13,15 @@
  * **Only commands that exist are here.** The mockup also draws Fillet, Pattern,
  * Measure, Section View and more, and the app has none of them. A button that does
  * nothing teaches people to stop trying the buttons.
+ *
+ * The four feature buttons open `BuildPanel` already set to what they name. The Sketch
+ * tab's Build keeps the full panel, for New and Common, which have no button here.
  */
 import { useEffect, useState } from 'react';
 import { Tooltip } from 'antd';
 import { SettingOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import RibbonButton from './RibbonButton.jsx';
-import BuildPanel from './BuildPanel.jsx';
+import BuildPanel, { useHasBuiltPart } from './BuildPanel.jsx';
 import { glyph } from './glyph.jsx';
 import { useCamStore } from '../stores/camStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
@@ -34,7 +37,11 @@ const TABS = [
   { value: 'turn', label: 'Turn' },
 ];
 
-const BuildIcon = glyph(<><path d="M4 15l8 4 8-4v-5l-8 4-8-4z" /><path d="M4 10l8-4 8 4M12 14v5" /><path d="M12 2v5M9.5 4.5L12 2l2.5 2.5" /></>);
+const ExtrudedBossIcon = glyph(<><path d="M4 15l8 4 8-4v-5l-8 4-8-4z" /><path d="M4 10l8-4 8 4M12 14v5" /><path d="M12 2v5M9.5 4.5L12 2l2.5 2.5" /></>);
+const ExtrudedCutIcon = glyph(<><path d="M4 15l8 4 8-4v-5l-8-4-8 4z" /><path d="M4 10l8 4 8-4M12 14v5" /><path d="M9 9l3 1.5L15 9l-3-1.5z" /></>);
+const RevolvedBossIcon = glyph(<><path d="M6 3v18" strokeDasharray="3 2" /><path d="M6 6h6c3.5 0 5 2.5 5 6s-1.5 6-5 6H6" /><path d="M16 3l3 2.5-3.5 1" /></>);
+const RevolvedCutIcon = glyph(<><path d="M6 3v18" strokeDasharray="3 2" /><path d="M6 6h6c3.5 0 5 2.5 5 6s-1.5 6-5 6H6" /><circle cx="13" cy="12" r="2.5" /></>);
+const ToolTableIcon = glyph(<><path d="M9 3h6v9l-3 4-3-4z" /><path d="M12 16v5" /></>);
 const RebuildIcon = glyph(<><path d="M19 9a8 8 0 10.5 5" /><path d="M19.5 4v5h-5" /></>);
 const SuppressIcon = glyph(<><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" /><path d="M4 20L20 4" /></>);
 const WorkOriginIcon = glyph(<><path d="M6 19V5M6 19h14" /><circle cx="6" cy="19" r="2.2" /></>);
@@ -54,7 +61,8 @@ function Command({ tip, ...button }) {
 
 /** The buttons for a machine page. The two differ only in what they say about simulating. */
 function MachineCommands({
-  onSetup, onWorkOrigin, onExportGcode, simulateCommand = { id: 'simulate', icon: <SimulateIcon /> },
+  onSetup, onWorkOrigin, onToolTable, hasTools, onExportGcode,
+  simulateCommand = { id: 'simulate', icon: <SimulateIcon /> },
 }) {
   const gcode = useCamStore((s) => s.gcode);
   const status = useCamStore((s) => s.status);
@@ -73,6 +81,10 @@ function MachineCommands({
       <Command
         icon={<WorkOriginIcon />} label="Work Origin" onClick={onWorkOrigin} disabled={!hasPart}
         tip={hasPart ? 'Set X0, Y0 and Z0 on the part' : 'Import a part first'}
+      />
+      <Command
+        icon={<ToolTableIcon />} label="Tool Table" onClick={onToolTable} disabled={!hasTools}
+        tip={hasTools ? 'The tools this program uses, each one editable' : 'Parse a program that names its tools first'}
       />
       <Sep />
       <Command
@@ -103,16 +115,50 @@ function FeatureCommands() {
   const rebuild = useFeatureStore((s) => s.rebuild);
   const toggleSuppress = useFeatureStore((s) => s.toggleSuppress);
   const selected = features.find((f) => f.id === selectedId);
+  const hasPart = useHasBuiltPart();
+
+  const feature = (preset, Icon, tip) => (
+    <BuildPanel
+      preset={preset}
+      trigger={(
+        <Tooltip
+          title={preset.cut && !hasPart ? 'Build a part first: a cut needs something to cut' : tip}
+          placement="bottom"
+        >
+          <RibbonButton
+            icon={<Icon />}
+            label={preset.name}
+            accent={!preset.cut}
+            disabled={preset.cut && !hasPart}
+          />
+        </Tooltip>
+      )}
+    />
+  );
 
   return (
     <>
-      <BuildPanel
-        trigger={(
-          <Tooltip title="Extrude or revolve the active sketch into a solid, adding to or cutting the part" placement="bottom">
-            <RibbonButton icon={<BuildIcon />} label="Extrude / Revolve" accent />
-          </Tooltip>
-        )}
-      />
+      {feature(
+        { name: 'Extruded Boss/Base', op: 'extrude', cut: false },
+        ExtrudedBossIcon,
+        'Extrude the active sketch into a solid, joined to the part if there is one',
+      )}
+      {feature(
+        { name: 'Revolved Boss/Base', op: 'revolve', cut: false },
+        RevolvedBossIcon,
+        'Revolve the active sketch into a solid, joined to the part if there is one',
+      )}
+      <Sep />
+      {feature(
+        { name: 'Extruded Cut', op: 'extrude', cut: true },
+        ExtrudedCutIcon,
+        'Extrude the active sketch and remove it from the part',
+      )}
+      {feature(
+        { name: 'Revolved Cut', op: 'revolve', cut: true },
+        RevolvedCutIcon,
+        'Revolve the active sketch and remove it from the part',
+      )}
       <Sep />
       <Command
         icon={<RebuildIcon />} label="Rebuild" accent={dirty} disabled={!features.length}
@@ -129,7 +175,7 @@ function FeatureCommands() {
 }
 
 export default function CommandRibbon({
-  setRibbonSlot, onSetup, onWorkOrigin, onExportGcode, simulateCommand,
+  setRibbonSlot, onSetup, onWorkOrigin, onToolTable, hasTools = false, onExportGcode, simulateCommand,
 }) {
   const page = useCamStore((s) => s.page);
   const setPage = useCamStore((s) => s.setPage);
@@ -199,6 +245,8 @@ export default function CommandRibbon({
           <MachineCommands
             onSetup={onSetup}
             onWorkOrigin={onWorkOrigin}
+            onToolTable={onToolTable}
+            hasTools={hasTools}
             onExportGcode={onExportGcode}
             simulateCommand={simulateCommand}
           />

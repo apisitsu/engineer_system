@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client';
 import CommandRibbon from './CommandRibbon.jsx';
 import { useCamStore } from '../stores/camStore.js';
 import { useFeatureStore } from '../stores/featureStore.js';
+import { useCamPlanStore } from '../stores/camPlanStore.js';
 
 let container;
 let root;
@@ -108,6 +109,35 @@ describe('CommandRibbon', () => {
     await render();
     const btn = q('button[data-cmd="simulateUndercut"]');
     expect(btn.textContent).toContain('Simulate the undercut');
+  });
+
+  it('opens the tool table when the program has tools', async () => {
+    props.onToolTable = vi.fn();
+    await render();
+    expect(button('Tool Table').disabled).toBe(true);
+    props.hasTools = true;
+    await render();
+    await press(button('Tool Table'));
+    expect(props.onToolTable).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the four named features, and a cut only once there is a part', async () => {
+    await render();
+    await press(tab('features'));
+    for (const name of ['Extruded Boss/Base', 'Revolved Boss/Base', 'Extruded Cut', 'Revolved Cut']) {
+      // eslint-disable-next-line jest/valid-expect
+      expect(button(name), name).not.toBeNull();
+    }
+    expect(button('Extruded Boss/Base').disabled).toBe(false);
+    expect(button('Extruded Cut').disabled).toBe(true);
+    expect(button('Revolved Cut').disabled).toBe(true);
+
+    await act(async () => {
+      useFeatureStore.setState({ features: [{ id: 'f1', name: 'Extrude1' }] });
+      useCamPlanStore.setState({ status: 'ready', stlName: 'part.stl' });
+    });
+    expect(button('Extruded Cut').disabled).toBe(false);
+    await act(async () => { useCamPlanStore.setState({ status: 'idle', stlName: null }); });
   });
 
   it('turns off what has nothing to act on', async () => {
