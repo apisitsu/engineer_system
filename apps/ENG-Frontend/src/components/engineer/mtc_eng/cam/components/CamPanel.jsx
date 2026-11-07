@@ -50,6 +50,7 @@ import {
 import { axisSummary, fitWarnings } from '../engine/cam/envelope.js';
 import { operationKind } from '../engine/cam/recipe.js';
 import { describeFace, describeEdge } from '../engine/mesh/features.js';
+import { flipOf } from '../engine/mesh/datum.js';
 import { visibleFeatures, hiddenNote } from '../engine/view/featureList.js';
 import { PART_ACCEPT, PART_FORMATS } from '../engine/mesh/import.js';
 import { dialectFor } from '../engine/cam/post/dialect.js';
@@ -322,7 +323,9 @@ export default function CamPanel() {
   const startPickRotaryZero = useCamPlanStore((s) => s.startPickRotaryZero);
   const clearRotaryZero = useCamPlanStore((s) => s.clearRotaryZero);
   const rotaryZeroAngle = useCamPlanStore((s) => s.rotaryZeroAngle);
-  const toggleReverseX = useCamPlanStore((s) => s.toggleReverseX);
+  const toggleFlip = useCamPlanStore((s) => s.toggleFlip);
+  const setAxisOffset = useCamPlanStore((s) => s.setAxisOffset);
+  const displayedDatumOffset = useCamPlanStore((s) => s.displayedDatumOffset);
 
   const busy = status === 'loading' || status === 'planning';
   const machine = machineById(machineId);
@@ -333,6 +336,7 @@ export default function CamPanel() {
   const dialect = dialectFor(machine.controller);
   const mode = plan?.mode ?? analysis?.recommend;
   const originPoint = displayedDatumPoint() ?? [0, 0, 0];
+  const originOffset = displayedDatumOffset();
   const rotaryCenterYZ = displayedRotaryCenter() ?? [0, 0];
 
   // `setAxisOrigin`/`setRotaryCenter` re-measure the whole mesh (see
@@ -350,6 +354,15 @@ export default function CamPanel() {
   }, [originPoint[0], originPoint[1], originPoint[2]]);
   const commitAxis = (i) => {
     if (originDraft[i] !== originPoint[i]) setAxisOrigin(i, originDraft[i]);
+  };
+
+  const [offsetDraft, setOffsetDraft] = React.useState(originOffset);
+  React.useEffect(() => {
+    setOffsetDraft(originOffset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originOffset[0], originOffset[1], originOffset[2]]);
+  const commitOffset = (i) => {
+    if (offsetDraft[i] !== originOffset[i]) setAxisOffset(i, offsetDraft[i]);
   };
 
   const [rotaryDraft, setRotaryDraft] = React.useState(rotaryCenterYZ);
@@ -671,7 +684,8 @@ export default function CamPanel() {
                   const armed = datumPickMode === label.toLowerCase();
                   const locked = datum.axesSet[i];
                   return (
-                    <Space key={label} size={6} wrap>
+                    <div key={label}>
+                    <Space size={6} wrap>
                       <Tooltip title={`Click the part to set ${label}0 there — only ${label} moves, nothing rotates`}>
                         <Button
                           size="small"
@@ -710,27 +724,50 @@ export default function CamPanel() {
                         <Text type="secondary" style={{ fontSize: 11 }}>free</Text>
                       )}
                     </Space>
+                    <Space size={6} wrap style={{ marginTop: 4 }}>
+                      <Tooltip title={`Put ${label}0 this far from the picked plane, along +${label}. The plane then reads ${label} = minus this distance.`}>
+                        <InputNumber
+                          size="small"
+                          addonBefore="Offset"
+                          aria-label={`${label} offset`}
+                          style={{ width: 132 }}
+                          step={0.1}
+                          value={offsetDraft[i]}
+                          onChange={(v) => {
+                            const next = [...offsetDraft];
+                            next[i] = v ?? 0;
+                            setOffsetDraft(next);
+                          }}
+                          onBlur={() => commitOffset(i)}
+                          onPressEnter={() => commitOffset(i)}
+                        />
+                      </Tooltip>
+                      {/* A 180° turn about the origin, not a mirror, so one other
+                          axis always reverses too: the switches show that. */}
+                      {mode === 'mill' && (
+                        <Space size={4}>
+                          <Switch
+                            size="small"
+                            aria-label={`Flip ${label}`}
+                            checked={flipOf(datum)[i]}
+                            onChange={() => toggleFlip(i)}
+                          />
+                          <Tooltip title={`Turn the part 180° about the origin so ${label} reads reversed. ${['X', 'Y', 'Z'][(i + 1) % 3]} reverses with it, because reversing one axis alone would mirror the part.`}>
+                            <Text style={{ color: CAD.label, fontSize: 12 }}>{`Flip ${label}`}</Text>
+                          </Tooltip>
+                        </Space>
+                      )}
+                    </Space>
+                    </div>
                   );
                 })}
               </div>
-              {datum.point && (
+              {(datum.point || flipOf(datum).some(Boolean)) && (
                 <CommandButton
                   id="clearDatum" size="small" type="text"
                   icon={<RollbackOutlined />}
                   style={{ marginTop: 4 }} onClick={clearDatum}
                 />
-              )}
-              {/* Turns the whole part 180° about Z — a rotation, not a
-                  mirror, so both X and Y reverse together — for when a
-                  program written or posted elsewhere counts X the other way
-                  along the same physical setup. */}
-              {mode === 'mill' && (
-                <Space size={4} style={{ marginTop: 6 }}>
-                  <Switch size="small" checked={datum.reverseX} onChange={toggleReverseX} />
-                  <Tooltip title="Rotate the part 180° about Z — reverses which end reads as high X (and high Y with it)">
-                    <Text style={{ color: CAD.label, fontSize: 12 }}>Flip X</Text>
-                  </Tooltip>
-                </Space>
               )}
             </div>
           </div>

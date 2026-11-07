@@ -390,6 +390,29 @@ describe('indexing and picking, on screen', () => {
     expect((container.textContent.match(/free/g) ?? []).length).toBe(2);
   });
 
+  it('offers an offset and a flip for each axis', async () => {
+    await planned(box(60, 40, 20));
+    for (const axis of ['X', 'Y', 'Z']) {
+      expect(container.querySelector(`input[aria-label="${axis} offset"]`)).not.toBeNull();
+      expect(container.textContent).toContain(`Flip ${axis}`);
+    }
+  });
+
+  it('shows both axes a flip reverses, and flips from the switch', async () => {
+    await planned(box(60, 40, 20));
+    await act(async () => { container.querySelector('button[aria-label="Flip Z"]').click(); });
+    await render();
+    const on = ['X', 'Y', 'Z'].map((a) => container
+      .querySelector(`button[aria-label="Flip ${a}"]`)
+      .getAttribute('aria-checked'));
+    expect(on).toEqual(['true', 'false', 'true']);
+  });
+
+  it('has no flip on a lathe job, where the part is never reoriented', async () => {
+    await planned(turnedShaft());
+    expect(container.textContent).not.toMatch(/Flip [XYZ]/);
+  });
+
   it('lists the faces and edges of the part to pick from', async () => {
     // eslint-disable-next-line testing-library/render-result-naming-convention
     const el = await planned(box(60, 40, 20));

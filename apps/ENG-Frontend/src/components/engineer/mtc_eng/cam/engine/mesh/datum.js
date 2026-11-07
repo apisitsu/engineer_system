@@ -27,8 +27,39 @@ import { boundsOf } from './analyze.js';
 import { isEvenPermutation, orientForMilling, reorient } from './orient.js';
 import { rotateAboutX, normalizeAngle } from './rotate.js';
 
-/** A proper (winding-preserving) 180° turn about Z: X and Y both reverse, Z does not. */
-const REVERSE_X_TRANSFORM = { order: [0, 1, 2], signs: [-1, -1, 1] };
+const AXIS_NAME = ['X', 'Y', 'Z'];
+const NO_FLIP = [false, false, false];
+
+/**
+ * Which displayed axes a datum reverses, as `[x, y, z]` booleans.
+ *
+ * A project saved before Y and Z could flip carries `reverseX:true` instead,
+ * which was the same 180° turn about Z that X and Y reversed together are now.
+ */
+export function flipOf(datum) {
+  if (datum?.flip) return datum.flip;
+  return datum?.reverseX ? [true, true, false] : NO_FLIP;
+}
+
+/**
+ * Flip one axis, carrying the next axis round with it (X→Y, Y→Z, Z→X).
+ *
+ * Reversing a single axis is a reflection, which would machine the mirror image
+ * of the model with nothing on screen looking wrong. Reversing two is a 180°
+ * turn about the third, so the part stays itself, and every setup keeps an even
+ * number of reversed axes.
+ */
+export function toggledFlip(flip, axis) {
+  const next = [...flip];
+  next[axis] = !next[axis];
+  const partner = (axis + 1) % 3;
+  next[partner] = !next[partner];
+  return next;
+}
+
+function applyFlip([x, y, z], flip) {
+  return [flip[0] ? -x : x, flip[1] ? -y : y, flip[2] ? -z : z];
+}
 
 /**
  * Move a point to the origin by subtracting it from every vertex.
@@ -125,8 +156,8 @@ export function angleToFaceUp([, ny, nz]) {
 /**
  * Map a point through the inverse of a `reorient`/`orientToNormal` transform,
  * plus the continuous `angle` a picked A0 face may have added (see
- * `angleToFaceUp`) and a `reverseX` 180°-about-Z flip on top of that (see
- * `applyDatum`) — undone in the reverse of the order they were applied.
+ * `angleToFaceUp`) and a `flip` 180° turn on top of that (see `applyDatum`) —
+ * undone in the reverse of the order they were applied.
  *
  * A point picked off the *displayed* mesh (already laid down, automatically
  * or by a previous datum) has to be converted back to the pristine import
@@ -138,11 +169,10 @@ export function angleToFaceUp([, ny, nz]) {
 export function pointToRawFrame(point, orientation) {
   if (!orientation) return point;
   const {
-    order, flipY = false, signs, angle = 0, reverseX = false,
+    order, flipY = false, signs, angle = 0, flip = NO_FLIP,
   } = orientation;
   const [sx, sy, sz] = signs ?? [1, flipY ? -1 : 1, 1];
-  let [x, y, z] = point;
-  if (reverseX) { x = -x; y = -y; }
+  let [x, y, z] = applyFlip(point, flip);
   if (angle) [y, z] = rotateYZ(y, z, -angle);
   const out = new Array(3);
   out[order[0]] = x * sx;
@@ -151,19 +181,18 @@ export function pointToRawFrame(point, orientation) {
   return out;
 }
 
-/** The forward transform of a single point, mirroring what `reorient` (plus a picked A0 and/or `reverseX`) does to vertices. */
+/** The forward transform of a single point, mirroring what `reorient` (plus a picked A0 and/or `flip`) does to vertices. */
 export function pointFromRawFrame(point, orientation) {
   if (!orientation) return point;
   const {
-    order, flipY = false, signs, angle = 0, reverseX = false,
+    order, flipY = false, signs, angle = 0, flip = NO_FLIP,
   } = orientation;
   const [sx, sy, sz] = signs ?? [1, flipY ? -1 : 1, 1];
-  let x = point[order[0]] * sx;
+  const x = point[order[0]] * sx;
   let y = point[order[1]] * sy;
   let z = point[order[2]] * sz;
   if (angle) [y, z] = rotateYZ(y, z, angle);
-  if (reverseX) { x = -x; y = -y; }
-  return [x, y, z];
+  return applyFlip([x, y, z], flip);
 }
 
 /**
@@ -242,13 +271,40 @@ export function faceToRawFrame(face, orientation, datumPoint) {
  * @param {object|null} orientation the active lay-down orientation
  * @param {0|1|2} axis the displayed axis being set (X, Y or Z)
  * @param {number[]} clickedDisplayed the picked point, in the displayed frame
+ * @param {number} [offset] how far along +axis the zero sits from the picked plane
  * @returns {number[]} the new origin, in the raw import frame
  */
-export function originFromAxisPick(currentRawPoint, orientation, axis, clickedDisplayed) {
+export function originFromAxisPick(currentRawPoint, orientation, axis, clickedDisplayed, offset = 0) {
   const g = currentRawPoint ? pointFromRawFrame(currentRawPoint, orientation) : [0, 0, 0];
   const next = [...g];
-  next[axis] = g[axis] + clickedDisplayed[axis];
+  next[axis] = g[axis] + clickedDisplayed[axis] + offset;
   return pointToRawFrame(next, orientation);
+}
+
+/**
+ * Set how far ONE axis's zero sits from the plane it was picked on.
+ *
+ * `datum.point` always holds the effective origin, offset included, so nothing
+ * downstream has to know offsets exist. `datum.offset` remembers how much of it
+ * is offset, which is what lets 0.5 → 1.0 move the origin by 0.5 rather than
+ * stacking on what is already there. Both are in the raw import frame, so a flip
+ * turns the part about the origin without moving it on the part: the fields read
+ * with the opposite sign and the physical zero stays where it was.
+ *
+ * @param {number[]|null} currentRawPoint the origin in force (raw frame), or null
+ * @param {number[]|null} currentRawOffset the offset in force (raw frame), or null
+ * @param {object|null} orientation the active lay-down orientation
+ * @param {0|1|2} axis the displayed axis being offset
+ * @param {number} value distance along +axis, in the displayed frame
+ * @returns {{point:number[], offset:number[]}} both in the raw import frame
+ */
+export function originFromAxisOffset(currentRawPoint, currentRawOffset, orientation, axis, value) {
+  const g = currentRawPoint ? pointFromRawFrame(currentRawPoint, orientation) : [0, 0, 0];
+  const d = currentRawOffset ? pointFromRawFrame(currentRawOffset, orientation) : [0, 0, 0];
+  return {
+    point: originFromAxisValue(currentRawPoint, orientation, axis, g[axis] + value - d[axis]),
+    offset: originFromAxisValue(currentRawOffset, orientation, axis, value),
+  };
 }
 
 /**
@@ -277,12 +333,13 @@ export function originFromAxisValue(currentRawPoint, orientation, axis, value) {
  * axis so the picked face reads as A0; a 4-axis part rarely arrives modelled
  * at the angle it will actually be chucked at, and this is the "index by eye
  * once" step that fixes that without touching `indexAngle`'s own numbering.
- * `datum.reverseX` then turns the whole result 180° about Z — a proper
- * rotation, so it reverses which end reads as high X *and* which side reads
- * as high Y together, rather than mirroring the part into its own reflection
- * — for when a hand-written or externally posted program counts X the other
- * way along the same physical setup. `datum.point`, in the raw import frame,
- * then becomes the new (0,0,0) once everything above has been applied.
+ * `datum.flip` then turns the whole result 180° about one axis — a proper
+ * rotation, so two axes reverse together (see `toggledFlip`) rather than
+ * mirroring the part into its own reflection — for when a hand-written or
+ * externally posted program counts an axis the other way along the same
+ * physical setup. `datum.point`, in the raw import frame, then becomes the new
+ * (0,0,0) once everything above has been applied, so the turn happens about the
+ * origin and the origin stays on the same spot of the part.
  *
  * Turning is never reoriented — `turningProfile` finds its own spindle axis
  * by symmetry — so only the translation matters there, and only its
@@ -291,12 +348,12 @@ export function originFromAxisValue(currentRawPoint, orientation, axis, value) {
  *
  * @param {{soup:object, welded:object}} raw the mesh exactly as imported
  * @param {{planeNormal:number[]|null, rotaryZero:number[]|null,
- *   reverseX:boolean, point:number[]|null}} datum
+ *   flip:boolean[], point:number[]|null}} datum
  * @param {{mode:'mill'|'turn'}} opts
  * @returns {{soup:object, welded:object, orientation:object|null}}
  *   `orientation` is `orientForMilling`'s record for mill — with an `angle`
- *   field added when `rotaryZero` moved anything, and `reverseX:true` when
- *   set — or `null` for turn, where none of this applies.
+ *   field added when `rotaryZero` moved anything, and `flip` when any axis is
+ *   reversed — or `null` for turn, where none of this applies.
  */
 export function applyDatum(raw, datum, { mode }) {
   if (mode !== 'mill') {
@@ -326,10 +383,20 @@ export function applyDatum(raw, datum, { mode }) {
     orientation = { ...orientation, angle: zeroAngle, changed: orientation.changed || zeroAngle !== 0 };
   }
 
-  if (datum?.reverseX) {
-    soup = reorient(soup, REVERSE_X_TRANSFORM);
-    welded = reorient(welded, REVERSE_X_TRANSFORM);
-    orientation = { ...orientation, reverseX: true, changed: true };
+  const flip = flipOf(datum);
+  if (flip.some(Boolean)) {
+    const turn = { order: [0, 1, 2], signs: flip.map((f) => (f ? -1 : 1)) };
+    soup = reorient(soup, turn);
+    welded = reorient(welded, turn);
+    const reversed = AXIS_NAME.filter((_, i) => flip[i]).join(' and ');
+    orientation = {
+      ...orientation,
+      flip,
+      changed: true,
+      // This line is what the setter reads at the vice, and a flip can turn the
+      // part upside down, so it has to say so rather than repeat the lay-down.
+      description: `${orientation.description} Then turned 180° so ${reversed} read reversed.`,
+    };
   }
 
   if (datum?.point) {

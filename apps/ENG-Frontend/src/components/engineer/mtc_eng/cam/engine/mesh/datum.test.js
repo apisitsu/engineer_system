@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   translate, orientToNormal, angleToFaceUp, pointToRawFrame, pointFromRawFrame,
   displayedPointToRawFrame, applyDatum, originFromAxisPick, originFromAxisValue,
+  originFromAxisOffset, toggledFlip,
 } from './datum.js';
 import { boundsOf, meshVolume, shellReport } from './analyze.js';
 import { reorient } from './orient.js';
@@ -123,8 +124,12 @@ describe('pointToRawFrame', () => {
     expect(back[2]).toBeCloseTo(raw[2], 6);
   });
 
-  it('round-trips through a permutation, an A0 angle, and reverseX all together', () => {
-    const o = { ...orientToNormal([0, -1, 0]), angle: 42, reverseX: true };
+  it.each([
+    [[true, true, false]],
+    [[false, true, true]],
+    [[true, false, true]],
+  ])('round-trips through a permutation, an A0 angle, and flip %j all together', (flip) => {
+    const o = { ...orientToNormal([0, -1, 0]), angle: 42, flip };
     const raw = [7, -3, 11];
     const displayed = pointFromRawFrame(raw, o);
     const back = pointToRawFrame(displayed, o);
@@ -215,6 +220,68 @@ describe('per-axis origin (touch off one axis at a time)', () => {
   });
 });
 
+describe('toggledFlip', () => {
+  it.each([
+    [0, [true, true, false]],
+    [1, [false, true, true]],
+    [2, [true, false, true]],
+  ])('axis %i reverses itself and the next axis', (axis, expected) => {
+    expect(toggledFlip([false, false, false], axis)).toEqual(expected);
+  });
+
+  it('never leaves an odd number of axes reversed, which would be a mirror', () => {
+    let flip = [false, false, false];
+    for (const axis of [0, 1, 2, 2, 0, 1, 1]) {
+      flip = toggledFlip(flip, axis);
+      expect(flip.filter(Boolean).length % 2).toBe(0);
+    }
+  });
+
+  it('undoes itself', () => {
+    expect(toggledFlip(toggledFlip([true, true, false], 1), 1)).toEqual([true, true, false]);
+  });
+});
+
+describe('offset from the picked plane', () => {
+  // Nothing laid down, so the displayed and raw frames agree.
+  const identity = null;
+
+  it('adds the distance to a pick along that axis only', () => {
+    const p = originFromAxisPick([1, 2, 0], identity, 2, [9, 9, 10], 0.5);
+    expect(p).toEqual([1, 2, 10.5]);
+  });
+
+  it('moves the origin by the change, not by the whole value', () => {
+    const first = originFromAxisOffset([0, 0, 10], [0, 0, 0], identity, 2, 0.5);
+    expect(first.point[2]).toBeCloseTo(10.5);
+    const second = originFromAxisOffset(first.point, first.offset, identity, 2, 1);
+    expect(second.point[2]).toBeCloseTo(11);
+    expect(second.offset[2]).toBeCloseTo(1);
+    const cleared = originFromAxisOffset(second.point, second.offset, identity, 2, 0);
+    expect(cleared.point[2]).toBeCloseTo(10);
+  });
+
+  it('leaves the other axes alone', () => {
+    const { point, offset } = originFromAxisOffset([3, 4, 5], [0.1, 0.2, 0], identity, 2, 1);
+    expect(point.slice(0, 2)).toEqual([3, 4]);
+    expect(offset.slice(0, 2)).toEqual([0.1, 0.2]);
+  });
+
+  it('works when nothing has been picked yet', () => {
+    const { point, offset } = originFromAxisOffset(null, null, identity, 0, 2);
+    expect(point).toEqual([2, 0, 0]);
+    expect(offset).toEqual([2, 0, 0]);
+  });
+
+  it('reads along the displayed axis on a part that was laid down and flipped', () => {
+    const orientation = { ...orientToNormal([0, -1, 0]), flip: [false, true, true] };
+    const { point, offset } = originFromAxisOffset(null, null, orientation, 2, 3);
+    expect(pointFromRawFrame(point, orientation)[2]).toBeCloseTo(3);
+    expect(pointFromRawFrame(offset, orientation)[2]).toBeCloseTo(3);
+    expect(pointFromRawFrame(point, orientation)[0]).toBeCloseTo(0);
+  });
+});
+
 describe('applyDatum', () => {
   it('with no plane picked, falls back to the automatic lay-down decision', () => {
     // Already the shortest-on-Z layout automatic orientation wants, so the
@@ -263,32 +330,58 @@ describe('applyDatum', () => {
     expect(b.max[1]).toBeCloseTo(10, 3);
   });
 
-  it('reverseX turns the part 180° about Z — a rotation, not a mirror', () => {
-    const soup = box(120, 30, 20);
+  // An offset part, so a turn visibly lands somewhere new: x 0..120, y 0..30, z 0..20.
+  const cornered = () => translate(box(120, 30, 20), [-60, -15, -10]);
+
+  it.each([
+    ['X and Y', [true, true, false], { min: [-120, -30, 0], max: [0, 0, 20] }],
+    ['Y and Z', [false, true, true], { min: [0, -30, -20], max: [120, 0, 0] }],
+    ['Z and X', [true, false, true], { min: [-120, 0, -20], max: [0, 30, 0] }],
+  ])('a flip of %s is a 180° turn, not a mirror', (_, flip, expected) => {
+    const soup = cornered();
     const welded = weld(soup);
     const before = meshVolume(welded);
-    const r = applyDatum(
-      { soup, welded },
-      { planeNormal: null, rotaryZero: null, reverseX: true, point: null },
-      { mode: 'mill' },
-    );
-    expect(r.orientation.reverseX).toBe(true);
+    const r = applyDatum({ soup, welded }, { flip, point: null }, { mode: 'mill' });
+    expect(r.orientation.flip).toEqual(flip);
+    expect(r.orientation.changed).toBe(true);
     // Proper rotation: same volume and winding, not flipped into a mirror image.
     expect(meshVolume(r.welded)).toBeCloseTo(before, 3);
     expect(Math.sign(meshVolume(r.welded))).toBe(Math.sign(before));
     expect(shellReport(r.welded).watertight).toBe(true);
 
-    // The corner that was at (+60, +15, +10) is now at (-60, -15, +10): X
-    // and Y both reverse, Z does not.
-    const pos = r.welded.positions;
-    let found = false;
-    for (let i = 0; i < pos.length; i += 3) {
-      if (Math.abs(pos[i] + 60) < 1e-3 && Math.abs(pos[i + 1] + 15) < 1e-3 && Math.abs(pos[i + 2] - 10) < 1e-3) {
-        found = true;
-        break;
-      }
+    const b = boundsOf(r.welded);
+    for (let i = 0; i < 3; i += 1) {
+      expect(b.min[i]).toBeCloseTo(expected.min[i], 3);
+      expect(b.max[i]).toBeCloseTo(expected.max[i], 3);
     }
-    expect(found).toBe(true);
+  });
+
+  it('turns about the picked origin, so the origin stays on the same spot of the part', () => {
+    const soup = cornered();
+    const welded = weld(soup);
+    // The top face at Z0: flipping Z leaves that face on Z0 with the part above it.
+    const r = applyDatum(
+      { soup, welded },
+      { flip: [true, false, true], point: [0, 0, 20] },
+      { mode: 'mill' },
+    );
+    const b = boundsOf(r.welded);
+    expect(b.min[2]).toBeCloseTo(0, 3);
+    expect(b.max[2]).toBeCloseTo(20, 3);
+  });
+
+  it('says so in the setup note, because a flip can turn the part upside down', () => {
+    const soup = cornered();
+    const r = applyDatum({ soup, welded: weld(soup) }, { flip: [false, true, true] }, { mode: 'mill' });
+    expect(r.orientation.description).toMatch(/Y and Z read reversed/);
+  });
+
+  it('still honours a project saved with the old reverseX flag', () => {
+    const soup = cornered();
+    const welded = weld(soup);
+    const r = applyDatum({ soup, welded }, { reverseX: true, point: null }, { mode: 'mill' });
+    expect(r.orientation.flip).toEqual([true, true, false]);
+    expect(boundsOf(r.welded).max[0]).toBeCloseTo(0, 3);
   });
 
   it('relocates the origin to a picked point and stands a side face up', () => {

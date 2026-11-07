@@ -26,7 +26,7 @@ import * as recipeOps from '../engine/cam/recipe.js';
 import { normalizeAngle } from '../engine/mesh/rotate.js';
 import {
   pointToRawFrame, pointFromRawFrame, displayedPointToRawFrame, faceToRawFrame,
-  originFromAxisPick, originFromAxisValue,
+  originFromAxisPick, originFromAxisValue, originFromAxisOffset, flipOf, toggledFlip,
 } from '../engine/mesh/datum.js';
 import { encodeFloat32, decodeFloat32 } from '../engine/projectFile.js';
 import { useCamStore } from './camStore.js';
@@ -47,7 +47,12 @@ export const getMesh = () => _mesh;
 const _raw = { soup: null, welded: null };
 
 const NO_DATUM = {
-  planeNormal: null, point: null, rotaryCenter: null, rotaryZero: null, reverseX: false,
+  planeNormal: null, point: null, rotaryCenter: null, rotaryZero: null,
+  // Which of X/Y/Z read reversed — always two or none, see `toggledFlip`.
+  flip: [false, false, false],
+  // How much of `point` is a typed distance from the picked plane rather than
+  // the plane itself, so editing it does not stack (see `originFromAxisOffset`).
+  offset: [0, 0, 0],
   // Which of X/Y/Z the operator has explicitly touched off, so the panel can
   // show each axis locked or free independently. `point` still carries the
   // values; this only records which axes are the operator's rather than the
@@ -279,7 +284,7 @@ export const useCamPlanStore = create((set, get) => ({
     // clearing the datum would compound transforms instead of each landing
     // where it should.
     const activeDatum = (datum.planeNormal || datum.point || datum.rotaryCenter
-      || datum.rotaryZero || datum.reverseX)
+      || datum.rotaryZero || flipOf(datum).some(Boolean))
       ? datum : null;
     _ctx = planContext(_raw.soup, _raw.welded, {
       mode: forceMode, partOff, machineId, datum: activeDatum,
@@ -538,7 +543,8 @@ export const useCamPlanStore = create((set, get) => ({
     if (!_ctx) return null;
     const orientation = _ctx.mode === 'mill' ? _ctx.orientation : null;
     const current = get().datum;
-    const rawPoint = originFromAxisPick(current.point, orientation, axis, point);
+    const offset = pointFromRawFrame(current.offset ?? NO_DATUM.offset, orientation)[axis];
+    const rawPoint = originFromAxisPick(current.point, orientation, axis, point, offset);
     const axesSet = [...current.axesSet];
     axesSet[axis] = true;
     set({ datum: { ...current, point: rawPoint, axesSet }, datumPickMode: null });
@@ -553,9 +559,26 @@ export const useCamPlanStore = create((set, get) => ({
     const orientation = _ctx.mode === 'mill' ? _ctx.orientation : null;
     const current = get().datum;
     const rawPoint = originFromAxisValue(current.point, orientation, axis, value ?? 0);
+    // An absolute value replaces the plane and its offset alike, or clearing the
+    // offset afterwards would move the origin away from what was just typed.
+    const offset = originFromAxisValue(current.offset, orientation, axis, 0);
     const axesSet = [...current.axesSet];
     axesSet[axis] = true;
-    set({ datum: { ...current, point: rawPoint, axesSet } });
+    set({ datum: { ...current, point: rawPoint, offset, axesSet } });
+    get().prepare();
+    if (get().recipe.length) get().rebuild();
+    return get().datum;
+  },
+
+  /** A typed distance from the picked plane for one axis, along +axis in the frame on screen. */
+  setAxisOffset(axis, value) {
+    if (!_ctx) return null;
+    const orientation = _ctx.mode === 'mill' ? _ctx.orientation : null;
+    const current = get().datum;
+    const { point, offset } = originFromAxisOffset(current.point, current.offset, orientation, axis, value ?? 0);
+    const axesSet = [...current.axesSet];
+    axesSet[axis] = true;
+    set({ datum: { ...current, point, offset, axesSet } });
     get().prepare();
     if (get().recipe.length) get().rebuild();
     return get().datum;
@@ -572,7 +595,8 @@ export const useCamPlanStore = create((set, get) => ({
     // point entirely so the mesh passes through untouched (reference equality).
     const zeroed = originFromAxisValue(current.point, orientation, axis, 0);
     const point = axesSet.some(Boolean) ? zeroed : null;
-    set({ datum: { ...current, point, axesSet } });
+    const offset = originFromAxisValue(current.offset, orientation, axis, 0);
+    set({ datum: { ...current, point, offset, axesSet } });
     get().prepare();
     if (get().recipe.length) get().rebuild();
     return get().datum;
@@ -601,6 +625,14 @@ export const useCamPlanStore = create((set, get) => ({
     if (!datum.point || !_ctx) return null;
     const orientation = _ctx.mode === 'mill' ? _ctx.orientation : null;
     return pointFromRawFrame(datum.point, orientation);
+  },
+
+  /** The current per-axis offset from the picked planes, in the frame on screen. */
+  displayedDatumOffset() {
+    const { datum } = get();
+    if (!datum.offset || !_ctx) return NO_DATUM.offset;
+    const orientation = _ctx.mode === 'mill' ? _ctx.orientation : null;
+    return pointFromRawFrame(datum.offset, orientation);
   },
 
   /**
@@ -679,13 +711,14 @@ export const useCamPlanStore = create((set, get) => ({
   },
 
   /**
-   * Turn the whole part 180° about Z — swapping which end reads as high X
-   * (and, since a mirror would flip the model into scrap, which side reads
-   * as high Y along with it) — for when a program written or posted
-   * elsewhere counts X the other way along the same physical setup.
+   * Reverse one axis by turning the whole part 180° about the origin — swapping
+   * which end reads high on that axis (and, since a mirror would flip the model
+   * into scrap, on one other axis along with it) — for when a program written or
+   * posted elsewhere counts it the other way along the same physical setup.
    */
-  toggleReverseX() {
-    set({ datum: { ...get().datum, reverseX: !get().datum.reverseX } });
+  toggleFlip(axis) {
+    const current = get().datum;
+    set({ datum: { ...current, flip: toggledFlip(flipOf(current), axis) } });
     get().prepare();
     if (get().recipe.length) get().rebuild();
   },
@@ -784,7 +817,7 @@ export const useCamPlanStore = create((set, get) => ({
         diameterMode: settings.diameterMode ?? true,
         programNumber: settings.programNumber ?? 1,
         indexAngle: settings.indexAngle ?? 0,
-        datum: { ...NO_DATUM, ...(cam.datum ?? {}) },
+        datum: { ...NO_DATUM, ...(cam.datum ?? {}), flip: flipOf(cam.datum) },
         recipe: Array.isArray(cam.recipe) ? cam.recipe : [],
         selectedFeature: null,
         previewFeature: null,
