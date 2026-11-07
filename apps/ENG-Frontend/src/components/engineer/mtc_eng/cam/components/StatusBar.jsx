@@ -96,6 +96,11 @@ export default function StatusBar() {
       <Text strong style={{ ...cell, color: CAD.text }} data-status="mode">{mode}</Text>
       <Text style={cell} data-status="selection">Selected: {selection}</Text>
       <span style={{ flex: 1 }} />
+      {page !== 'sketch' && (
+        <Text style={cell} data-status="legend">
+          Rapid <span style={{ color: CAD.rapid }}>-----</span> Feed <span style={{ color: CAD.feed }}>-----</span>
+        </Text>
+      )}
       <Text style={cell}>mm</Text>
       <Text
         style={{ ...cell, color: stale ? CAD.accent : CAD.label, fontWeight: stale ? 600 : 400 }}

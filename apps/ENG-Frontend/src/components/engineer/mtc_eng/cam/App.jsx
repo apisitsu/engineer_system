@@ -60,6 +60,7 @@ import StatusBar from './components/StatusBar.jsx';
 import SketchContextMenu from './components/SketchContextMenu.jsx';
 import SketchConfirmCorner from './components/SketchConfirmCorner.jsx';
 import MenuBar from './components/MenuBar.jsx';
+import CommandRibbon from './components/CommandRibbon.jsx';
 import StdVcDialog from './components/StdVcDialog.jsx';
 import CustomTurnToolDialog from './components/CustomTurnToolDialog.jsx';
 import StdEditorDialog from './components/StdEditorDialog.jsx';
@@ -80,18 +81,11 @@ import { CAD } from './theme.js';
 const { Sider, Content, Header } = Layout;
 const { Title, Text } = Typography;
 
-const PAGES = [
-  { label: 'Milling', value: 'mill' },
-  { label: 'Turning', value: 'turn' },
-  { label: 'Sketch', value: 'sketch' },
-];
-
 export default function App() {
   const { token } = theme.useToken();
   const { notification } = AntdApp.useApp();
   // Small scalar state from Zustand — large buffers live in bufferCache.
   const gcode = useCamStore((s) => s.gcode);
-  const fileName = useCamStore((s) => s.fileName);
   const status   = useCamStore((s) => s.status);
   const bufVer   = useCamStore((s) => s.bufVer);  // version counter — triggers re-render
   const playhead = useCamStore((s) => s.playhead);
@@ -172,7 +166,6 @@ export default function App() {
   const toggleTool = useCamStore((s) => s.toggleTool);
   const toggleToolpath = useCamStore((s) => s.toggleToolpath);
   const setCutFollows = useCamStore((s) => s.setCutFollows);
-  const setPage     = useCamStore((s) => s.setPage);
   const setViewPreset = useCamStore((s) => s.setViewPreset);
   const setRapidRate = useCamStore((s) => s.setRapidRate);
   const setToolChangeSeconds = useCamStore((s) => s.setToolChangeSeconds);
@@ -663,28 +656,32 @@ export default function App() {
             // Library had a drawer of its own to collide with.
             onToggleLibrary={() => { setSettingsOpen(false); setLibraryOpen((v) => !v); }}
             onOpenSetup={() => { setLibraryOpen(false); setSettingsOpen(true); }}
+            brand={(
+              <>
+                <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 18 }} />
+                <span style={{
+                  color: CAD.text, fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', margin: '0 8px 0 4px',
+                }}
+                >
+                  Engineer CAM Lite
+                </span>
+              </>
+            )}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0 8px' }}>
-            <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 22 }} />
-            <Title level={4} style={{ color: CAD.text, margin: 0 }}>
-              Engineer CAM Lite
-            </Title>
-            <Segmented
-              value={page}
-              onChange={setPage}
-              options={PAGES}
-              disabled={status === 'parsing'}
-            />
-            {fileName && <Tag color="blue">{fileName}</Tag>}
-            <Text style={{ color: CAD.muted, marginLeft: 'auto' }}>
-              Rapid <span style={{ color: CAD.rapid }}>-----</span>   Feed {' '}
-              <span style={{ color: CAD.feed }}>-----</span>
-            </Text>
-          </div>
         </Header>
-        {/* The Ribbon: the Sketch page's command rail, docked here rather than
-            floating over the viewport. Empty (zero height) on every other page. */}
-        <div ref={setRibbonSlot} data-ribbon-slot style={{ flex: '0 0 auto' }} />
+        <CommandRibbon
+          setRibbonSlot={setRibbonSlot}
+          onSetup={() => { setLibraryOpen(false); setSettingsOpen(true); }}
+          onWorkOrigin={() => {
+            setLibraryOpen(false);
+            setSettingsOpen(true);
+            // After the drawer has slid in, or the scroll has nothing to scroll.
+            setTimeout(() => {
+              document.querySelector('[data-cam-origin]')?.scrollIntoView?.({ block: 'start' });
+            }, 350);
+          }}
+          onExportGcode={onExportGcode}
+        />
         <Layout>
           {/* The left column is the **feature tree**, the way a CAD lays a part
               window out: the model's structure is the thing that stays on

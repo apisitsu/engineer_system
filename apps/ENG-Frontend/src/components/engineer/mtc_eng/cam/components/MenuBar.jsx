@@ -177,7 +177,7 @@ export function searchMenu(flat, query, limit = 8) {
 }
 
 export default function MenuBar({
-  onExportGcode, libraryOpen, onToggleLibrary, onOpenSetup,
+  onExportGcode, libraryOpen, onToggleLibrary, onOpenSetup, brand = null,
 }) {
   const page = useCamStore((s) => s.page);
   const view = useCamStore((s) => s.view);
@@ -212,6 +212,8 @@ export default function MenuBar({
   const dxfInput = useRef(null);
   const searchRef = useRef(null);
   const [query, setQuery] = useState('');
+  // Who is signed in, as the host app stores it. Empty in standalone cam-web.
+  const operator = localStorage.getItem('u_code');
   // The name being typed into Save As, where the browser has no dialog of its own.
   const [saveAsName, setSaveAsName] = useState(null);
 
@@ -342,6 +344,7 @@ export default function MenuBar({
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {brand}
       {hiddenInput(fileInput, PROGRAM_ACCEPT, loadFile)}
       {hiddenInput(projectInput, '.json,.camweb.json', guarded2(openFromFile, setError))}
       <Modal
@@ -410,6 +413,11 @@ export default function MenuBar({
         popupMatchSelectWidth={300}
         data-menu-search
       />
+      {operator && (
+        <span style={{ color: CAD.label, fontSize: 12, whiteSpace: 'nowrap' }} data-menu-operator>
+          {operator}
+        </span>
+      )}
     </div>
   );
 }

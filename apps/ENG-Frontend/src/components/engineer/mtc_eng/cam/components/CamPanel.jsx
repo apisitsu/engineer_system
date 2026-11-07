@@ -671,7 +671,7 @@ export default function CamPanel() {
               table to teach the interpreter about, so instead the part itself
               is moved to sit at whatever point the operator actually touched
               off at. */}
-          <div>
+          <div data-cam-origin>
             <Text style={{ color: CAD.label, fontSize: 11 }}>
               Origin — so a separately loaded .nc program simulates at the same X0/Y0/Z0
             </Text>

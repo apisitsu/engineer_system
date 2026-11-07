@@ -53,13 +53,19 @@ is the agreed layout — open it in a browser). **Done:** feature-tree icons per
 on the selected row, which is drawn on the accent colour) and a **status bar**
 (`StatusBar.jsx`, docked after the working area in `App.jsx`). The status bar shows
 only values the app really holds — what is being edited, what is selected, tree
-up-to-date — never placeholder coordinates. **Not done yet:** the docked Ribbon
-(labelled buttons, tabs by task), the Insert menu and the command search. Until the
-Ribbon lands, the rule in `engine/view/commands.js` still holds — toolbar buttons
-are glyphs named on hover — and the Ribbon is the agreed exception to it: **buttons
-on the Ribbon carry a label under the glyph**, glyph-only stays for the narrow rails.
-The mockup's *Evaluate* tab (Measure, Section, Check part) lists commands that do not
-exist in the app; do not build the tab until there is something real to put in it.
+up-to-date — never placeholder coordinates. The Insert menu and command search are in
+`MenuBar.jsx`, with the app name on the same row. The **Ribbon** is `CommandRibbon.jsx`:
+tabs Features / Sketch / Mill / Turn, with the Sketch tab's buttons portalled in from
+`SketchToolbar`. The rule in `engine/view/commands.js` still holds for the rails —
+glyphs named on hover — and the Ribbon is the agreed exception: **buttons on the Ribbon
+carry a label under the glyph**. It holds only commands that exist, so the mockup's
+Fillet, Pattern, G71, Billet and the rest stay out until they do, and the *Evaluate*
+tab (Measure, Section, Check part) is not built until there is something real to put
+in it. **Project saving, opening, DXF and the library are in the File menu, not the
+Ribbon** — the operator's decision, 2026-11-07, overriding the mockup's Sketch tab.
+**Not done yet:** the view toolbar across the top of the viewport (the bottom rail
+still holds view toggles and playback), and the bottom tabs Model / Program /
+Simulation / Library.
 
 ## Every colour comes from `cam/theme.js`
 
