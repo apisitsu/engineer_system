@@ -8,17 +8,15 @@
  * Drawing itself still happens in the viewport (SketchLayer); this is the toolbar
  * and status readout, wired to the same sketchStore.
  */
-import { Button, Tooltip, Popover, InputNumber, Space, Tag, Typography, Divider, Segmented, Upload } from 'antd';
+import { Button, Tooltip, Popover, InputNumber, Space, Tag, Typography, Divider, Segmented } from 'antd';
 import {
   UndoOutlined, RedoOutlined, DeleteOutlined, ThunderboltOutlined,
-  NodeIndexOutlined, EllipsisOutlined, BulbOutlined, ClearOutlined,
-  ExportOutlined, ImportOutlined,
+  NodeIndexOutlined,
 } from '@ant-design/icons';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useSketchStore } from '../stores/sketchStore.js';
 import RibbonButton from './RibbonButton.jsx';
-import { exportSketchDxf } from '../lib/projectIO.js';
 import SketchesPanel from './SketchesPanel.jsx';
 import BuildPanel from './BuildPanel.jsx';
 // The helper this rail introduced now serves the whole app — see `glyph.jsx`.
@@ -582,30 +580,12 @@ export default function SketchToolbar({ ribbonSlot = null }) {
   const undo = useSketchStore((s) => s.undo);
   const redo = useSketchStore((s) => s.redo);
   const deleteSelected = useSketchStore((s) => s.deleteSelected);
-  const loadDemo = useSketchStore((s) => s.loadDemo);
-  const clear = useSketchStore((s) => s.clear);
   const sk = useSketchStore((s) => s.sk);
   const toggleConstruction = useSketchStore((s) => s.toggleConstruction);
   const mirror = useSketchStore((s) => s.mirror);
   const beginOffset = useSketchStore((s) => s.beginOffset);
   const polygonSides = useSketchStore((s) => s.polygonSides);
   const setPolygonSides = useSketchStore((s) => s.setPolygonSides);
-
-  const setError = useSketchStore((s) => s.setError);
-  // Export failures land on the sketcher's own error line.
-  const onExportDxf = useCallback(async () => {
-    try { await exportSketchDxf(); } catch (e) { setError?.(e?.message || String(e)); }
-  }, [setError]);
-  const importDxf = useSketchStore((s) => s.importDxf);
-  const onImportDxf = useCallback(async (file) => {
-    try {
-      // The file's own name becomes the sketch's, so a drawing imported next to
-      // two others is identifiable in the list.
-      importDxf(await file.text(), { name: file.name.replace(/\.[^.]*$/, '') || 'DXF' });
-    } catch (e) {
-      setError?.(e?.message || String(e));
-    }
-  }, [importDxf, setError]);
 
   const activeHint = TOOLS.find((t) => t.value === tool)?.hint;
   // Enablement for the sketch-modify tools, from the current selection.
@@ -752,9 +732,8 @@ export default function SketchToolbar({ ribbonSlot = null }) {
 
       {/* The 2D→3D pair. Which sketch and which plane comes first because it is
           what the drawing lands on; Build is next to it because it is what the
-          drawing is for. Both are their own triggers because a popover nested
-          inside the "More" popover closes the outer one as you reach for it.
-          Saving and opening projects, and the library, are in the File menu. */}
+          drawing is for. Saving and opening projects, DXF and the library are in
+          the File menu, and Clear sketch is in Edit. */}
       <SketchesPanel
         trigger={(
           <Tooltip title="Sketches — which one you are drawing, and the plane it sits on" placement="bottom">
@@ -769,37 +748,6 @@ export default function SketchToolbar({ ribbonSlot = null }) {
           </Tooltip>
         )}
       />
-
-
-      <Popover
-        trigger="click"
-        placement="bottomLeft"
-        content={(
-          <Space direction="vertical" size={4}>
-            <Tooltip title="DXF is the format SolidWorks, CATIA, AutoCAD and other CAM packages all read">
-              <Button size="small" icon={<ExportOutlined />} onClick={onExportDxf} block>
-                Export DXF
-              </Button>
-            </Tooltip>
-            <Tooltip title="Read a DXF drawing in as a new sketch — lines, circles, arcs and polylines, with the ends that meet welded so the profile closes">
-              <Upload
-                accept=".dxf"
-                showUploadList={false}
-                beforeUpload={(file) => { onImportDxf(file); return false; }}
-              >
-                <Button size="small" icon={<ImportOutlined />} block>Import DXF</Button>
-              </Upload>
-            </Tooltip>
-            <Divider style={{ margin: '4px 0' }} />
-            <Button size="small" icon={<BulbOutlined />} onClick={() => loadDemo()} block>Demo sketch</Button>
-            <Button size="small" icon={<ClearOutlined />} onClick={() => clear()} block>Clear all</Button>
-          </Space>
-        )}
-      >
-        <Tooltip title="More" placement="bottom">
-          <RibbonButton icon={<EllipsisOutlined />} label="More" />
-        </Tooltip>
-      </Popover>
 
       {/* Compact status: active-tool hint, DOF, solve result. */}
       {sep}

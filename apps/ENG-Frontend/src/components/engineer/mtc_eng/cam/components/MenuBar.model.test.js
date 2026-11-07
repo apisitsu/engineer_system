@@ -42,10 +42,16 @@ describe('buildMenuItems', () => {
 
   it('keeps every way of saving and opening a project in the File menu', () => {
     const file = buildMenuItems(ctx()).find((m) => m.key === 'file').children.map((c) => c.key);
-    for (const key of ['open-project', 'save-project', 'save-project-as', 'library']) {
+    for (const key of ['open-project', 'save-project', 'save-project-as', 'library', 'import-dxf', 'export-dxf']) {
       // eslint-disable-next-line jest/valid-expect
       expect(file, key).toContain(key);
     }
+    expect(file).not.toContain('sample');
+  });
+
+  it('offers Clear sketch only on the Sketch page', () => {
+    expect(leaf(buildMenuItems(ctx({ sketching: false })), 'clear-sketch').disabled).toBe(true);
+    expect(leaf(buildMenuItems(ctx({ sketching: true })), 'clear-sketch').disabled).toBe(false);
   });
 
   it('gives every command a unique key', () => {

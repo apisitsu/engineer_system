@@ -845,6 +845,20 @@ describe('camPlanStore — origin at the centre of a circle', () => {
     expect(store().datum.axesSet).toEqual([true, true, true]);
   });
 
+  it('takes the circle on show, whatever surface the click landed on', async () => {
+    await offCentreTube();
+    store().startPickCircle();
+    useCamPlanStore.setState({
+      datumHover: { id: 'c', circle: { axis: 2, center: [5, 7, 15], radius: 10 } },
+    });
+    store().pickCircleCenter();
+    const shown = store().displayedDatumPoint();
+    expect(shown[0]).toBeCloseTo(5, 3);
+    expect(shown[1]).toBeCloseTo(7, 3);
+    expect(store().datumPickMode).toBeNull();
+    expect(store().datumHover).toBeNull();
+  });
+
   it('stays armed and says so when there is no circle', async () => {
     await store().loadStl(stlFile(box(60, 40, 15)));
     await store().makePlan();

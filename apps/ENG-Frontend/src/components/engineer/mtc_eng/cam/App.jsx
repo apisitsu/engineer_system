@@ -216,7 +216,7 @@ export default function App() {
   const toolToggle = offerToolToggle({ mode, sketching });
 
   // Open on a blank page — no sample program is loaded. The user brings their
-  // own via drag-and-drop, Open file, or the (optional) Load sample button.
+  // own via drag-and-drop or Open file.
 
   usePlayback(playing, speed);
 

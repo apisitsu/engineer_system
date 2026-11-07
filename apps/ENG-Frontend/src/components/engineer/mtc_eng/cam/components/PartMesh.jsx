@@ -206,7 +206,10 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
         };
       }
       const circle = nearestCircle(circleCache.current.circles, point);
-      if (!circle) { setDatumHover(null); return; }
+      // Keep the marker on show until another circle replaces it, or it would vanish
+      // on the way to it: the ring sits on an edge, where the cursor crosses a
+      // chamfer or leaves the part altogether.
+      if (!circle) return;
       const across = circle.center.filter((_, i) => i !== circle.axis).map((v) => v.toFixed(3));
       setDatumHover({ id: `circle:${circle.axis}:${across.join(',')}:${circle.radius.toFixed(3)}`, circle });
       return;
@@ -218,7 +221,7 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
   };
 
   const onPointerOut = () => {
-    setDatumHover(null);
+    if (datumPickMode !== 'circle') setDatumHover(null);
     if (hoverIdRef.current === null) return;
     hoverIdRef.current = null;
     previewFeatureAt(null);
@@ -323,8 +326,14 @@ function circleMarkerGeometry({ axis, center, radius }, size) {
  */
 export function DatumPickHighlight({ meshVer }) {
   const hover = useCamPlanStore((s) => (s.datumPickMode ? s.datumHover : null));
+  const pickCircleCenter = useCamPlanStore((s) => s.pickCircleCenter);
   const bounds = useCamPlanStore((s) => s.analysis?.bounds);
   const size = originMarkerSize(bounds);
+  // The ring is a click target of its own, because half of it can hang off the
+  // edge of the part, where a click would otherwise hit nothing.
+  const onClick = hover?.circle
+    ? (event) => { event.stopPropagation(); pickCircleCenter(); }
+    : undefined;
   const geometries = useMemo(() => {
     if (hover?.circle) return circleMarkerGeometry(hover.circle, size);
     if (hover?.face) {
@@ -342,7 +351,7 @@ export function DatumPickHighlight({ meshVer }) {
   return (
     <group name="datum-pick-highlight">
       {geometries.map((g) => (
-        <mesh key={g.uuid} geometry={g} renderOrder={10}>
+        <mesh key={g.uuid} geometry={g} renderOrder={10} onClick={onClick}>
           {/* A circle draws over the part, so a bore is still marked from a view
               that hides its far edge. A face keeps its depth test and only lifts
               off the facets it covers, so it shows which side is being picked. */}

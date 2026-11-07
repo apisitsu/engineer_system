@@ -329,6 +329,37 @@ describe('PartMesh — showing what an armed pick would take', () => {
     expect(store().datumHover).toBeNull();
   });
 
+  it('keeps the circle on show across a surface with none, and off the part', async () => {
+    await store().loadStl(stlFile(tube(20, 10, 30)));
+    await store().makePlan();
+    store().startPickCircle();
+    const part = await partOf();
+    await ReactThreeTestRenderer.act(async () => {
+      part.props.onPointerMove(event([10, 0, 15], [-1, 0, 0], 0));
+    });
+    const shown = store().datumHover;
+    await ReactThreeTestRenderer.act(async () => {
+      // A chamfer: no circle can be read from a facet at this angle.
+      part.props.onPointerMove(event([10, 0, 30], [-0.6, 0, 0.8], 1));
+      part.props.onPointerOut();
+    });
+    expect(store().datumHover).toBe(shown);
+  });
+
+  it('a click on the part takes the circle on show', async () => {
+    await store().loadStl(stlFile(tube(20, 10, 30)));
+    await store().makePlan();
+    store().startPickCircle();
+    const part = await partOf();
+    await ReactThreeTestRenderer.act(async () => {
+      part.props.onPointerMove(event([10, 0, 15], [-1, 0, 0], 0));
+      // Lands on the chamfer beside the ring, where no circle can be read.
+      part.props.onClick(event([10, 0, 30], [-0.6, 0, 0.8], 1));
+    });
+    expect(store().datumPickMode).toBeNull();
+    expect(store().datum.axesSet).toEqual([true, true, false]);
+  });
+
   it('clears when the cursor leaves the part', async () => {
     await store().loadStl(stlFile(box(60, 40, 20)));
     await store().makePlan();
@@ -377,6 +408,23 @@ describe('DatumPickHighlight', () => {
     expect(groups(r)).toHaveLength(1);
     // eslint-disable-next-line testing-library/await-async-query
     expect(r.scene.findAllByType('Mesh')).toHaveLength(2);
+  });
+
+  it('takes the circle when the ring itself is clicked', async () => {
+    await store().loadStl(stlFile(box(60, 40, 20)));
+    await store().makePlan();
+    useCamPlanStore.setState({
+      datumPickMode: 'circle',
+      datumHover: { id: 'circle:x', circle: { axis: 2, center: [1, 2, 3], radius: 5 } },
+    });
+    const r = await ReactThreeTestRenderer.create(<DatumPickHighlight meshVer={store().meshVer} />);
+    // eslint-disable-next-line testing-library/await-async-query
+    const ring = r.scene.findAllByType('Mesh')[0];
+    await ReactThreeTestRenderer.act(async () => {
+      ring.props.onClick({ stopPropagation() {} });
+    });
+    expect(store().datumPickMode).toBeNull();
+    expect(store().datum.axesSet).toEqual([true, true, false]);
   });
 
   it('draws the face for an axis pick', async () => {

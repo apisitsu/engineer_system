@@ -558,12 +558,17 @@ export const useCamPlanStore = create((set, get) => ({
   startPickCircle() { set({ datumPickMode: 'circle', datumPickHint: null, datumHover: null }); },
 
   /**
-   * A click on or beside a circle puts the origin on its centre. A click that finds
-   * no circle stays armed and says so, rather than setting an origin nobody asked for.
+   * A click puts the origin on the centre of the circle on show, if one is. What is
+   * marked is what gets taken: re-reading the circle from the click would answer for
+   * whatever surface happens to lie under the marker, which may be a chamfer or
+   * nothing at all. With no marker, as on a touch screen, the click itself decides.
+   * A click that finds no circle stays armed and says so, rather than setting an
+   * origin nobody asked for.
    */
   pickCircleCenter(point, normal) {
     if (!_ctx) return null;
-    const circle = circleAtPick(_mesh.welded, point, normal);
+    const circle = get().datumHover?.circle
+      ?? (point && normal ? circleAtPick(_mesh.welded, point, normal) : null);
     if (!circle) {
       set({ datumPickHint: 'No circle found there. Click a round wall, or a flat face beside a circle.' });
       return null;
@@ -576,6 +581,7 @@ export const useCamPlanStore = create((set, get) => ({
       datum: { ...current, point: rawPoint, axesSet },
       datumPickMode: null,
       datumPickHint: null,
+      datumHover: null,
     });
     get().prepare();
     if (get().recipe.length) get().rebuild();

@@ -35,7 +35,6 @@ import { useLibraryStore } from '../stores/libraryStore.js';
 import {
   saveProject, saveProjectAs, canPickSaveLocation, currentProjectFileName, openProjectFile, exportSketchDxf,
 } from '../lib/projectIO.js';
-import { SAMPLE_GCODE, SAMPLE_TURNING } from '../SAMPLE_GCODE.js';
 import { CAD } from '../theme.js';
 
 const PROGRAM_ACCEPT = '.nc,.gcode,.gc,.tap,.cnc,.ngc,.txt,.mpf';
@@ -66,11 +65,12 @@ export function buildMenuItems(ctx) {
       label: 'File',
       children: [
         { key: 'open', label: 'Open program…' },
-        { key: 'sample', label: 'Load sample' },
         { type: 'divider' },
         { key: 'open-project', label: 'Open project…' },
         { key: 'save-project', label: 'Save project' },
         { key: 'save-project-as', label: 'Save project as…' },
+        { type: 'divider' },
+        { key: 'import-dxf', label: 'Import DXF…', disabled: !sketching },
         { key: 'export-dxf', label: 'Export sketch as DXF', disabled: !sketching },
         { type: 'divider' },
         { key: 'library', label: libraryOpen ? 'Library ✓' : 'Library…' },
@@ -87,6 +87,7 @@ export function buildMenuItems(ctx) {
         { key: 'rebuild', label: 'Rebuild', disabled: !hasFeatures },
         { type: 'divider' },
         { key: 'delete', label: 'Delete', disabled: !sketching || !hasSelection },
+        { key: 'clear-sketch', label: 'Clear sketch', disabled: !sketching },
       ],
     },
     {
@@ -107,7 +108,6 @@ export function buildMenuItems(ctx) {
       children: [
         { key: 'new-sketch', label: 'New sketch', disabled: !sketching },
         { key: 'sketch-on-face', label: 'Sketch on picked face', disabled: !sketching || !hasFace },
-        { key: 'import-dxf', label: 'Import DXF…', disabled: !sketching },
       ],
     },
     {
@@ -180,11 +180,9 @@ export default function MenuBar({
   onExportGcode, libraryOpen, onToggleLibrary, onOpenSetup,
 }) {
   const page = useCamStore((s) => s.page);
-  const mode = useCamStore((s) => s.mode);
   const view = useCamStore((s) => s.view);
   const gcode = useCamStore((s) => s.gcode);
   const loadFile = useCamStore((s) => s.loadFile);
-  const parse = useCamStore((s) => s.parse);
   const setViewPreset = useCamStore((s) => s.setViewPreset);
 
   const sketching = page === 'sketch';
@@ -192,6 +190,7 @@ export default function MenuBar({
   const undo = useSketchStore((s) => s.undo);
   const redo = useSketchStore((s) => s.redo);
   const deleteSelected = useSketchStore((s) => s.deleteSelected);
+  const clearSketch = useSketchStore((s) => s.clear);
   const addSketch = useSketchStore((s) => s.addSketch);
   const importDxf = useSketchStore((s) => s.importDxf);
   const setError = useSketchStore((s) => s.setError);
@@ -274,7 +273,6 @@ export default function MenuBar({
       return;
     }
     if (key === 'open') { fileInput.current?.click(); return; }
-    if (key === 'sample') { parse(mode === 'turn' ? SAMPLE_TURNING : SAMPLE_GCODE); return; }
     if (key === 'open-project') { projectInput.current?.click(); return; }
     if (key === 'export-dxf') { guarded(exportSketchDxf)(); return; }
     if (key === 'library') { onToggleLibrary(); return; }
@@ -283,6 +281,7 @@ export default function MenuBar({
     if (key === 'redo') { redo(); return; }
     if (key === 'rebuild') { rebuild(); return; }
     if (key === 'delete') { deleteSelected(); return; }
+    if (key === 'clear-sketch') { clearSketch(); return; }
     if (key === 'fit') { setViewPreset(view); return; }
     if (key.startsWith('view:')) { setViewPreset(key.slice(5)); return; }
     if (key === 'new-sketch') { addSketch(); return; }
@@ -355,6 +354,13 @@ export default function MenuBar({
         destroyOnHidden
         width={420}
       >
+        {/* Said here because the dialog cannot offer a folder: a page on plain
+            HTTP is not allowed to open the browser's Save dialog itself. */}
+        <div style={{ color: CAD.dim, fontSize: 12, marginBottom: 6 }}>
+          This page is not on HTTPS, so the browser saves to its Downloads folder.
+          To choose a folder, turn on “Ask where to save each file” in Chrome’s
+          download settings.
+        </div>
         <Input
           value={saveAsName ?? ''}
           autoFocus
