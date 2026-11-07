@@ -324,6 +324,7 @@ export default function CamPanel() {
   const clearRotaryZero = useCamPlanStore((s) => s.clearRotaryZero);
   const rotaryZeroAngle = useCamPlanStore((s) => s.rotaryZeroAngle);
   const toggleFlip = useCamPlanStore((s) => s.toggleFlip);
+  const turnPart = useCamPlanStore((s) => s.turnPart);
   const startPickCircle = useCamPlanStore((s) => s.startPickCircle);
   const datumPickHint = useCamPlanStore((s) => s.datumPickHint);
   const setAxisOffset = useCamPlanStore((s) => s.setAxisOffset);
@@ -759,6 +760,21 @@ export default function CamPanel() {
                             <Text style={{ color: CAD.label, fontSize: 12 }}>{`Flip ${label}`}</Text>
                           </Tooltip>
                         </Space>
+                      )}
+                      {mode === 'mill' && (
+                        <Tooltip title={datum.rotaryZero
+                          ? 'Clear the A0 face first: its angle is measured from the layout this would change.'
+                          : `Turn the part 90° about ${label}, through the origin, counter-clockwise looking down ${label}. Four presses come back to the start.`}
+                        >
+                          <Button
+                            size="small"
+                            aria-label={`Rotate about ${label}`}
+                            disabled={Boolean(datum.rotaryZero)}
+                            onClick={() => turnPart(i)}
+                          >
+                            {`${label} 90°`}
+                          </Button>
+                        </Tooltip>
                       )}
                     </Space>
                     </div>

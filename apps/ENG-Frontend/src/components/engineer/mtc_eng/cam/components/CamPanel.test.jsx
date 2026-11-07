@@ -413,6 +413,19 @@ describe('indexing and picking, on screen', () => {
     expect(container.textContent).not.toMatch(/Flip [XYZ]/);
   });
 
+  it('turns the part 90° from a button on each axis', async () => {
+    await planned(box(120, 30, 20));
+    expect(container.querySelector('button[aria-label="Rotate about X"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Rotate about Y"]')).not.toBeNull();
+    await act(async () => { container.querySelector('button[aria-label="Rotate about Z"]').click(); });
+    expect(store().datum.axes).not.toBeNull();
+  });
+
+  it('has no 90° turn on a lathe job', async () => {
+    await planned(turnedShaft());
+    expect(container.querySelector('button[aria-label="Rotate about Z"]')).toBeNull();
+  });
+
   it('offers the circle centre on a mill job', async () => {
     await planned(box(60, 40, 20));
     expect(container.textContent).toContain('Pick circle centre');

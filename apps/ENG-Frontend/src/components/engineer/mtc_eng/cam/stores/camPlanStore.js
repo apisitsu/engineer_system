@@ -27,7 +27,7 @@ import { normalizeAngle } from '../engine/mesh/rotate.js';
 import {
   pointToRawFrame, pointFromRawFrame, displayedPointToRawFrame, faceToRawFrame,
   originFromAxisPick, originFromAxisValue, originFromAxisOffset, flipOf, toggledFlip,
-  realignAxisPick, originFromCircle,
+  realignAxisPick, originFromCircle, quarterTurn,
 } from '../engine/mesh/datum.js';
 import { circleAtPick } from '../engine/mesh/circlePick.js';
 import { encodeFloat32, decodeFloat32 } from '../engine/projectFile.js';
@@ -529,6 +529,19 @@ export const useCamPlanStore = create((set, get) => ({
    * by accident. Touch-off is per axis on a real machine, and now here too.
    */
   startPickAxis(axis) { set({ datumPickMode: 'xyz'[axis] ?? null }); },
+
+  /**
+   * Turn the part 90° about one axis on screen, about the origin. Milling only, and
+   * not with an A0 face set, whose angle is measured from the layout this changes.
+   */
+  turnPart(axis) {
+    const { datum } = get();
+    if (!_ctx || _ctx.mode !== 'mill' || datum.rotaryZero) return null;
+    set({ datum: { ...datum, ...quarterTurn(datum, _ctx.orientation, axis) } });
+    get().prepare();
+    if (get().recipe.length) get().rebuild();
+    return get().datum;
+  },
 
   /** Arm the next click to put the origin on the centre of a circle instead. */
   startPickCircle() { set({ datumPickMode: 'circle', datumPickHint: null }); },

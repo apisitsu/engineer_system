@@ -3,6 +3,7 @@ import { useCamPlanStore, getMesh } from './camPlanStore.js';
 import { useCamStore } from './camStore.js';
 import { turnedShaft, box, groovedShaft, tube } from '../engine/mesh/fixtures.js';
 import { translate } from '../engine/mesh/datum.js';
+import { circleAtPick } from '../engine/mesh/circlePick.js';
 import { machineById, DEFAULT_MILL_ID } from '../engine/cam/machines.js';
 
 /** Wrap a triangle soup as a binary STL File-alike the store can read. */
@@ -749,6 +750,57 @@ describe('camPlanStore — picking a flat face turns it square to the axis', () 
     store().prepare();
     store().pickAxisOrigin(2, [60, 0, 0], [1, 0, 0]);
     expect(store().datum.axes).toBeNull();
+  });
+});
+
+describe('camPlanStore — turning the part 90°', () => {
+  beforeEach(() => {
+    store().clear();
+    useCamPlanStore.setState({ machineId: DEFAULT_MILL_ID, forceMode: 'mill', material: 'aluminium' });
+  });
+
+  it('keeps X0/Y0 on the bore while the part turns about Z', async () => {
+    await store().loadStl(stlFile(translate(tube(20, 10, 30), [-5, -7, 0])));
+    await store().makePlan();
+    store().pickCircleCenter([15, 7, 15], [-1, 0, 0]);
+    store().turnPart(2);
+    // The bore is on the Z axis through the origin, whichever way the part faces.
+    const c = circleAtPick(getMesh().welded, [10, 0, 15], [-1, 0, 0]);
+    expect(c.center[0]).toBeCloseTo(0, 2);
+    expect(c.center[1]).toBeCloseTo(0, 2);
+    expect(store().datum.axesSet).toEqual([true, true, false]);
+  });
+
+  it('swaps the other two extents and rebuilds the plan', async () => {
+    await store().loadStl(stlFile(box(120, 30, 20)));
+    await store().makePlan();
+    store().turnPart(1);
+    const plan = await store().makePlan();
+    expect(plan.part.top - plan.part.bottom).toBeCloseTo(120, 3);
+  });
+
+  it('is undone by clearing the origin', async () => {
+    await store().loadStl(stlFile(box(120, 30, 20)));
+    await store().makePlan();
+    store().turnPart(1);
+    store().clearDatum();
+    const plan = await store().makePlan();
+    expect(plan.part.top - plan.part.bottom).toBeCloseTo(20, 3);
+  });
+
+  it('leaves a part with an A0 face set as it is', async () => {
+    await store().loadStl(stlFile(box(120, 30, 20)));
+    await store().makePlan();
+    store().pickRotaryZero([0, 0, 1]);
+    expect(store().turnPart(2)).toBeNull();
+    expect(store().datum.axes).toBeNull();
+  });
+
+  it('does nothing on a lathe job', async () => {
+    await store().loadStl(stlFile(box(120, 30, 20)));
+    useCamPlanStore.setState({ forceMode: 'turn' });
+    store().prepare();
+    expect(store().turnPart(2)).toBeNull();
   });
 });
 

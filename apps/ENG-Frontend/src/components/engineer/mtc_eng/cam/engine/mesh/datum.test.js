@@ -3,6 +3,7 @@ import {
   translate, orientToNormal, angleToFaceUp, pointToRawFrame, pointFromRawFrame,
   displayedPointToRawFrame, applyDatum, originFromAxisPick, originFromAxisValue,
   originFromAxisOffset, toggledFlip, realignedAxes, realignAxisPick, originFromCircle,
+  quarterTurn,
 } from './datum.js';
 import { boundsOf, meshVolume, shellReport } from './analyze.js';
 import { reorient } from './orient.js';
@@ -258,6 +259,96 @@ describe('originFromCircle', () => {
     expect(shown[0]).toBeCloseTo(4);
     expect(shown[1]).toBeCloseTo(5);
     expect(shown[2]).toBeCloseTo(0);
+  });
+});
+
+describe('quarterTurn', () => {
+  const IDENTITY = { order: [0, 1, 2], signs: [1, 1, 1] };
+  const FREE = { point: null, flip: [false, false, false], axesSet: [false, false, false] };
+
+  // Apply a run of turns the way the store does, each from the layout before it.
+  const turned = (soup, axes, datum = FREE) => {
+    const welded = weld(soup);
+    let d = datum;
+    let o = { ...IDENTITY, ...(d.flip.some(Boolean) ? { flip: d.flip } : {}) };
+    for (const axis of axes) {
+      d = { ...d, ...quarterTurn(d, o, axis) };
+      o = applyDatum({ soup, welded }, d, { mode: 'mill' }).orientation;
+    }
+    return { ...applyDatum({ soup, welded }, d, { mode: 'mill' }), datum: d };
+  };
+
+  it.each([
+    [0, [120, 20, 30]],
+    [1, [20, 30, 120]],
+    [2, [30, 120, 20]],
+  ])('turns about axis %i, swapping the other two', (axis, size) => {
+    const b = boundsOf(turned(box(120, 30, 20), [axis]).welded);
+    size.forEach((s, i) => expect(b.size[i]).toBeCloseTo(s, 3));
+  });
+
+  it('goes counter-clockwise looking down the axis: +X comes round to +Y about Z', () => {
+    const axes = quarterTurn(FREE, IDENTITY, 2).axes;
+    const p = pointFromRawFrame([1, 0, 0], axes);
+    expect(p[0]).toBeCloseTo(0);
+    expect(p[1]).toBeCloseTo(1);
+  });
+
+  it.each([[0], [1], [2]])('is a rotation, never a mirror, about axis %i', (axis) => {
+    const soup = box(120, 30, 20);
+    const before = meshVolume(weld(soup));
+    const r = turned(soup, [axis]);
+    expect(meshVolume(r.welded)).toBeCloseTo(before, 3);
+    expect(shellReport(r.welded).watertight).toBe(true);
+  });
+
+  it.each([[0], [1], [2]])('four turns about axis %i come back to the start', (axis) => {
+    const r = turned(box(120, 30, 20), [axis, axis, axis, axis]);
+    expect(r.orientation.changed).toBe(false);
+  });
+
+  it('keeps the origin on the same spot of the part', () => {
+    // Origin on an off-centre point: after the turn it is still at (0,0,0).
+    const point = [10, 5, 0];
+    const soup = box(120, 30, 20);
+    const r = turned(soup, [2], { ...FREE, point });
+    expect(pointFromRawFrame(point, r.orientation)[2]).toBeCloseTo(0);
+    const b = boundsOf(r.welded);
+    // Measured from the origin it spans x -70..50, y -20..10, then turns about Z.
+    expect(b.max[0]).toBeCloseTo(20, 3);
+    expect(b.min[0]).toBeCloseTo(-10, 3);
+    expect(b.max[1]).toBeCloseTo(50, 3);
+    expect(b.min[1]).toBeCloseTo(-70, 3);
+  });
+
+  it('moves locks with the planes they were set on', () => {
+    const { axesSet } = quarterTurn({ ...FREE, axesSet: [true, false, true] }, IDENTITY, 2);
+    expect(axesSet).toEqual([false, true, true]);
+  });
+
+  it('keeps a flip on, and turns the part as it now sits', () => {
+    const flip = [true, false, true];
+    const soup = translate(box(120, 30, 20), [-60, -15, -10]);
+    const r = turned(soup, [2], { ...FREE, flip });
+    expect(r.datum.flip).toEqual(flip);
+    expect(r.orientation.flip).toEqual(flip);
+    const b = boundsOf(r.welded);
+    // Flipped it spans x -120..0, y 0..30, z -20..0; +X then comes round to +Y.
+    expect(b.max[0]).toBeCloseTo(0, 3);
+    expect(b.min[0]).toBeCloseTo(-30, 3);
+    expect(b.max[1]).toBeCloseTo(0, 3);
+    expect(b.min[1]).toBeCloseTo(-120, 3);
+    expect(b.max[2]).toBeCloseTo(0, 3);
+    expect(b.min[2]).toBeCloseTo(-20, 3);
+    expect(meshVolume(r.welded)).toBeGreaterThan(0);
+  });
+
+  it('starts from the automatic lay-down when there is one', () => {
+    const lay = orientToNormal([1, 0, 0]);
+    const { axes } = quarterTurn(FREE, lay, 2);
+    const before = pointFromRawFrame([1, 0, 0], lay);
+    expect(before[2]).toBeCloseTo(1);
+    expect(pointFromRawFrame([1, 0, 0], axes)[2]).toBeCloseTo(1);
   });
 });
 

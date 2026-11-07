@@ -327,26 +327,73 @@ export function realignedAxes(orientation, normal, axis) {
   const from = abs.indexOf(Math.max(...abs));
   if (from === axis || abs[from] < SQUARE_TO_AXIS * Math.hypot(...normal)) return null;
   const sign = normal[from] < 0 ? -1 : 1;
+  return signedAxes(orientation, (shown) => {
+    const turned = [...shown];
+    turned[axis] = sign * shown[from];
+    turned[from] = -sign * shown[axis];
+    return turned;
+  }, NO_FLIP, `Set the part with the picked face square to ${AXIS_NAME[axis]}, facing +${AXIS_NAME[axis]}.`);
+}
 
+/**
+ * Re-express the frame on screen, moved by a quarter turn, as an axis layout.
+ *
+ * `keptFlip` is the flip that will still be applied on top of the result, so it is
+ * taken back out here. Passing none folds every flip into the layout instead.
+ */
+function signedAxes(orientation, move, keptFlip, description) {
   const order = [0, 0, 0];
   const signs = [1, 1, 1];
   for (let raw = 0; raw < 3; raw += 1) {
     const unit = [0, 0, 0];
     unit[raw] = 1;
-    const shown = pointFromRawFrame(unit, orientation);
-    const turned = [...shown];
-    turned[axis] = sign * shown[from];
-    turned[from] = -sign * shown[axis];
-    const to = turned.findIndex((v) => Math.abs(v) > 0.5);
+    const moved = applyFlip(move(pointFromRawFrame(unit, orientation)), keptFlip);
+    const to = moved.findIndex((v) => Math.abs(v) > 0.5);
     order[to] = raw;
-    signs[to] = turned[to] < 0 ? -1 : 1;
+    signs[to] = moved[to] < 0 ? -1 : 1;
   }
   return {
     order,
     signs,
     changed: order.some((raw, i) => raw !== i) || signs.some((s) => s !== 1),
-    description: `Set the part with the picked face square to ${AXIS_NAME[axis]}, facing +${AXIS_NAME[axis]}.`,
+    description,
   };
+}
+
+/** Each axis's lock, moved to the axis the plane it was set on reads on now. */
+function carriedLocks(axesSet, orientation, nextOrientation) {
+  const carried = [false, false, false];
+  axesSet.forEach((locked, was) => {
+    const unit = [0, 0, 0];
+    unit[was] = 1;
+    const now = pointFromRawFrame(pointToRawFrame(unit, orientation), nextOrientation);
+    carried[now.findIndex((v) => Math.abs(v) > 0.5)] = locked;
+  });
+  return carried;
+}
+
+/**
+ * Turn the part 90° about one axis of the frame on screen, counter-clockwise looking
+ * down that axis, as a patch for the datum.
+ *
+ * `datum.point` stays as it is, so the turn happens about the origin: X0/Y0 set on
+ * a bore stay on that bore while a keyway beside it comes round. Any flip stays on.
+ *
+ * @param {object} datum the datum in force
+ * @param {object} orientation the active lay-down orientation
+ * @param {0|1|2} axis the displayed axis to turn about
+ */
+export function quarterTurn(datum, orientation, axis) {
+  const flip = flipOf(datum);
+  const u = (axis + 1) % 3;
+  const v = (axis + 2) % 3;
+  const axes = signedAxes(orientation, (shown) => {
+    const turned = [...shown];
+    turned[u] = -shown[v];
+    turned[v] = shown[u];
+    return turned;
+  }, flip, `Set the part turned to the layout chosen on the panel, last 90° about ${AXIS_NAME[axis]}.`);
+  return { axes, axesSet: carriedLocks(datum.axesSet, orientation, { ...axes, flip }) };
 }
 
 /**
@@ -371,13 +418,7 @@ export function realignAxisPick(datum, orientation, axis, clicked, normal) {
   const offset = datum.offset ? pointFromRawFrame(datum.offset, axes)[axis] : 0;
   next[axis] = pointFromRawFrame(clickedRaw, axes)[axis] + offset;
 
-  const axesSet = [false, false, false];
-  datum.axesSet.forEach((locked, was) => {
-    const unit = [0, 0, 0];
-    unit[was] = 1;
-    const now = pointFromRawFrame(pointToRawFrame(unit, orientation), axes);
-    axesSet[now.findIndex((v) => Math.abs(v) > 0.5)] = locked;
-  });
+  const axesSet = carriedLocks(datum.axesSet, orientation, axes);
   axesSet[axis] = true;
 
   return {
