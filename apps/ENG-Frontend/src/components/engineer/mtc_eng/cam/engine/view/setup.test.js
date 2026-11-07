@@ -151,11 +151,12 @@ describe('playback pacing', () => {
 
 describe('chuckFitBounds', () => {
   it('holds the whole chuck, wider than the fit a bar gets on its own', () => {
-    const chuck = { z: -40, od: 10 };
+    // The same bar for both, as the app has it: a chuck is sized from the bounds.
+    const chuck = chuckFromBounds('turn', turnBounds, 0);
     const box = chuckFitBounds(chuck);
-    expect(box.max[0]).toBeCloseTo(chuckBodyRadius(10));
+    expect(box.max[0]).toBeCloseTo(chuckBodyRadius(chuck.od));
     expect(box.max[0]).toBeGreaterThan(fitBoundsFor('turn', turnBounds).max[0]);
-    expect(box.min[1]).toBeCloseTo(-chuckBodyRadius(10));
+    expect(box.min[1]).toBeCloseTo(-chuckBodyRadius(chuck.od));
     expect(box.max[2]).toBeCloseTo(-40 - CHUCK.clearance);
     expect(box.min[2]).toBeCloseTo(-40 - CHUCK.clearance - CHUCK.jawProtrude - CHUCK.bodyLength);
   });

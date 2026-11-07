@@ -79,6 +79,7 @@ describe('BuildPanel — one named feature from the Ribbon', () => {
   const pressBuild = () => act(async () => {
     document.querySelector('[data-sketch-build]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
+  const realBuild = useFeatureStore.getState().buildFromSketch;
   let build;
 
   const withPart = (yes) => {
@@ -92,8 +93,8 @@ describe('BuildPanel — one named feature from the Ribbon', () => {
   });
 
   afterEach(() => {
-    document.querySelectorAll('.ant-popover').forEach((el) => el.remove());
     useCamPlanStore.setState({ status: 'idle', stlName: null });
+    useFeatureStore.setState({ features: [], buildFromSketch: realBuild });
   });
 
   it('asks only for sizes, having been told the rest by the button', async () => {
