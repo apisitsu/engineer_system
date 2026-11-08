@@ -122,9 +122,24 @@ describe('BuildPanel — one named feature from the Ribbon', () => {
   it('cuts from the part, and says which way a cut runs', async () => {
     withPart(true);
     const text = await open(panel({ name: 'Extruded Cut', op: 'extrude', cut: true }));
-    expect(text).toContain('make the depth negative');
+    expect(text).toContain('into the part');
     await pressBuild();
-    expect(build).toHaveBeenCalledWith(expect.objectContaining({ op: 'extrude', merge: 'cut' }));
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ op: 'extrude', merge: 'cut', end: 'blind' }));
+  });
+
+  it('cuts through all without asking for a depth, and turns round on Reverse', async () => {
+    withPart(true);
+    await open(panel({ name: 'Extruded Cut', op: 'extrude', cut: true }));
+    // The panel just opened; earlier tests' popovers may linger in the body.
+    const pop = () => [...document.querySelectorAll('.ant-popover')].at(-1);
+    const through = [...pop().querySelectorAll('[data-extrude-end] label')].find((l) => l.textContent === 'Through All');
+    await act(async () => { through.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(pop().textContent).not.toContain('Depth');
+    await act(async () => {
+      pop().querySelector('[data-extrude-reverse]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await pressBuild();
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ end: 'through', reverse: true }));
   });
 
   it('revolves when the button says so', async () => {

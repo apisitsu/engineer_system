@@ -13,12 +13,15 @@
  * and finding that out only after pressing a button is how a tool teaches people
  * not to press it.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { SwapOutlined } from '@ant-design/icons';
 import {
   Button, Tooltip, Popover, Space, Typography, Segmented, InputNumber, Alert,
 } from 'antd';
 import { useSketchStore } from '../stores/sketchStore.js';
-import { useCamPlanStore } from '../stores/camPlanStore.js';
+import { useCamPlanStore, getRawMesh } from '../stores/camPlanStore.js';
+import { boundsOf } from '../engine/mesh/analyze.js';
+import { END_CONDITIONS, defaultReverse } from '../engine/solid/featureTree.js';
 import { useFeatureStore } from '../stores/featureStore.js';
 import { planeLabel } from '../engine/sketch/plane.js';
 import { centerlines } from '../engine/sketch/model.js';
@@ -108,6 +111,15 @@ export default function BuildPanel({ trigger, preset }) {
   const [chosenOp, setOp] = useState('extrude');
   const op = preset?.op ?? chosenOp;
   const [depth, setDepth] = useState(10);
+  const [end, setEnd] = useState('blind');
+  // `null` until pressed: until then the extrude runs the way its kind wants to,
+  // a cut into the part and a boss out of it (`defaultReverse`).
+  const [reverseChoice, setReverse] = useState(null);
+  const meshVer = useCamPlanStore((s) => s.meshVer);
+  const partBounds = useMemo(() => {
+    const { soup } = getRawMesh();
+    return soup?.triangleCount ? boundsOf(soup) : null;
+  }, [meshVer]); // eslint-disable-line react-hooks/exhaustive-deps
   const sk = useSketchStore((s) => s.sk);
   // `null` until the operator picks one: until then a centerline on the sketch is
   // the axis, and the sketch's X axis when there is none. A pick of a centerline
@@ -140,12 +152,16 @@ export default function BuildPanel({ trigger, preset }) {
     else mergeOp = hasPart ? 'add' : 'new';
   }
 
+  const reverse = reverseChoice ?? defaultReverse(active?.plane, partBounds, mergeOp === 'cut');
+
   const onBuild = async () => {
     setBusy(true);
     try {
       const shape = op === 'revolve'
         ? { op, ...axisFromValue(axis), angle: (angle * Math.PI) / 180 }
-        : { op, depth };
+        : {
+          op, depth, end, reverse,
+        };
       await build({ ...shape, combine: combineOp, merge: mergeOp });
     } finally {
       setBusy(false);
@@ -170,22 +186,45 @@ export default function BuildPanel({ trigger, preset }) {
 
       {op === 'extrude' ? (
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
-          <Tooltip title="Distance along the plane's normal. Negative extrudes the other way.">
-            <InputNumber
-              size="small"
-              value={depth}
-              onChange={(v) => setDepth(Number(v) || 0)}
-              addonBefore="Depth"
-              addonAfter="mm"
-              style={{ width: '100%' }}
-            />
-          </Tooltip>
-          {/* A cut pointing away from the part removes nothing and raises nothing,
-              and which way that is depends on the plane, so it has to be said. */}
-          {preset?.cut && (
-            <Text style={{ color: CAD.dim, fontSize: 10 }}>
-              The cut runs along the plane&apos;s normal. If nothing is removed, make the depth negative.
-            </Text>
+          <Segmented
+            size="small"
+            block
+            value={end}
+            onChange={setEnd}
+            options={Object.entries(END_CONDITIONS).map(([value, label]) => ({ value, label }))}
+            data-extrude-end
+          />
+          {end !== 'through' && (
+            <Tooltip title={end === 'mid' ? 'The whole depth, half each side of the plane' : 'Distance from the plane'}>
+              <InputNumber
+                size="small"
+                value={depth}
+                onChange={(v) => setDepth(Number(v) || 0)}
+                addonBefore="Depth"
+                addonAfter="mm"
+                style={{ width: '100%' }}
+              />
+            </Tooltip>
+          )}
+          {/* A cut pointing away from the part removes nothing, so which way it
+              runs is chosen for it — and said, with the button to turn it round. */}
+          {end !== 'mid' && (
+            <Space size={6} align="center">
+              <Button
+                size="small"
+                type={reverse ? 'primary' : 'default'}
+                icon={<SwapOutlined rotate={90} />}
+                onClick={() => setReverse(!reverse)}
+                data-extrude-reverse
+              >
+                Reverse
+              </Button>
+              <Text style={{ color: CAD.dim, fontSize: 10 }}>
+                {end === 'through' ? 'Through the part, ' : ''}
+                {reverse ? 'against' : 'along'} the plane&apos;s normal
+                {mergeOp === 'cut' ? ' — into the part' : ''}
+              </Text>
+            </Space>
           )}
         </Space>
       ) : (

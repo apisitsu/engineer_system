@@ -25,14 +25,14 @@ import {
 import {
   DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined,
   EyeOutlined, EyeInvisibleOutlined, ReloadOutlined,
-  RightOutlined, DownOutlined, MenuOutlined,
+  RightOutlined, DownOutlined, MenuOutlined, SwapOutlined,
 } from '@ant-design/icons';
 import { useFeatureStore, TREE_W_DEFAULT } from '../stores/featureStore.js';
 import {
   SketchIcon, FeatureIcon, LinkIcon,
 } from './TreeIcons.jsx';
 import { useSketchStore } from '../stores/sketchStore.js';
-import { describeFeature } from '../engine/solid/featureTree.js';
+import { describeFeature, END_CONDITIONS } from '../engine/solid/featureTree.js';
 import { planeLabel } from '../engine/sketch/plane.js';
 import RevolveAxis, { axisValueOf, axisFromValue } from './RevolveAxis.jsx';
 import { CAD } from '../theme.js';
@@ -88,24 +88,48 @@ function FeatureEditor({ feature }) {
   return (
     <Space direction="vertical" size={4} style={{ width: '100%' }}>
       {feature.kind === 'extrude' ? (
-        <Space size={4} style={{ width: '100%' }}>
-          <InputNumber
+        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+          <Segmented
             size="small"
-            value={feature.depth}
-            onChange={(v) => update(feature.id, { depth: Number(v) || 0 })}
-            addonBefore="Depth"
-            style={{ width: 124 }}
-            data-feature-depth
+            block
+            value={feature.end}
+            onChange={(v) => update(feature.id, { end: v })}
+            options={Object.entries(END_CONDITIONS).map(([value, label]) => ({ value, label }))}
           />
-          <Tooltip title="Lift the solid off its plane — a boss standing on a face, or a cut starting below one">
-            <InputNumber
-              size="small"
-              value={feature.base}
-              onChange={(v) => update(feature.id, { base: Number(v) || 0 })}
-              addonBefore="From"
-              style={{ width: 112 }}
-            />
-          </Tooltip>
+          <Space size={4} style={{ width: '100%' }}>
+            {feature.end !== 'through' && (
+              <InputNumber
+                size="small"
+                value={feature.depth}
+                onChange={(v) => update(feature.id, { depth: Number(v) || 0 })}
+                addonBefore="Depth"
+                style={{ width: 124 }}
+                data-feature-depth
+              />
+            )}
+            {feature.end === 'blind' && (
+              <Tooltip title="Lift the solid off its plane — a boss standing on a face, or a cut starting below one">
+                <InputNumber
+                  size="small"
+                  value={feature.base}
+                  onChange={(v) => update(feature.id, { base: Number(v) || 0 })}
+                  addonBefore="From"
+                  style={{ width: 112 }}
+                />
+              </Tooltip>
+            )}
+            {feature.end !== 'mid' && (
+              <Tooltip title="Run the other way along the plane's normal">
+                <Button
+                  size="small"
+                  type={feature.reverse ? 'primary' : 'default'}
+                  icon={<SwapOutlined rotate={90} />}
+                  onClick={() => update(feature.id, { reverse: !feature.reverse })}
+                  data-feature-reverse
+                />
+              </Tooltip>
+            )}
+          </Space>
         </Space>
       ) : (
         <Space size={4} style={{ width: '100%' }}>

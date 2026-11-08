@@ -46,9 +46,73 @@
 import { sketchRegions } from '../sketch/loops.js';
 import { combineRegions } from './regionBoolean.js';
 import { buildSolid } from './extrude.js';
-import { resolvePlaneRef, lineFrame } from '../sketch/plane.js';
+import { resolvePlaneRef, lineFrame, planeBasis } from '../sketch/plane.js';
 import { centerlines } from '../sketch/model.js';
 import { boundsOf } from '../mesh/analyze.js';
+
+/**
+ * How far an extrude runs. Blind is the depth typed; Through All is past the far
+ * side of whatever is on the machine when the feature is replayed, so it still
+ * goes through after the part grows; Mid Plane is the depth split either side.
+ */
+export const END_CONDITIONS = {
+  blind: 'Blind',
+  through: 'Through All',
+  mid: 'Mid Plane',
+};
+
+/** How far past the part's far side Through All runs, so its end is never flush with a face. */
+const THROUGH_PAST = 1;
+
+/** The far side of the part from a plane: how far it reaches along +n and along −n. */
+export function partReach(plane, bounds) {
+  const { origin, n } = planeBasis(plane);
+  let ahead = -Infinity;
+  let behind = -Infinity;
+  for (const x of [bounds.min[0], bounds.max[0]]) {
+    for (const y of [bounds.min[1], bounds.max[1]]) {
+      for (const z of [bounds.min[2], bounds.max[2]]) {
+        const d = (x - origin[0]) * n[0] + (y - origin[1]) * n[1] + (z - origin[2]) * n[2];
+        ahead = Math.max(ahead, d);
+        behind = Math.max(behind, -d);
+      }
+    }
+  }
+  return { ahead, behind };
+}
+
+/**
+ * Which way a new extrude should run by default: a cut into the part, a boss out
+ * of it. `true` means reversed — against the plane's normal. Only a part wholly
+ * on one side of the plane decides it; one the plane passes through does not.
+ */
+export function defaultReverse(plane, bounds, cut) {
+  if (!bounds) return false;
+  const { ahead, behind } = partReach(plane, bounds);
+  const behindOnly = ahead <= 1e-6 && behind > 1e-6;
+  const aheadOnly = behind <= 1e-6 && ahead > 1e-6;
+  return cut ? behindOnly : aheadOnly;
+}
+
+/**
+ * The signed depth and lift an extrude feature builds with, on `plane`, against
+ * the part built so far (`partBounds`, for Through All).
+ */
+export function extrudeSpan(feature, plane, partBounds) {
+  const sign = feature.reverse ? -1 : 1;
+  if (feature.end === 'mid') {
+    const d = Math.abs(feature.depth);
+    return { depth: d, base: feature.base - d / 2 };
+  }
+  if (feature.end === 'through') {
+    if (!partBounds) throw new Error('Through All needs a part to go through — build or import one first');
+    const { ahead, behind } = partReach(plane, partBounds);
+    const reach = sign > 0 ? ahead : behind;
+    if (!(reach > 1e-6)) throw new Error('Through All points away from the part — reverse it');
+    return { depth: sign * (reach + THROUGH_PAST), base: 0 };
+  }
+  return { depth: sign * feature.depth, base: feature.base };
+}
 
 /** What a feature can be. `import` is the mesh a file was read into. */
 export const FEATURE_KINDS = {
@@ -96,6 +160,9 @@ export function createFeature(kind, props = {}) {
     combine: props.combine || null,
     depth: Number.isFinite(props.depth) ? props.depth : 10,
     base: Number.isFinite(props.base) ? props.base : 0,
+    // How far an extrude runs (SolidWorks' end condition) and which way.
+    end: END_CONDITIONS[props.end] ? props.end : 'blind',
+    reverse: !!props.reverse,
     axis: props.axis === 'y' ? 'y' : 'x',
     // A centerline on the sketch to turn about, by its line id. When set it wins
     // over `axis`, which then only says what to fall back to.
@@ -122,7 +189,7 @@ export function parseFeatures(raw) {
 
 /** Build the solid one feature describes, on its own. Throws with a message. */
 function makeFeatureSolid(feature, {
-  sketchOf, importOf, refBounds, planes, used,
+  sketchOf, importOf, refBounds, planes, used, partBounds,
 }) {
   if (feature.kind === 'import') {
     const soup = importOf?.(feature);
@@ -149,11 +216,14 @@ function makeFeatureSolid(feature, {
       ? 'its sketch no longer encloses a closed profile'
       : 'its sketch is empty');
   }
+  const span = feature.kind === 'extrude'
+    ? extrudeSpan(feature, plane, partBounds)
+    : { depth: feature.depth, base: feature.base };
   const shape = {
     op: feature.kind,
     plane,
-    depth: feature.depth,
-    base: feature.base,
+    depth: span.depth,
+    base: span.base,
     axis: feature.axis,
     angle: feature.angle,
     segments: feature.segments ?? undefined,
@@ -233,7 +303,8 @@ export function rebuildFeatures(features, ctx = {}, { keepIntermediates = false 
 
     let made;
     try {
-      made = makeFeatureSolid(f, fctx);
+      // What Through All has to get through: the part as it stands before this.
+      made = makeFeatureSolid(f, { ...fctx, partBounds: current ? boundsOf(current) : null });
     } catch (e) {
       fail(f, e?.message || String(e));
       continue;
@@ -304,5 +375,8 @@ export function describeFeature(f, sketchName) {
     const about = f.axisLine != null ? 'the centerline' : f.axis.toUpperCase();
     return `Revolve ${deg}° about ${about}${where}${how}`;
   }
-  return `Extrude ${f.depth} mm${f.base ? ` from ${f.base}` : ''}${where}${how}`;
+  const back = f.reverse ? ', reversed' : '';
+  if (f.end === 'through') return `Extrude through all${back}${where}${how}`;
+  if (f.end === 'mid') return `Extrude ${Math.abs(f.depth)} mm mid plane${where}${how}`;
+  return `Extrude ${f.depth} mm${back}${f.base ? ` from ${f.base}` : ''}${where}${how}`;
 }

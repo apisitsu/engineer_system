@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createFeature, parseFeatures, rebuildFeatures, needsMeshBoolean,
-  describeFeature, FEATURE_KINDS, MERGE_MODES, seedFeatureIds,
+  describeFeature, FEATURE_KINDS, MERGE_MODES, seedFeatureIds, defaultReverse,
 } from './featureTree.js';
 import { meshBoolean } from '../../lib/csg.js';
 import { createSketch, addPoint, addLine } from '../sketch/model.js';
@@ -443,5 +443,70 @@ describe('revolve about a centerline', () => {
     expect(f.axisLine).toBe(12);
     expect(describeFeature(f)).toMatch(/about the centerline/);
     expect(createFeature('revolve', {}).axisLine).toBeNull();
+  });
+});
+
+describe('extrude end conditions', () => {
+  const plate = (depth = 10) => createFeature('extrude', { sketchId: 1, depth });
+  const twoSketches = () => ({
+    1: { doc: rectSketch(0, 0, 40, 40), plane: XY },
+    2: { doc: rectSketch(15, 15, 25, 25), plane: { preset: 'XY', offset: 10, gap: 0 } },
+  });
+  const zRange = (soup) => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 2; i < soup.positions.length; i += 3) {
+      lo = Math.min(lo, soup.positions[i]);
+      hi = Math.max(hi, soup.positions[i]);
+    }
+    return [lo, hi];
+  };
+
+  it('starts blind and running along the normal', () => {
+    expect(createFeature('extrude', {})).toMatchObject({ end: 'blind', reverse: false });
+    expect(createFeature('extrude', { end: 'sideways' }).end).toBe('blind');
+  });
+
+  it('reverses without a negative depth', () => {
+    const f = createFeature('extrude', { sketchId: 1, depth: 10, reverse: true });
+    expect(zRange(rebuildFeatures([f], ctx(twoSketches())).soup)).toEqual([-10, 0]);
+  });
+
+  it('splits a mid-plane extrude either side of the plane', () => {
+    const f = createFeature('extrude', { sketchId: 1, depth: 10, end: 'mid' });
+    expect(zRange(rebuildFeatures([f], ctx(twoSketches())).soup)).toEqual([-5, 5]);
+  });
+
+  it('cuts through all, and still does once the part is made thicker', () => {
+    const tree = [plate(10), createFeature('extrude', {
+      sketchId: 2, end: 'through', reverse: true, merge: 'cut',
+    })];
+    nearVolume(volume(rebuildFeatures(tree, ctx(twoSketches())).soup), 16000 - 1000);
+    // The pocket's sketch sits on the top; thicken the plate and move the sketch with it.
+    const thick = twoSketches();
+    thick[2].plane = { preset: 'XY', offset: 30, gap: 0 };
+    tree[0] = plate(30);
+    nearVolume(volume(rebuildFeatures(tree, ctx(thick)).soup), 48000 - 3000);
+  });
+
+  it('says so when Through All points away from the part, or there is no part', () => {
+    const away = [plate(10), createFeature('extrude', { sketchId: 2, end: 'through', merge: 'cut' })];
+    expect(rebuildFeatures(away, ctx(twoSketches())).errors[0].message).toMatch(/points away/);
+    const alone = [createFeature('extrude', { sketchId: 1, end: 'through' })];
+    expect(rebuildFeatures(alone, ctx(twoSketches())).errors[0].message).toMatch(/needs a part/);
+  });
+
+  it('runs a cut into the part and a boss out of it by default', () => {
+    const bounds = { min: [0, 0, 0], max: [40, 40, 10] };
+    const top = { preset: 'XY', offset: 10 };
+    expect(defaultReverse(top, bounds, true)).toBe(true);
+    expect(defaultReverse(top, bounds, false)).toBe(false);
+    // A plane through the part does not decide it.
+    expect(defaultReverse({ preset: 'XY', offset: 5 }, bounds, true)).toBe(false);
+  });
+
+  it('names the end condition in the tree', () => {
+    expect(describeFeature(createFeature('extrude', { end: 'through', reverse: true }))).toMatch(/through all, reversed/);
+    expect(describeFeature(createFeature('extrude', { end: 'mid', depth: 8 }))).toMatch(/8 mm mid plane/);
   });
 });
