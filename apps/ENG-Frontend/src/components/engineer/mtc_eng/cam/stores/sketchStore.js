@@ -1411,7 +1411,9 @@ export const useSketchStore = create((set, get) => ({
     const pt = get().sk.entities.get(d.id);
     if (pt) pt.fixed = d.wasFixed;
     set({ dragging: null, _dragTarget: null });
-    get()._bump();
+    // A press that never moved changed nothing, and must not read as an edit: it
+    // would mark the part out of date for a click.
+    if (d.moved) get()._bump();
     // Settle once the pin is released: a genuinely free point stays where it was
     // dragged, but a fully-constrained one the drag deformed snaps back to satisfy
     // its constraints — matching how SolidWorks resists dragging defined geometry.

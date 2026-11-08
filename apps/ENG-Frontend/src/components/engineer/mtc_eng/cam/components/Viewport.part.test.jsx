@@ -22,6 +22,8 @@ import { useCamPlanStore, getMesh, getRawMesh } from '../stores/camPlanStore.js'
 import { useCamStore } from '../stores/camStore.js';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { useFeatureStore } from '../stores/featureStore.js';
+import { useMeasureStore } from '../stores/measureStore.js';
+import * as THREE from 'three';
 import { boundsOf } from '../engine/mesh/analyze.js';
 import { fitBoundsForPart } from '../engine/view/setup.js';
 import { framing } from '../engine/view/camera.js';
@@ -268,5 +270,43 @@ describe('the reported journey, end to end', () => {
     const f = framing('mill', 'iso', fitBoundsForPart('mill', analysis.bounds), { width: 1200, height: 800 });
     expect(66.55 * f.zoom).toBeGreaterThan(100);
     expect(66.55 * f.zoom).toBeLessThan(1200);
+  });
+});
+
+describe('Viewport — Measure', () => {
+  beforeEach(() => {
+    store().clear();
+    useMeasureStore.setState({ active: false, picks: [] });
+  });
+
+  /** A click on triangle `t` of the part as it is on screen. */
+  async function clickTriangle(r, t) {
+    const mesh = partMeshes(r)[0];
+    const p = getMesh().soup.positions;
+    const v = [0, 1, 2].map((k) => new THREE.Vector3(p[t * 9 + k * 3], p[t * 9 + k * 3 + 1], p[t * 9 + k * 3 + 2]));
+    const point = v[0].clone().add(v[1]).add(v[2]).divideScalar(3);
+    const normal = v[1].clone().sub(v[0]).cross(v[2].clone().sub(v[0])).normalize();
+    await r.fireEvent(mesh, 'click', {
+      faceIndex: t, point, face: { normal }, object: mesh.instance, stopPropagation: () => {},
+    });
+  }
+
+  it('takes a click on the part as a measurement while it is on, and marks it', async () => {
+    await store().loadStl(stlFile(box(20, 30, 10)));
+    useMeasureStore.setState({ active: true });
+    const r = await mount();
+    await clickTriangle(r, 0);
+    expect(useMeasureStore.getState().picks).toHaveLength(1);
+    expect(useMeasureStore.getState().picks[0].kind).toBe('face');
+    const r2 = await mount();
+    // eslint-disable-next-line testing-library/await-async-query
+    expect(r2.scene.findAll((n) => n.instance?.name === 'measure-marks')).toHaveLength(1);
+  });
+
+  it('leaves the part to its usual clicks when it is off', async () => {
+    await store().loadStl(stlFile(box(20, 30, 10)));
+    const r = await mount();
+    await clickTriangle(r, 0);
+    expect(useMeasureStore.getState().picks).toHaveLength(0);
   });
 });

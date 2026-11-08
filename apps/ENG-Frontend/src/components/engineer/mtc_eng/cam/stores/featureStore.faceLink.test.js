@@ -186,3 +186,16 @@ describe('the name Sketch on Face gives a sketch', () => {
     expect(entry().name).toBe('Boss top');
   });
 });
+
+describe('a press on a point that never moves', () => {
+  it('is a click, not an edit: the tree stays up to date', async () => {
+    rect(0, 0, 40, 20);
+    await build({ op: 'extrude', depth: 10 });
+    const corner = [...sketch().sk.entities.values()].find((e) => e.type === 'point' && !e.origin);
+    const v = sketch().version;
+    expect(sketch().beginDrag(corner.id)).toBe(true);
+    expect(sketch().endDrag()).toBe(false);
+    expect(sketch().version).toBe(v);
+    expect(features().dirty).toBe(false);
+  });
+});

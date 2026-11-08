@@ -10,6 +10,7 @@ import CommandRibbon from './CommandRibbon.jsx';
 import { useCamStore } from '../stores/camStore.js';
 import { useFeatureStore } from '../stores/featureStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
+import { useMeasureStore } from '../stores/measureStore.js';
 
 let container;
 let root;
@@ -166,7 +167,20 @@ describe('CommandRibbon', () => {
     for (const t of ['features', 'mill', 'turn']) {
       // eslint-disable-next-line no-await-in-loop
       await press(tab(t));
-      expect(container.textContent).not.toMatch(/soon|Fillet|Pattern|Measure|Section View/);
+      expect(container.textContent).not.toMatch(/soon|Fillet|Pattern|Section View/);
     }
+  });
+
+  it('turns Measure on and off once there is a part, from Features and the machine tabs', async () => {
+    useMeasureStore.setState({ active: false, picks: [] });
+    await render();
+    expect(button('Measure').disabled).toBe(true);
+    await act(async () => { useCamPlanStore.setState({ analysis: { bounds: { min: [0, 0, 0], max: [1, 1, 1] } } }); });
+    await press(button('Measure'));
+    expect(useMeasureStore.getState().active).toBe(true);
+    await press(tab('features'));
+    await press(button('Measure'));
+    expect(useMeasureStore.getState().active).toBe(false);
+    await act(async () => { useCamPlanStore.setState({ analysis: null }); });
   });
 });

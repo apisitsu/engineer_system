@@ -11,7 +11,7 @@
  * what keeps a half-typed dimension alive while the operator looks at another tab.
  *
  * **Only commands that exist are here.** The mockup also draws Fillet, Pattern,
- * Measure, Section View and more, and the app has none of them. A button that does
+ * Section View and more, and the app has none of them. A button that does
  * nothing teaches people to stop trying the buttons.
  *
  * The four feature buttons open `BuildPanel` already set to what they name. The Sketch
@@ -27,6 +27,7 @@ import { useCamStore } from '../stores/camStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
 import { useFeatureStore } from '../stores/featureStore.js';
 import { useStdStore } from '../stores/stdStore.js';
+import { useMeasureStore } from '../stores/measureStore.js';
 import { command } from '../engine/view/commands.js';
 import { CAD } from '../theme.js';
 
@@ -49,7 +50,22 @@ const SimulateIcon = glyph(<path d="M7 5l12 7-12 7z" />);
 const PostIcon = glyph(<><path d="M4 7h16M4 12h10M4 17h13" /><path d="M17 11l3 3-3 3" /></>);
 const StandardVcIcon = glyph(<><path d="M4 18a8 8 0 0116 0" /><path d="M12 18l4-6.5" /></>);
 
+const MeasureIcon = glyph(<><path d="M3 15l12-12 6 6-12 12z" /><path d="M7 11l2 2M10 8l2 2M13 5l2 2" /></>);
+
 const Sep = () => <div style={{ width: 1, alignSelf: 'stretch', margin: '4px 5px', background: CAD.border }} />;
+
+/** Measure, on every tab that shows the part. On while it is lit. */
+function MeasureCommand() {
+  const active = useMeasureStore((s) => s.active);
+  const toggle = useMeasureStore((s) => s.toggle);
+  const hasPart = useCamPlanStore((s) => Boolean(s.analysis));
+  return (
+    <Command
+      icon={<MeasureIcon />} label="Measure" active={active} disabled={!hasPart} onClick={toggle}
+      tip={hasPart ? 'Click a face, a bore or a boss — one for its size, two for the distance between' : 'Build or import a part first'}
+    />
+  );
+}
 
 function Command({ tip, ...button }) {
   return (
@@ -82,6 +98,7 @@ function MachineCommands({
         icon={<WorkOriginIcon />} label="Work Origin" onClick={onWorkOrigin} disabled={!hasPart}
         tip={hasPart ? 'Set X0, Y0 and Z0 on the part' : 'Import a part first'}
       />
+      <MeasureCommand />
       <Command
         icon={<ToolTableIcon />} label="Tool Table" onClick={onToolTable} disabled={!hasTools}
         tip={hasTools ? 'The tools this program uses, each one editable' : 'Parse a program that names its tools first'}
@@ -170,6 +187,8 @@ function FeatureCommands() {
         disabled={!selected} onClick={() => toggleSuppress(selected.id)}
         tip={selected ? `Leave ${selected.name} out of the part, or put it back` : 'Select a feature in the tree first'}
       />
+      <Sep />
+      <MeasureCommand />
     </>
   );
 }

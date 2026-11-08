@@ -12,6 +12,7 @@ import { Line, Html } from '@react-three/drei';
 import { invalidate, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSketchStore, AXIS_LOCK_FACTOR } from '../stores/sketchStore.js';
+import { useMeasureStore } from '../stores/measureStore.js';
 import { dimensionAnnotations } from '../engine/sketch/annotations.js';
 import { polygonPreview, slotPreview, axisDistance } from '../engine/sketch/shapes.js';
 import { tessellateArc, CHORD_TOL } from '../engine/sketch/loops.js';
@@ -292,6 +293,7 @@ export default function SketchLayer() {
   const activeId = useSketchStore((s) => s.activeId);
   const tool = useSketchStore((s) => s.tool);
   const facePick = useSketchStore((s) => s.facePick);
+  const measuring = useMeasureStore((s) => s.active);
   const selection = useSketchStore((s) => s.selection);
   const pending = useSketchStore((s) => s.pending);
   const cursor = useSketchStore((s) => s.cursor);
@@ -477,14 +479,17 @@ export default function SketchLayer() {
     return () => el.removeEventListener('contextmenu', onCtx);
   }, [gl, openContextMenu]);
 
-  const drawing = tool === 'point' || tool === 'line' || tool === 'rectangle'
-    || tool === 'circle' || tool === 'arc' || tool === 'slot' || tool === 'polygon';
+  // While Sketch on Face waits for a face, or Measure for a click, the clicks are
+  // the part's: the sketch neither draws nor picks, or it would take them first.
+  const inert = facePick || measuring;
+  const drawing = !inert && (tool === 'point' || tool === 'line' || tool === 'rectangle'
+    || tool === 'circle' || tool === 'arc' || tool === 'slot' || tool === 'polygon');
   // Geometry is clickable in select/dimension (pick), trim (cut) and chamfer
   // (pick two lines) modes.
-  const picking = tool === 'select' || tool === 'dimension' || tool === 'trim' || tool === 'chamfer';
+  const picking = !inert && (tool === 'select' || tool === 'dimension' || tool === 'trim' || tool === 'chamfer');
   // Circles/arcs are directly selectable (their own raycast) only when picking a
   // selection — not while trimming/chamfering (both act on lines).
-  const selecting = tool === 'select' || tool === 'dimension';
+  const selecting = !inert && (tool === 'select' || tool === 'dimension');
   const selected = new Set(selection);
   // SolidWorks' solve-state colouring of the geometry, now literally its three
   // colours on a light ground: under-defined stays blue (still has freedom),
@@ -565,9 +570,7 @@ export default function SketchLayer() {
           razor-thin line ray; in the Select tool a *drag* on empty space is a
           marquee (`Viewport` turns OrbitControls' left-drag rotate off while
           Select is active so the drag is ours). */}
-      {/* Not while Sketch on Face is waiting: the plane would take the click
-          meant for the part behind it. */}
-      {(drawing || picking) && !facePick && (
+      {(drawing || picking) && (
         <mesh
           ref={planeMeshRef}
           onPointerDown={(e) => {

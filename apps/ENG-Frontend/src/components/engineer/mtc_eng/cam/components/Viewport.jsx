@@ -14,7 +14,7 @@ import Backplot from './Backplot.jsx';
 import StockMesh from './StockMesh.jsx';
 import StockPreview from './StockPreview.jsx';
 import PartMesh, {
-  FeatureHighlight, DatumPickHighlight, OriginMarker, RotaryAxisLine, SketchPart,
+  FeatureHighlight, DatumPickHighlight, OriginMarker, RotaryAxisLine, SketchPart, MeasureMarks,
 } from './PartMesh.jsx';
 import { CHUCK, chuckBodyRadius } from '../engine/view/setup.js';
 import SketchLayer from './SketchLayer.jsx';
@@ -657,6 +657,7 @@ export function SceneContents({
       {sketching ? (
         <>
           <SketchPart meshVer={partVer} visible={showPart} />
+          {showPart && <MeasureMarks meshVer={partVer} raw />}
           <SketchLayer />
         </>
       ) : (
@@ -688,6 +689,7 @@ export function SceneContents({
             {showPart && <DatumPickHighlight meshVer={partVer} />}
             {showPart && <OriginMarker meshVer={partVer} />}
             {showPart && <RotaryAxisLine meshVer={partVer} />}
+            {showPart && <MeasureMarks meshVer={partVer} />}
           </WorkGroup>
           <Tool
             pos={toolPos}

@@ -27,6 +27,8 @@ import { useFeatureStore } from '../stores/featureStore.js';
 import { useCamStore } from '../stores/camStore.js';
 import { planeBasis } from '../engine/sketch/plane.js';
 import { detectFeatures, faceOfTriangle } from '../engine/mesh/features.js';
+import { measurePick } from '../engine/mesh/measure.js';
+import { useMeasureStore } from '../stores/measureStore.js';
 import { featureAtPoint } from '../engine/mesh/pickEdge.js';
 import { circlesAt, nearestCircle } from '../engine/mesh/circlePick.js';
 import { originMarkerSize, rotaryAxisLength } from '../engine/view/originMarker.js';
@@ -34,6 +36,14 @@ import { CAD } from '../theme.js';
 
 /** The model to be made, distinct from the simulated stock's aluminium grey. */
 const PART_COLOR = '#93a7bd';
+
+/** A Measure pick from a hit on `welded`, at `point` in its frame. */
+const pickFor = (welded, event, point) => measurePick(
+  welded,
+  event.faceIndex,
+  point,
+  event.face?.normal?.toArray() ?? [0, 0, 1],
+);
 
 /** Flat-shaded geometry for a soup, one normal per facet (see the note at the top). */
 function soupGeometry(soup) {
@@ -94,6 +104,8 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
   const pickRotaryCenter = useCamPlanStore((s) => s.pickRotaryCenter);
   const pickRotaryZero = useCamPlanStore((s) => s.pickRotaryZero);
   const setDatumHover = useCamPlanStore((s) => s.setDatumHover);
+  const measuring = useMeasureStore((s) => s.active);
+  const addMeasure = useMeasureStore((s) => s.add);
   const circleCache = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const geometry = useMemo(() => soupGeometry(getMesh().soup), [meshVer]);
@@ -154,6 +166,12 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
       if (event.face?.normal) pickRotaryZero(event.face.normal.toArray());
       return;
     }
+    // Measure, when it is on, takes the click: it is what the operator just asked for.
+    if (measuring) {
+      event.stopPropagation();
+      addMeasure(pickFor(getMesh().welded, event, localPoint()));
+      return;
+    }
     const picked = featureUnder(event);
     if (picked === undefined) return;
     event.stopPropagation();
@@ -189,6 +207,7 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
   const onPointerMove = (event) => {
     // The cursor means an origin right now, not a feature, so show that instead.
     if (datumPickMode) { hoverDatum(event); return; }
+    if (measuring) return;
     const picked = featureUnder(event);
     if (picked === undefined) return;
     if ((picked?.id ?? null) !== (hoverIdRef.current ?? null)) {
@@ -333,6 +352,8 @@ export function FeatureHighlight({ meshVer }) {
  */
 export function SketchPart({ meshVer, visible = true }) {
   const facePick = useSketchStore((s) => s.facePick);
+  const measuring = useMeasureStore((s) => s.active);
+  const addMeasure = useMeasureStore((s) => s.add);
   const [hover, setHover] = useState(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const geometry = useMemo(() => soupGeometry(getRawMesh().soup), [meshVer]);
@@ -359,6 +380,14 @@ export function SketchPart({ meshVer, visible = true }) {
     return welded ? faceOfTriangle(detectFeatures(welded), event.faceIndex) : null;
   };
 
+  // Measure takes clicks here as on the machining pages, in the frame the part
+  // was built in; Sketch on Face, armed on purpose, comes first.
+  const measure = measuring && !facePick ? {
+    onClick: (event) => {
+      event.stopPropagation();
+      addMeasure(pickFor(getRawMesh().welded, event, event.point.toArray()));
+    },
+  } : {};
   const pick = facePick ? {
     onPointerMove: (event) => {
       event.stopPropagation();
@@ -386,6 +415,7 @@ export function SketchPart({ meshVer, visible = true }) {
         geometry={geometry}
         renderOrder={-1}
         onAfterRender={(renderer) => renderer.clearDepth()}
+        {...measure}
         {...pick}
       >
         <meshStandardMaterial color={PART_COLOR} metalness={0.1} roughness={0.65} side={THREE.DoubleSide} />
@@ -397,6 +427,53 @@ export function SketchPart({ meshVer, visible = true }) {
           />
         </mesh>
       )}
+    </group>
+  );
+}
+
+/**
+ * What Measure has picked, drawn on the part: the face lit, the circle ringed,
+ * and a dot where a distance is taken from. Drawn over everything, since a mark
+ * hidden behind the part it marks says nothing.
+ *
+ * `raw` is the frame the picks were made in — the part as built on the Sketch
+ * page, as set up for machining elsewhere.
+ */
+export function MeasureMarks({ meshVer, raw = false }) {
+  const picks = useMeasureStore((s) => s.picks);
+  const bounds = useCamPlanStore((s) => s.analysis?.bounds);
+  const size = originMarkerSize(bounds);
+  const geometries = useMemo(() => {
+    const soup = (raw ? getRawMesh() : getMesh()).soup;
+    const out = [];
+    for (const p of picks) {
+      if (p.kind === 'face') {
+        const built = highlightGeometry(p.face, soup);
+        if (built) out.push(built.geometry);
+      }
+      if (p.kind === 'circle') out.push(...circleMarkerGeometry(p.circle, size));
+      else {
+        const dot = new THREE.SphereGeometry(size * 0.04, 12, 8);
+        dot.translate(p.point[0], p.point[1], p.point[2]);
+        out.push(dot);
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picks, size, meshVer, raw]);
+
+  useEffect(() => () => geometries.forEach((g) => g.dispose()), [geometries]);
+
+  if (!geometries.length) return null;
+  return (
+    <group name="measure-marks">
+      {geometries.map((g) => (
+        <mesh key={g.uuid} geometry={g} renderOrder={11} raycast={() => null}>
+          <meshBasicMaterial
+            color={CAD.accent} transparent opacity={0.7} side={THREE.DoubleSide} depthTest={false} depthWrite={false}
+          />
+        </mesh>
+      ))}
     </group>
   );
 }

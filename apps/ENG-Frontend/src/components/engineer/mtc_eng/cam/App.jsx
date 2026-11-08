@@ -65,6 +65,7 @@ import SketchContextMenu from './components/SketchContextMenu.jsx';
 import SketchConfirmCorner from './components/SketchConfirmCorner.jsx';
 import MenuBar from './components/MenuBar.jsx';
 import CommandRibbon from './components/CommandRibbon.jsx';
+import MeasurePanel from './components/MeasurePanel.jsx';
 import WorkspaceTabs from './components/WorkspaceTabs.jsx';
 import StdVcDialog from './components/StdVcDialog.jsx';
 import CustomTurnToolDialog from './components/CustomTurnToolDialog.jsx';
@@ -1445,6 +1446,8 @@ export default function App() {
                 />
               )}
             </div>
+
+            <MeasurePanel sketching={sketching} />
 
             {/* Bottom toolbar: playing the program back. A sketch has nothing to play. */}
             {!sketching && (
