@@ -22,6 +22,7 @@ import { Tooltip } from 'antd';
 import { SettingOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import RibbonButton from './RibbonButton.jsx';
 import BuildPanel, { useHasBuiltPart } from './BuildPanel.jsx';
+import HolePanel from './HolePanel.jsx';
 import { glyph } from './glyph.jsx';
 import { useCamStore } from '../stores/camStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
@@ -50,6 +51,7 @@ const SimulateIcon = glyph(<path d="M7 5l12 7-12 7z" />);
 const PostIcon = glyph(<><path d="M4 7h16M4 12h10M4 17h13" /><path d="M17 11l3 3-3 3" /></>);
 const StandardVcIcon = glyph(<><path d="M4 18a8 8 0 0116 0" /><path d="M12 18l4-6.5" /></>);
 
+const HoleIcon = glyph(<><path d="M4 9l8-4 8 4-8 4z" /><path d="M4 9v7l8 4 8-4V9" /><ellipse cx="12" cy="9" rx="3" ry="1.5" fill="currentColor" /><path d="M9 9v6M15 9v6" opacity="0.6" /></>);
 const MeasureIcon = glyph(<><path d="M3 15l12-12 6 6-12 12z" /><path d="M7 11l2 2M10 8l2 2M13 5l2 2" /></>);
 
 const Sep = () => <div style={{ width: 1, alignSelf: 'stretch', margin: '4px 5px', background: CAD.border }} />;
@@ -176,6 +178,16 @@ function FeatureCommands() {
         RevolvedCutIcon,
         'Revolve the active sketch and remove it from the part',
       )}
+      <HolePanel
+        trigger={(
+          <Tooltip
+            title={hasPart ? 'Drilled, tapped, counterbored or countersunk holes at the sketch\'s points' : 'Build a part first: a hole needs something to go into'}
+            placement="bottom"
+          >
+            <RibbonButton icon={<HoleIcon />} label="Hole Wizard" disabled={!hasPart} />
+          </Tooltip>
+        )}
+      />
       <Sep />
       <Command
         icon={<RebuildIcon />} label="Rebuild" accent={dirty} disabled={!features.length}

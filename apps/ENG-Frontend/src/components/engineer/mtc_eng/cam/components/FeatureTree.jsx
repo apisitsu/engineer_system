@@ -20,7 +20,7 @@
  */
 import { useState } from 'react';
 import {
-  Button, Tooltip, Space, Typography, InputNumber, Segmented, Badge, Alert, Dropdown,
+  Button, Tooltip, Space, Typography, InputNumber, Segmented, Badge, Alert, Dropdown, Select,
 } from 'antd';
 import {
   DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined,
@@ -33,6 +33,7 @@ import {
 } from './TreeIcons.jsx';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { describeFeature, END_CONDITIONS } from '../engine/solid/featureTree.js';
+import { THREADS } from '../engine/solid/hole.js';
 import { planeLabel } from '../engine/sketch/plane.js';
 import RevolveAxis, { axisValueOf, axisFromValue } from './RevolveAxis.jsx';
 import { CAD } from '../theme.js';
@@ -83,6 +84,49 @@ function FeatureEditor({ feature }) {
         The mesh this job was imported from. Its geometry cannot be edited here —
         it is the base everything else is cut from.
       </Text>
+    );
+  }
+  if (feature.kind === 'hole') {
+    return (
+      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+        <Space size={4} style={{ width: '100%' }}>
+          {feature.holeType === 'tap' ? (
+            <Select
+              size="small"
+              value={feature.thread}
+              onChange={(v) => update(feature.id, { thread: v })}
+              options={Object.keys(THREADS).map((t) => ({ value: t, label: t }))}
+              style={{ width: 90 }}
+            />
+          ) : (
+            <InputNumber
+              size="small"
+              value={feature.diameter}
+              min={0.1}
+              onChange={(v) => update(feature.id, { diameter: Number(v) || feature.diameter })}
+              addonBefore="Ø"
+              style={{ width: 100 }}
+            />
+          )}
+          {feature.end === 'blind' && (
+            <InputNumber
+              size="small"
+              value={feature.depth}
+              min={0.1}
+              onChange={(v) => update(feature.id, { depth: Number(v) || feature.depth })}
+              addonBefore="Depth"
+              style={{ width: 124 }}
+            />
+          )}
+        </Space>
+        <Segmented
+          size="small"
+          block
+          value={feature.end}
+          onChange={(v) => update(feature.id, { end: v })}
+          options={[{ value: 'blind', label: 'Blind' }, { value: 'through', label: 'Through All' }]}
+        />
+      </Space>
     );
   }
   return (

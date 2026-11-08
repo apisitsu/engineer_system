@@ -13,8 +13,13 @@
  *
  * 1. corners closer than `tol` are one corner;
  * 2. a triangle with no area is dropped;
- * 3. a triangle with another corner lying on one of its edges is split at that
- *    corner, until no edge has a corner on it.
+ * 3. a triangle with another corner lying on an **open** edge of it — one no
+ *    neighbour shares — is split at that corner, until no open edge has one.
+ *
+ * Only open edges are looked at, because only there can a T-junction be: an edge
+ * a neighbour runs back along is already closed. Looking at every edge found
+ * "corners on edges" that were only close to the long thin triangles a boolean
+ * fans round a hole, split them by the thousand and bent the surface doing it.
  *
  * Splitting at a point on an edge cuts the triangle in two along a line from the
  * opposite corner, so both halves keep the original's facing and neither is
@@ -32,6 +37,18 @@ export function repairSoup(soup, { tol = 1e-4 } = {}) {
   // Cells about a fiftieth of the part: an edge then crosses a handful of them,
   // where cells the size of the tolerance would number in the hundreds of thousands.
   const grid = vertexGrid(verts, Math.max(diagonalOf(verts) / 50, tol * 10));
+  // Directed edges of every live triangle, so an edge with a partner running the
+  // other way is known closed. Kept current as triangles are dropped and split.
+  const edges = new Map();
+  const count = (t, by) => {
+    for (let k = 0; k < 3; k++) {
+      const key = `${t[k]},${t[(k + 1) % 3]}`;
+      edges.set(key, (edges.get(key) || 0) + by);
+    }
+  };
+  tris.forEach((t) => count(t, 1));
+  const open = (a, b) => !(edges.get(`${b},${a}`) > 0);
+
   const out = [];
   // A worklist rather than recursion: a long edge on a finely cut neighbour can
   // need hundreds of splits, and each split triangle goes on the end of the list.
@@ -42,14 +59,17 @@ export function repairSoup(soup, { tol = 1e-4 } = {}) {
   for (; i < work.length && i < limit; i++) {
     const t = work[i];
     // A split of a sliver can leave a half with no area; it covers nothing.
-    if (area2(verts, t) <= tol * tol) continue;
-    const split = cornerOnEdge(verts, grid, t, tol);
+    if (area2(verts, t) <= tol * tol) { count(t, -1); continue; }
+    const split = cornerOnEdge(verts, grid, t, tol, open);
     if (!split) { out.push(t); continue; }
     const { edge, v } = split;
     const a = t[edge];
     const b = t[(edge + 1) % 3];
     const c = t[(edge + 2) % 3];
-    work.push([a, v, c], [v, b, c]);
+    const halves = [[a, v, c], [v, b, c]];
+    count(t, -1);
+    halves.forEach((h) => count(h, 1));
+    work.push(...halves);
   }
   // Out of patience on something pathological: keep what is left as it was.
   out.push(...work.slice(i));
@@ -151,11 +171,12 @@ function vertexGrid(verts, size) {
   return { cells, size };
 }
 
-/** The first corner found lying inside one of the triangle's edges, or null. */
-function cornerOnEdge(verts, { cells, size }, t, tol) {
+/** The first corner found lying inside one of the triangle's open edges, or null. */
+function cornerOnEdge(verts, { cells, size }, t, tol, open) {
   for (let e = 0; e < 3; e++) {
     const ia = t[e];
     const ib = t[(e + 1) % 3];
+    if (!open(ia, ib)) continue;
     const a = verts[ia];
     const b = verts[ib];
     const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];

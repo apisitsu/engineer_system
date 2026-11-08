@@ -48,6 +48,9 @@ import { combineRegions } from './regionBoolean.js';
 import { buildSolid } from './extrude.js';
 import { resolvePlaneRef, lineFrame, planeBasis } from '../sketch/plane.js';
 import { centerlines } from '../sketch/model.js';
+import {
+  HOLE_TYPES, THREADS, holeSolid, holePositions,
+} from './hole.js';
 import { boundsOf } from '../mesh/analyze.js';
 
 /**
@@ -119,7 +122,11 @@ export const FEATURE_KINDS = {
   import: { label: 'Import', needsSketch: false },
   extrude: { label: 'Extrude', needsSketch: true },
   revolve: { label: 'Revolve', needsSketch: true },
+  hole: { label: 'Hole', needsSketch: true },
 };
+
+/** Numbers that come back as themselves when sane, else the default given. */
+const positive = (v, fallback) => (Number.isFinite(v) && v > 0 ? v : fallback);
 
 /**
  * How a feature joins what came before it. `new` starts again — the first
@@ -153,6 +160,25 @@ export function createFeature(kind, props = {}) {
     merge: MERGE_MODES[props.merge] ? props.merge : 'new',
   };
   if (kind === 'import') return base;
+  if (kind === 'hole') {
+    // A hole only ever takes material away.
+    return {
+      ...base,
+      merge: 'cut',
+      sketchId: Number.isFinite(props.sketchId) ? props.sketchId : null,
+      holeType: HOLE_TYPES[props.holeType] ? props.holeType : 'drill',
+      diameter: positive(props.diameter, 6),
+      thread: THREADS[props.thread] ? props.thread : 'M6',
+      threadDepth: positive(props.threadDepth, 12),
+      cbDiameter: positive(props.cbDiameter, 11),
+      cbDepth: positive(props.cbDepth, 6.5),
+      cskDiameter: positive(props.cskDiameter, 12),
+      cskAngle: positive(props.cskAngle, 90),
+      depth: positive(props.depth, 15),
+      end: props.end === 'through' ? 'through' : 'blind',
+      reverse: !!props.reverse,
+    };
+  }
   return {
     ...base,
     sketchId: Number.isFinite(props.sketchId) ? props.sketchId : null,
@@ -208,6 +234,8 @@ function makeFeatureSolid(feature, {
   const plane = resolvePlaneRef(entry.plane, refBounds);
   if (plane !== entry.plane) planes?.set(feature.sketchId, plane);
 
+  if (feature.kind === 'hole') return makeHoles(feature, entry.doc, plane, partBounds);
+
   const found = sketchRegions(entry.doc);
   let regions = found.regions;
   if (feature.combine && regions.length > 1) regions = combineRegions(regions, feature.combine);
@@ -232,6 +260,26 @@ function makeFeatureSolid(feature, {
     return revolveAboutLine(regions, entry.doc, feature.axisLine, shape);
   }
   return buildSolid(regions, shape);
+}
+
+/**
+ * The holes a Hole feature cuts: one at each of its sketch's points, as deep as
+ * it says or through whatever is on the machine (`extrudeSpan`'s rule, with the
+ * depth the hole's drill point starts at).
+ */
+function makeHoles(feature, doc, plane, partBounds) {
+  if (!partBounds) throw new Error('a hole needs a part to go into — build or import one first');
+  let depth = feature.depth;
+  const through = feature.end === 'through';
+  if (through) {
+    const { ahead, behind } = partReach(plane, partBounds);
+    const reach = feature.reverse ? ahead : behind;
+    if (!(reach > 1e-6)) throw new Error('the hole points away from the part — reverse it');
+    depth = reach + THROUGH_PAST;
+  }
+  return holeSolid(holePositions(doc), plane, feature, {
+    depth, through, reverse: feature.reverse, segments: feature.segments ?? undefined,
+  });
 }
 
 /**
@@ -368,6 +416,12 @@ export function needsMeshBoolean(features) {
 /** A one-line description for the tree panel. */
 export function describeFeature(f, sketchName) {
   if (f.kind === 'import') return 'Imported mesh';
+  if (f.kind === 'hole') {
+    const size = f.holeType === 'tap' ? f.thread : `Ø${f.diameter}`;
+    const kind = { drill: 'Drill', tap: 'Tapped', cbore: "C'bore", csk: "C'sink" }[f.holeType];
+    const deep = f.end === 'through' ? 'through all' : `× ${f.depth} mm`;
+    return `${kind} ${size} ${deep}${sketchName ? ` · ${sketchName}` : ''}`;
+  }
   const where = sketchName ? ` · ${sketchName}` : '';
   const how = f.merge === 'new' ? '' : ` · ${f.merge}`;
   if (f.kind === 'revolve') {

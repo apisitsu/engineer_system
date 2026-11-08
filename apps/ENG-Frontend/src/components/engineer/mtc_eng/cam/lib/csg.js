@@ -30,7 +30,10 @@ import * as THREE from 'three';
 import {
   Evaluator, Brush, ADDITION, SUBTRACTION, INTERSECTION,
 } from 'three-bvh-csg';
-import { repairSoup } from '../engine/mesh/repair.js';
+import { repairSoup, openEdgeCount } from '../engine/mesh/repair.js';
+
+/** The finer corner tolerance (mm) a repair is tried at when the usual one leaves edges open. */
+const FINE_TOL = 1e-5;
 
 /** The operations, in the words a CAD puts on the buttons. */
 export const MESH_OPS = {
@@ -135,7 +138,17 @@ export function meshBoolean(part, tool, op, format = op) {
 
   // Closed up before anything reads it: the evaluator leaves T-junctions, which
   // show as cracks on screen and as open edges to a slice (see `repairSoup`).
-  const soup = repairSoup(soupOf(result, format));
+  // Which corners count as one is a judgement: a turned groove closes best at
+  // the usual tolerance, a small drilled hole — corners a few hundredths apart
+  // round its mouth — at a finer one. Repair moves nothing, so both are the same
+  // solid, and the one with fewer open edges is kept.
+  const raw = soupOf(result, format);
+  let soup = repairSoup(raw);
+  const open = openEdgeCount(soup);
+  if (open > 0) {
+    const fine = repairSoup(raw, { tol: FINE_TOL });
+    if (openEdgeCount(fine) < open) soup = fine;
+  }
   if (!soup.triangleCount) {
     throw new Error(`Nothing is left after ${op} — the two solids do not overlap the way that needs.`);
   }

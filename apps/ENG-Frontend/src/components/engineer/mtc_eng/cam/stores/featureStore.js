@@ -30,6 +30,7 @@ import { create } from 'zustand';
 import {
   createFeature, parseFeatures, rebuildFeatures, needsMeshBoolean, seedFeatureIds,
 } from '../engine/solid/featureTree.js';
+import { holePositions } from '../engine/solid/hole.js';
 import { linkFaceToSolids } from '../engine/sketch/plane.js';
 import { useSketchStore } from './sketchStore.js';
 import { useCamPlanStore, getMesh } from './camPlanStore.js';
@@ -249,6 +250,41 @@ export const useFeatureStore = create((set, get) => ({
       // than leave a permanently broken entry in the tree.
       get().removeFeature(feature.id);
       sketch.setError(`Could not build: ${failed.message}`);
+      await get().rebuild();
+      return null;
+    }
+    sketch.setError(null);
+    return analysis;
+  },
+
+  /**
+   * Hole Wizard: holes of one kind at the open sketch's points.
+   *
+   * Not `buildFromSketch`: a hole needs positions, not a closed profile, and it
+   * always cuts the part already on the machine. A hole that cannot be made is
+   * dropped from the tree with the reason, the same as a build that fails.
+   */
+  async buildHole({ name, ...params } = {}) {
+    const sketch = useSketchStore.getState();
+    const entry = sketch.activeSketch();
+    if (!entry) return null;
+    if (!get().features.length) {
+      sketch.setError('There is no part yet to put a hole in — build or import one first.');
+      return null;
+    }
+    const count = holePositions(sketch.sk).length;
+    if (!count) {
+      sketch.setError('Put a point on the sketch where each hole goes — or a circle, and its centre is used.');
+      return null;
+    }
+    const feature = get().addFeature('hole', {
+      ...params, sketchId: entry.id, name: name || `Hole · ${entry.name}`,
+    });
+    const analysis = await get().rebuild();
+    const failed = get().errors.find((e) => e.id === feature.id);
+    if (failed) {
+      get().removeFeature(feature.id);
+      sketch.setError(`Could not make the hole: ${failed.message}`);
       await get().rebuild();
       return null;
     }

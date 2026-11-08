@@ -132,12 +132,14 @@ describe('CommandRibbon', () => {
     expect(button('Extruded Boss/Base').disabled).toBe(false);
     expect(button('Extruded Cut').disabled).toBe(true);
     expect(button('Revolved Cut').disabled).toBe(true);
+    expect(button('Hole Wizard').disabled).toBe(true);
 
     await act(async () => {
       useFeatureStore.setState({ features: [{ id: 'f1', name: 'Extrude1' }] });
       useCamPlanStore.setState({ status: 'ready', stlName: 'part.stl' });
     });
     expect(button('Extruded Cut').disabled).toBe(false);
+    expect(button('Hole Wizard').disabled).toBe(false);
     await act(async () => { useCamPlanStore.setState({ status: 'idle', stlName: null }); });
   });
 

@@ -113,15 +113,31 @@ describe('meshBoolean — a cut whose surface lies on the part’s', () => {
   });
 });
 
-describe('meshBoolean — when the cleaner mesh is the wrong solid', () => {
-  it('keeps the cut that removes all it should, over a closed one that does not', () => {
-    // A half-turn step at the end of a bar. Grown, the cut leaves open edges where
-    // its end faces meet the bar's corners; as drawn it closes better but its
-    // skin lies on the bar's and some 58 mm³ that should go is kept. The shape
-    // has to be right first.
+describe('meshBoolean — a part of a turn, and a drilled hole', () => {
+  it('cuts a half-turn step from a bar into a closed solid of the right volume', () => {
+    // The cut's end faces lie on a plane through the axis, where the bar has corners.
+    // Uncut as drawn, some 58 mm³ that should go is kept; repaired at every edge,
+    // and not only the open ones, it was left with over a hundred open edges.
     const bar = revolveRegion({ outer: square(0, 0, 60, 20) }, { axis: 'x' });
     const step = revolveRegion({ outer: square(50, 12, 60, 20) }, { axis: 'x', angle: Math.PI });
-    nearVolume(volume(meshBoolean(bar, step, 'cut')), volume(bar) - volume(step));
+    const out = meshBoolean(bar, step, 'cut');
+    nearVolume(volume(out), volume(bar) - volume(step));
+    expect(openEdgeCount(out)).toBe(0);
+  });
+
+  it('repairs a hole without splitting the plate round it into thousands of slivers', () => {
+    // The fan of long thin triangles a boolean leaves round a hole once read as
+    // T-junctions everywhere: ~37 000 triangles and the hole's volume bent by 1%.
+    const plate = box(0, 0, 40, 40, 0, 10);
+    const r = 3;
+    const ring = Array.from({ length: 120 }, (_, i) => {
+      const a = (i / 120) * 2 * Math.PI;
+      return [20 + r * Math.cos(a), 20 + r * Math.sin(a)];
+    }).flat();
+    const hole = extrudeRegion({ outer: ring }, { depth: 12, base: -1 });
+    const out = meshBoolean(plate, hole, 'cut');
+    nearVolume(volume(out), 16000 - volume(hole) * (10 / 12));
+    expect(out.triangleCount).toBeLessThan(5000);
   });
 
   it('counts the open edges of a surface', () => {
