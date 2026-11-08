@@ -131,3 +131,58 @@ describe('a sketch on a plane offset from a feature’s face', () => {
     expect(plane().offset).toBe(30);
   });
 });
+
+describe('what makes the tree out of date', () => {
+  beforeEach(async () => {
+    rect(0, 0, 40, 20);
+    await build({ op: 'extrude', depth: 10 });
+    expect(features().dirty).toBe(false);
+  });
+
+  it('is not starting a sketch on a face, or drawing on one no feature uses', () => {
+    pickTop(10);
+    features().sketchOnFace();
+    expect(features().dirty).toBe(false);
+    rect(5, 5, 10, 10);
+    expect(features().dirty).toBe(false);
+  });
+
+  it('is not opening a sketch a feature uses, only editing it', () => {
+    sketch().addSketch({});
+    expect(features().dirty).toBe(false);
+    sketch().setActiveSketch(1);
+    expect(features().dirty).toBe(false);
+    rect(50, 0, 60, 10);
+    expect(features().dirty).toBe(true);
+  });
+
+  it('is moving the plane of a sketch a feature uses', () => {
+    sketch().addSketch({});
+    sketch().setSketchPlane(1, { preset: 'XY', offset: 5 });
+    expect(features().dirty).toBe(true);
+  });
+});
+
+describe('the name Sketch on Face gives a sketch', () => {
+  it('follows the plane when it is offset from the face', async () => {
+    rect(0, 0, 40, 20);
+    await build({ op: 'extrude', depth: 10 });
+    pickTop(10);
+    const id = features().sketchOnFace();
+    const entry = () => sketch().sketches.find((s) => s.id === id);
+    expect(entry().name).toBe('Face Top (XY) +10');
+    sketch().setSketchPlane(id, withGap(entry().plane, 5));
+    expect(entry().name).toBe('Face Top (XY) +15');
+  });
+
+  it('is left alone once the operator has named the sketch', async () => {
+    rect(0, 0, 40, 20);
+    await build({ op: 'extrude', depth: 10 });
+    pickTop(10);
+    const id = features().sketchOnFace();
+    sketch().renameSketch(id, 'Boss top');
+    const entry = () => sketch().sketches.find((s) => s.id === id);
+    sketch().setSketchPlane(id, withGap(entry().plane, 5));
+    expect(entry().name).toBe('Boss top');
+  });
+});

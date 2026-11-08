@@ -114,6 +114,9 @@ function firstSketch(doc) {
 
 const INITIAL_DOC = newSketch();
 
+/** The name Sketch on Face gives a sketch: where it is. */
+const faceSketchName = (plane) => `Face ${planeLabel(plane)}`;
+
 export const useSketchStore = create((set, get) => ({
   // A sketch is a document plus the plane it is drawn on. `sk` is the *active*
   // document and is the **same object** as `sketches[active].doc`, not a copy —
@@ -259,7 +262,13 @@ export const useSketchStore = create((set, get) => ({
   /** Move a sketch onto a different plane. The geometry keeps its 2D coordinates. */
   setSketchPlane(id, plane) {
     const parsed = parsePlane(plane);
-    set({ sketches: get().sketches.map((s) => (s.id === id ? { ...s, plane: parsed } : s)) });
+    // A sketch still under the name Sketch on Face gave it says where it is, so it
+    // follows the plane ("Face Top (XY) +20" moved 10 up reads +30). One the
+    // operator renamed keeps the name they gave it.
+    const follow = (s) => (s.name === faceSketchName(s.plane) ? faceSketchName(parsed) : s.name);
+    set({
+      sketches: get().sketches.map((s) => (s.id === id ? { ...s, name: follow(s), plane: parsed } : s)),
+    });
     get()._bump();
     return parsed;
   },
@@ -295,7 +304,7 @@ export const useSketchStore = create((set, get) => ({
       set({ error: null });
       return onto;
     }
-    const id = get().addSketch({ name: `Face ${planeLabel(plane)}`, plane });
+    const id = get().addSketch({ name: faceSketchName(plane), plane });
     set({ error: null });
     return id;
   },

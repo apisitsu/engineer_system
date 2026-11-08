@@ -402,16 +402,37 @@ export const useFeatureStore = create((set, get) => ({
 }));
 
 /**
- * A sketch edit makes the tree stale.
+ * An edit to a sketch the tree is built from makes the tree stale.
  *
  * Subscribed here rather than called from `sketchStore` so the dependency keeps
  * pointing one way: the sketcher has no idea features exist, and it should not
  * have to. `version` is the token the sketcher already bumps on every mutation.
+ *
+ * `version` does not say *which* sketch changed, so two things are watched:
+ *
+ * - the **open** sketch, when a feature is built from it and it was already open
+ *   at the last bump — opening a sketch bumps too, and looking at a sketch is not
+ *   editing it;
+ * - the **planes** of the sketches features are built from, which change without
+ *   the sketch being open (the Sketches panel, a deleted sketch).
+ *
+ * Anything else — starting a sketch on a face, drawing on one no feature uses
+ * yet — leaves the part as it was, and so leaves the tree up to date. Marking it
+ * stale anyway lit Rebuild for nothing, and a warning that is usually wrong is a
+ * warning nobody reads.
  */
-let _lastVersion = null;
+// Every sketch's plane as text, by id. A sketch absent from the previous map is
+// new, not moved: a feature just built from it has already marked the tree.
+const planesById = (state) => new Map(state.sketches.map((s) => [s.id, JSON.stringify(s.plane)]));
+const initial = useSketchStore.getState();
+let _last = { version: initial.version, activeId: initial.activeId, planes: planesById(initial) };
 useSketchStore.subscribe((state) => {
-  if (state.version === _lastVersion) return;
-  _lastVersion = state.version;
-  const store = useFeatureStore.getState();
-  if (store.features.length) store.markDirty();
+  if (state.version === _last.version) return;
+  const { features } = useFeatureStore.getState();
+  const planes = planesById(state);
+  const used = new Set(features.map((f) => f.sketchId).filter((id) => id != null));
+  const editedUsed = state.activeId === _last.activeId && used.has(state.activeId);
+  const moved = [...used].some((id) => _last.planes.has(id) && planes.get(id) !== _last.planes.get(id));
+  _last = { version: state.version, activeId: state.activeId, planes };
+  if (features.length && (editedUsed || moved)) useFeatureStore.getState().markDirty();
 });
