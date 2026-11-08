@@ -7,6 +7,9 @@ import { meshBoolean } from '../../lib/csg.js';
 import { createSketch, addPoint, addLine } from '../sketch/model.js';
 import { volume } from './solidAssert.js';
 
+/** A mesh boolean grows the new solid by a micron (`lib/csg.js` GROW): near, not exact. */
+const nearVolume = (v, want) => expect(Math.abs(v - want)).toBeLessThan(1);
+
 /** Add a closed rectangle to an existing sketch. */
 function addRect(sk, x0, y0, x1, y1) {
   const p1 = addPoint(sk, x0, y0);
@@ -102,7 +105,7 @@ describe('rebuildFeatures — the fold', () => {
     ];
     const { soup, errors } = rebuildFeatures(tree, ctx(sketches));
     expect(errors).toEqual([]);
-    expect(volume(soup)).toBeCloseTo(40 * 40 * 10 - 10 * 10 * 10, 1);
+    nearVolume(volume(soup), 40 * 40 * 10 - 10 * 10 * 10);
   });
 
   it('replays the whole tree after a parameter changes — the point of all this', () => {
@@ -114,13 +117,11 @@ describe('rebuildFeatures — the fold', () => {
       createFeature('extrude', { sketchId: 1, depth: 10 }),
       createFeature('extrude', { sketchId: 2, depth: 30, base: -10, merge: 'cut' }),
     ];
-    expect(volume(rebuildFeatures(tree, ctx(sketches)).soup))
-      .toBeCloseTo(16000 - 1000, 1);
+    nearVolume(volume(rebuildFeatures(tree, ctx(sketches)).soup), 16000 - 1000);
 
     // Edit the plate's thickness only. Everything downstream follows.
     tree[0] = { ...tree[0], depth: 20 };
-    expect(volume(rebuildFeatures(tree, ctx(sketches)).soup))
-      .toBeCloseTo(40 * 40 * 20 - 10 * 10 * 20, 1);
+    nearVolume(volume(rebuildFeatures(tree, ctx(sketches)).soup), 40 * 40 * 20 - 10 * 10 * 20);
   });
 
   it('follows an edit to the **sketch**, not just to the parameters', () => {
@@ -179,7 +180,7 @@ describe('rebuildFeatures — the fold', () => {
     ];
     const { soup, errors } = rebuildFeatures(tree, ctx(sketches, { [base.id]: imported }));
     expect(errors).toEqual([]);
-    expect(volume(soup)).toBeCloseTo(16000 - 1000, 1);
+    nearVolume(volume(soup), 16000 - 1000);
   });
 
   it('applies the profile boolean before it builds anything', () => {
@@ -237,7 +238,7 @@ describe('rebuildFeatures — suppression and ordering', () => {
     // Cutting before there is anything to cut leaves the pocket as the base and
     // the plate then replaces it — order is not decoration.
     const cutFirst = rebuildFeatures([pocket, plate], ctx(s)).soup;
-    expect(volume(cutAfter)).toBeCloseTo(15000, 1);
+    nearVolume(volume(cutAfter), 15000);
     expect(volume(cutFirst)).toBeCloseTo(16000, 1);
   });
 });
@@ -352,7 +353,7 @@ describe('keepIntermediates', () => {
     expect(rebuildFeatures(tree, ctx(sketches)).steps[0].soup).toBeUndefined();
     const kept = rebuildFeatures(tree, ctx(sketches), { keepIntermediates: true });
     expect(volume(kept.steps[0].soup)).toBeCloseTo(16000, 1);
-    expect(volume(kept.steps[1].soup)).toBeCloseTo(15000, 1);
+    nearVolume(volume(kept.steps[1].soup), 15000);
   });
 });
 
