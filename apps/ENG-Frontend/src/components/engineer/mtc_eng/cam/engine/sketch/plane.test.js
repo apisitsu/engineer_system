@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PLANE_PRESETS, DEFAULT_PLANE, planeBasis, planeToWorld, worldToPlane,
-  planeMatrix, planeLabel, parsePlane, planeFromFace, boundsOnPlane, lineFrame,
+  planeMatrix, planeLabel, parsePlane, planeFromFace, boundsOnPlane, lineFrame, withGap, resolvePlaneRef,
 } from './plane.js';
 
 const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
@@ -133,11 +133,11 @@ describe('planeFromFace', () => {
     // A pocket floor 12 mm up must read as the machine's own Top plane, so a
     // dimension typed on it means what it meant on the table.
     expect(planeFromFace(face([0, 0, 1], [5, 7, 12], 'up')))
-      .toEqual({ preset: 'XY', offset: 12 });
+      .toEqual({ preset: 'XY', offset: 12, gap: 0 });
     expect(planeFromFace(face([1, 0, 0], [8, 1, 2], 'right')))
-      .toEqual({ preset: 'YZ', offset: 8 });
+      .toEqual({ preset: 'YZ', offset: 8, gap: 0 });
     expect(planeFromFace(face([0, -1, 0], [1, -4, 2], 'front')))
-      .toEqual({ preset: 'XZ', offset: 4 });
+      .toEqual({ preset: 'XZ', offset: 4, gap: 0 });
   });
 
   it('rounds the offset, because a centroid carries float noise', () => {
@@ -207,5 +207,33 @@ describe('lineFrame', () => {
 
   it('refuses a line of no length', () => {
     expect(() => lineFrame({ preset: 'XY', offset: 0 }, [1, 1], [1, 1])).toThrow(/no length/);
+  });
+});
+
+describe('withGap — a plane offset from the face it was made from', () => {
+  it('stands a standard plane off its face, and back', () => {
+    const top = planeFromFace({ normal: [0, 0, 1], centroid: [0, 0, 10] });
+    expect(top).toEqual({ preset: 'XY', offset: 10, gap: 0 });
+    const up = withGap(top, 5);
+    expect(up).toMatchObject({ preset: 'XY', offset: 15, gap: 5 });
+    expect(withGap(up, -2)).toMatchObject({ offset: 8, gap: -2 });
+  });
+
+  it('moves a custom frame along its own normal, out of the part', () => {
+    const under = planeFromFace({ normal: [0, 0, -1], centroid: [1, 2, 0] });
+    const off = withGap(under, 3);
+    expect(off.gap).toBe(3);
+    expect(off.origin.map((x) => +x.toFixed(9) || 0)).toEqual([1, 2, -3]);
+  });
+
+  it('keeps its distance off a linked face when the face moves', () => {
+    const plane = withGap({ preset: 'XY', offset: 10, gap: 0, ref: { featureId: 1, axis: 'z', side: 'max' } }, 5);
+    const moved = resolvePlaneRef(plane, new Map([[1, { min: [0, 0, 0], max: [40, 40, 25] }]]));
+    expect(moved.offset).toBe(30);
+  });
+
+  it('survives a project file', () => {
+    expect(parsePlane({ preset: 'XY', offset: 15, gap: 5 })).toEqual({ preset: 'XY', offset: 15, gap: 5 });
+    expect(parsePlane({ preset: 'XY', offset: 15 }).gap).toBeUndefined();
   });
 });

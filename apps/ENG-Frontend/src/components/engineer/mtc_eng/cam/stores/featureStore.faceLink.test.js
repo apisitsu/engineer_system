@@ -3,6 +3,7 @@ import { useSketchStore } from './sketchStore.js';
 import { useCamPlanStore } from './camPlanStore.js';
 import { useFeatureStore } from './featureStore.js';
 import { addPoint, addLine } from '../engine/sketch/model.js';
+import { withGap } from '../engine/sketch/plane.js';
 
 const sketch = () => useSketchStore.getState();
 const features = () => useFeatureStore.getState();
@@ -112,5 +113,21 @@ describe('sketch on a face picked on the Sketch page', () => {
     });
     expect(sketch().sketches.find((s) => s.id === id).plane)
       .toMatchObject({ preset: 'XY', offset: 10, ref: { axis: 'z', side: 'max' } });
+  });
+});
+
+describe('a sketch on a plane offset from a feature’s face', () => {
+  it('stays the same distance off the face when the feature changes', async () => {
+    rect(0, 0, 40, 20);
+    await build({ op: 'extrude', depth: 10 });
+    pickTop(10);
+    const id = features().sketchOnFace();
+    const plane = () => sketch().sketches.find((s) => s.id === id).plane;
+    sketch().setSketchPlane(id, withGap(plane(), 5));
+    expect(plane()).toMatchObject({ offset: 15, gap: 5, ref: { axis: 'z', side: 'max' } });
+
+    features().updateFeature(features().features[0].id, { depth: 25 });
+    await features().rebuild();
+    expect(plane().offset).toBe(30);
   });
 });

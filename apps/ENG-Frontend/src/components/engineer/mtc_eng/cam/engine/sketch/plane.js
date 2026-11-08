@@ -184,7 +184,7 @@ export function planeFromFace(face, { snapTol = 1e-6 } = {}) {
     if (dot(n, p.n) > 1 - snapTol) {
       // Round the offset: a centroid carries float noise from the triangle
       // areas it was weighted by, and "Top (XY) +12" beats "+11.999999997".
-      return { preset, offset: Math.round(dot(o, p.n) * 1e6) / 1e6 };
+      return { preset, offset: Math.round(dot(o, p.n) * 1e6) / 1e6, gap: 0 };
     }
   }
 
@@ -201,6 +201,7 @@ export function planeFromFace(face, { snapTol = 1e-6 } = {}) {
     u,
     v: cross(n, u),
     name: face.facing ? `On face · ${face.facing}` : 'On face',
+    gap: 0,
   };
 }
 
@@ -288,19 +289,22 @@ export function resolvePlaneRef(plane, boundsById) {
   const k = AXIS_INDEX[ref.axis];
   const coord = b[ref.side][k];
   if (!Number.isFinite(coord)) return plane;
+  // An offset plane stays the same distance off the face (`withGap`).
+  const gap = Number.isFinite(plane.gap) ? plane.gap : 0;
 
   if (plane.u && plane.v) {
     // A custom frame (a −Z/−X/+Y face, which no preset covers): slide its origin
     // along the axis; its u and v are already the face's own.
     const origin = plane.origin ? [...plane.origin] : [0, 0, 0];
-    if (Math.abs(origin[k] - coord) < 1e-9) return plane;
-    origin[k] = coord;
+    const at = coord + planeBasis(plane).n[k] * gap;
+    if (Math.abs(origin[k] - at) < 1e-9) return plane;
+    origin[k] = at;
     return { ...plane, origin };
   }
   const preset = PLANE_PRESETS[plane.preset];
   if (!preset || Math.abs(preset.n[k]) < 0.5) return plane; // link disagrees with the plane
   // The offset is measured along the preset's normal, which is −Y for Front.
-  const offset = Math.round(preset.n[k] * coord * 1e6) / 1e6;
+  const offset = Math.round((preset.n[k] * coord + gap) * 1e6) / 1e6;
   if (Math.abs((plane.offset || 0) - offset) < 1e-9) return plane;
   return { ...plane, offset };
 }
@@ -332,9 +336,12 @@ export function parsePlane(raw) {
     && (r.side === 'min' || r.side === 'max')
     ? { featureId: Number(r.featureId), axis: r.axis, side: r.side }
     : null;
+  // How far off the face a plane made from one sits (see `withGap`).
+  const gap = Number.isFinite(raw.gap) ? Number(raw.gap) : null;
   if (u && v) {
     const plane = { origin: vec3(raw.origin) || [0, 0, 0], u, v };
     if (ref) plane.ref = ref;
+    if (gap != null) plane.gap = gap;
     // A custom plane may carry the name it was made under ("On face · up"), so
     // a reopened project still says where the sketch came from rather than
     // "Custom". Kept only when it is a string, like every other parsed field.
@@ -344,5 +351,29 @@ export function parsePlane(raw) {
   const preset = PLANE_PRESETS[raw.preset] ? raw.preset : 'XY';
   const plane = { preset, offset: Number.isFinite(raw.offset) ? Number(raw.offset) : 0 };
   if (ref) plane.ref = ref;
+  if (gap != null) plane.gap = gap;
   return plane;
+}
+
+/**
+ * The plane `gap` mm off the face it was made from, along its normal — an offset
+ * reference plane, as SolidWorks makes one from a face. Positive stands it off the
+ * part, negative sinks it in.
+ *
+ * Only a plane made from a face has a gap (`planeFromFace` starts it at 0); the
+ * plane's numbers move by the change, and the gap is kept beside them so a face
+ * link that moves the face later moves the plane to the same distance off it
+ * (`resolvePlaneRef`).
+ */
+export function withGap(plane, gap) {
+  const was = Number.isFinite(plane?.gap) ? plane.gap : 0;
+  const delta = (Number.isFinite(gap) ? gap : 0) - was;
+  const out = { ...plane, gap: was + delta };
+  if (plane.u && plane.v) {
+    const { origin, n } = planeBasis(plane);
+    out.origin = add(origin, scale(n, delta));
+  } else {
+    out.offset = Math.round(((plane.offset || 0) + delta) * 1e6) / 1e6;
+  }
+  return out;
 }

@@ -224,7 +224,7 @@ describe('sketchOnFace — starting a second operation on the part', () => {
     expect(id).toBeTruthy();
     expect(store().activeId).toBe(id);
     // An axis-aligned face keeps the machine's axes and reads as an offset.
-    expect(store().activeSketch().plane).toEqual({ preset: 'XY', offset: 12 });
+    expect(store().activeSketch().plane).toEqual({ preset: 'XY', offset: 12, gap: 0 });
     expect(store().activeSketch().name).toMatch(/Top \(XY\) \+12/);
   });
 
@@ -244,7 +244,7 @@ describe('sketchOnFace — starting a second operation on the part', () => {
     useCamPlanStore.setState({ selectedFeature: face([1, 0, 0], [8, 0, 0], 'right') });
     expect(store().sketchOnFace({ onto: before })).toBe(before);
     expect(store().sketches).toHaveLength(count);
-    expect(store().activeSketch().plane).toEqual({ preset: 'YZ', offset: 8 });
+    expect(store().activeSketch().plane).toEqual({ preset: 'YZ', offset: 8, gap: 0 });
   });
 
   it('keeps the geometry when a sketch is moved onto a face', () => {
