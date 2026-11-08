@@ -145,6 +145,7 @@ export const useSketchStore = create((set, get) => ({
   contextMenu: null, // { x, y } screen position of an open right-click menu, or null
   dimensionPending: null, // { kind, refs, label, current } set on a dimension-mode empty-click → shows the inline value input
   offsetPending: false, // true while the Offset rail button is waiting for its distance
+  facePick: false, // true while Sketch on Face waits for a face of the part to be clicked
   editingConstraint: null, // { index, kind, label, angular, value } set when a placed dimension is double-clicked → shows the edit input
   pickTol: SNAP, // world-unit pick/snap tolerance — kept ~constant on screen (set per camera zoom)
   dragging: null, // { id, wasFixed, moved } while a point is being dragged (SW drag-to-modify)
@@ -276,7 +277,8 @@ export const useSketchStore = create((set, get) => ({
    *
    * `face` overrides the picked face. **The feature tree passes it in the raw
    * frame** (`featureStore.sketchOnFace`): a sketch lives where the solids are
-   * built — the Sketch page does not even draw the part — and a picked face is in
+   * built — the frame the Sketch page draws the part in — and a face picked on a
+   * machining page is in
    * the *displayed* frame, laid down and re-laid every time the part's shape
    * changes. A plane taken from the displayed face was right only while the two
    * frames happened to agree.
@@ -361,7 +363,17 @@ export const useSketchStore = create((set, get) => ({
   },
 
   setTool(tool) {
-    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false, boxSelect: null, _boxStart: null, selectedDims: [], contextMenu: null });
+    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false, facePick: false, boxSelect: null, _boxStart: null, selectedDims: [], contextMenu: null });
+  },
+
+  /**
+   * Sketch on Face: the next click on the part picks the face a new sketch goes on.
+   * Drawing is paused meanwhile, so the click reaches the part and not the plane.
+   */
+  setFacePick(on) {
+    set({
+      facePick: on, pending: null, pending2: null, boxSelect: null, _boxStart: null, error: null,
+    });
   },
 
   /** Show a message on the sketcher's error line (used by save/open failures). */

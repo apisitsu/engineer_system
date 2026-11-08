@@ -102,3 +102,15 @@ describe('sketch on a feature’s face — follows the feature when it changes',
     expect(features().sketchOnFace()).toBeNull();
   });
 });
+
+describe('sketch on a face picked on the Sketch page', () => {
+  it('uses the face it is handed, already in the frame the solids are built in', async () => {
+    rect(0, 0, 40, 20);
+    await build({ op: 'extrude', depth: 10 });
+    const id = features().sketchOnFace({
+      face: { normal: [0, 0, 1], centroid: [20, 10, 10], bounds: { min: [0, 0, 10], max: [40, 20, 10] }, facing: 'up' },
+    });
+    expect(sketch().sketches.find((s) => s.id === id).plane)
+      .toMatchObject({ preset: 'XY', offset: 10, ref: { axis: 'z', side: 'max' } });
+  });
+});

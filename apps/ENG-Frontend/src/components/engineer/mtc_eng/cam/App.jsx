@@ -27,7 +27,9 @@ import { cutterById } from './engine/cam/cutters.js';
 import { effectiveTool } from './engine/cam/effectiveTool.js';
 import { useCamStore } from './stores/camStore.js';
 import { useFeatureStore } from './stores/featureStore.js';
-import { useCamPlanStore } from './stores/camPlanStore.js';
+import { useCamPlanStore, getRawMesh } from './stores/camPlanStore.js';
+import { boundsOf } from './engine/mesh/analyze.js';
+import { boundsOnPlane } from './engine/sketch/plane.js';
 import { PART_FORMATS } from './engine/mesh/import.js';
 import CamPanel from './components/CamPanel.jsx';
 import { useSketchStore } from './stores/sketchStore.js';
@@ -339,11 +341,18 @@ export default function App() {
   // *key* there so drawing doesn't snap the camera — only an explicit Fit does).
   const sketchSk = useSketchStore((s) => s.sk);
   const sketchVersion = useSketchStore((s) => s.version);
+  // On the plane it is drawn on, which is not the table once a sketch is on a face.
+  const sketchPlane = useSketchStore((s) => (s.sketches.find((x) => x.id === s.activeId) ?? s.sketches[0])?.plane);
   const sketchFit = useMemo(
-    () => sketchBounds(sketchSk),
+    () => boundsOnPlane(sketchPlane, sketchBounds(sketchSk)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sketchSk, sketchVersion],
+    [sketchSk, sketchVersion, sketchPlane],
   );
+  // The part as the Sketch page draws it: as built, not laid down for machining.
+  const builtPartFit = useMemo(() => {
+    const { soup } = getRawMesh();
+    return soup?.triangleCount ? boundsOf(soup) : null;
+  }, [partVer]); // eslint-disable-line react-hooks/exhaustive-deps
   // The A-axis centre for the viewport's work rotation. `[0,0]` — the frame's
   // own origin — is what indexing assumed before an operator could pick one,
   // and stays the answer when they haven't.
@@ -1367,7 +1376,7 @@ export default function App() {
                   CAD view toolbar does it — a pressed glyph, not a labelled
                   switch. `type` carries the on/off state. Only offered once
                   there is something to hide: a dead toggle is worse than none. */}
-              {!sketching && partAnalysis && (
+              {partAnalysis && (
                 <CommandButton
                   id="showPart" size="small"
                   type={showPart ? 'primary' : 'default'}
@@ -1501,7 +1510,8 @@ export default function App() {
 
             <Viewport
               bounds={bounds}
-              fitBounds={fitBounds}
+              // The Sketch page frames the part it is drawn on, not the program.
+              fitBounds={sketching ? (showPart ? builtPartFit : null) : fitBounds}
               partVer={partVer}
               showPart={showPart}
               sketchFit={sketchFit}

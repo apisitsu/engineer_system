@@ -47,6 +47,8 @@ export const getMesh = () => _mesh;
  * always lands where it should instead of compounding transforms.
  */
 const _raw = { soup: null, welded: null };
+/** The part as imported or built: where the solids are, and so where sketches are drawn. */
+export const getRawMesh = () => _raw;
 
 const NO_DATUM = {
   planeNormal: null, point: null, rotaryCenter: null, rotaryZero: null,

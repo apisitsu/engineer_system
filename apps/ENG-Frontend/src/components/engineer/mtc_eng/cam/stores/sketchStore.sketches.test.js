@@ -372,3 +372,18 @@ describe('slot and polygon survive the pick tolerance the zoom hands them', () =
     expect(sketchRegionsOf().loops).toHaveLength(1);
   });
 });
+
+describe('Sketch on Face — waiting for the face', () => {
+  it('pauses any half-drawn line while it waits', () => {
+    useSketchStore.setState({ pending: 3 });
+    store().setFacePick(true);
+    expect(store().facePick).toBe(true);
+    expect(store().pending).toBeNull();
+  });
+
+  it('stops waiting when another tool is picked', () => {
+    store().setFacePick(true);
+    store().setTool('line');
+    expect(store().facePick).toBe(false);
+  });
+});

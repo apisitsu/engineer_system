@@ -348,8 +348,10 @@ export const useFeatureStore = create((set, get) => ({
     // the sketch sits where the solid really is however the part is laid down.
     // (Taking the plane from the displayed face was right only while the two
     // frames agreed; a taller extrude is laid down on another face entirely.)
+    // A face picked on the Sketch page is already in the raw frame: that page
+    // draws the part as built (`opts.face`).
     const cam = useCamPlanStore.getState();
-    const face = cam.faceInRawFrame(cam.selectedFeature);
+    const face = opts?.face ?? cam.faceInRawFrame(cam.selectedFeature);
     const id = useSketchStore.getState().sketchOnFace({ ...opts, face });
     if (id == null) return null;
     // `common` is left out: its result is the overlap of two solids, so neither

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PLANE_PRESETS, DEFAULT_PLANE, planeBasis, planeToWorld, worldToPlane,
-  planeMatrix, planeLabel, parsePlane, planeFromFace,
+  planeMatrix, planeLabel, parsePlane, planeFromFace, boundsOnPlane,
 } from './plane.js';
 
 const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
@@ -179,5 +179,17 @@ describe('planeFromFace', () => {
   it('falls back to the table for a face with nothing usable on it', () => {
     expect(planeFromFace(null)).toEqual(DEFAULT_PLANE);
     expect(planeFromFace({ normal: [0, 0, 1] })).toEqual(DEFAULT_PLANE);
+  });
+});
+
+describe('boundsOnPlane', () => {
+  it('stands a sketch box up on the plane it is drawn on', () => {
+    const b = boundsOnPlane({ preset: 'XZ', offset: 5 }, { min: [0, 0, 0], max: [10, 4, 0] });
+    expect(b.min).toEqual([0, -5, 0]);
+    expect(b.max).toEqual([10, -5, 4]);
+  });
+
+  it('is null for nothing drawn', () => {
+    expect(boundsOnPlane({ preset: 'XY', offset: 0 }, null)).toBeNull();
   });
 });

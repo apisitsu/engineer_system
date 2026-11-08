@@ -17,14 +17,33 @@
  * React's dev Performance Track structured-clones changed props and dies on
  * large typed arrays.
  */
-import { useEffect, useMemo, useRef } from 'react';
+import {
+  useEffect, useMemo, useRef, useState,
+} from 'react';
 import * as THREE from 'three';
-import { getMesh, useCamPlanStore } from '../stores/camPlanStore.js';
-import { faceOfTriangle } from '../engine/mesh/features.js';
+import { getMesh, getRawMesh, useCamPlanStore } from '../stores/camPlanStore.js';
+import { useSketchStore } from '../stores/sketchStore.js';
+import { useFeatureStore } from '../stores/featureStore.js';
+import { useCamStore } from '../stores/camStore.js';
+import { planeBasis } from '../engine/sketch/plane.js';
+import { detectFeatures, faceOfTriangle } from '../engine/mesh/features.js';
 import { featureAtPoint } from '../engine/mesh/pickEdge.js';
 import { circlesAt, nearestCircle } from '../engine/mesh/circlePick.js';
 import { originMarkerSize, rotaryAxisLength } from '../engine/view/originMarker.js';
 import { CAD } from '../theme.js';
+
+/** The model to be made, distinct from the simulated stock's aluminium grey. */
+const PART_COLOR = '#93a7bd';
+
+/** Flat-shaded geometry for a soup, one normal per facet (see the note at the top). */
+function soupGeometry(soup) {
+  if (!soup || soup.triangleCount === 0) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(soup.positions, 3));
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return g;
+}
 
 const ORIGIN_AXES = [
   { dir: [1, 0, 0], color: CAD.rapid },
@@ -76,16 +95,8 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
   const pickRotaryZero = useCamPlanStore((s) => s.pickRotaryZero);
   const setDatumHover = useCamPlanStore((s) => s.setDatumHover);
   const circleCache = useRef(null);
-  const geometry = useMemo(() => {
-    const { soup } = getMesh();
-    if (!soup || soup.triangleCount === 0) return null;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(soup.positions, 3));
-    g.computeVertexNormals();
-    g.computeBoundingSphere();
-    return g;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meshVer]);
+  const geometry = useMemo(() => soupGeometry(getMesh().soup), [meshVer]);
 
   useEffect(() => {
     if (!geometry) return undefined;
@@ -244,7 +255,7 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
           inside-out STL is common enough that back faces must still draw —
           `analyzeMesh` warns about the winding rather than leaving a hole. */}
       <meshStandardMaterial
-        color="#93a7bd"
+        color={PART_COLOR}
         metalness={0.1}
         roughness={0.65}
         transparent
@@ -301,6 +312,92 @@ export function FeatureHighlight({ meshVer }) {
         depthWrite={false}
       />
     </mesh>
+  );
+}
+
+/**
+ * The part on the Sketch page, solid, the way SolidWorks keeps it on screen while
+ * you sketch on it.
+ *
+ * It is the part **as built** (`getRawMesh`), not as laid down for machining: that
+ * is the frame the solids and the sketches live in, so a sketch on a face sits on
+ * that face here.
+ *
+ * Drawn first and then the depth is cleared, so the sketch draws over it: lines
+ * on a face would otherwise fight the face for the same depth, and a sketch plane
+ * inside the part would vanish behind it. The part still hides its own back faces.
+ *
+ * While Sketch on Face waits (`facePick`), the face under the cursor is lit, and a
+ * click starts a sketch on it and turns the view square to it. Otherwise the part
+ * has no handlers at all, so it never takes a click meant for the sketch.
+ */
+export function SketchPart({ meshVer, visible = true }) {
+  const facePick = useSketchStore((s) => s.facePick);
+  const [hover, setHover] = useState(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const geometry = useMemo(() => soupGeometry(getRawMesh().soup), [meshVer]);
+  const highlight = useMemo(
+    () => highlightGeometry(hover, getRawMesh().soup),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hover, meshVer],
+  );
+
+  useEffect(() => {
+    if (!geometry) return undefined;
+    return () => geometry.dispose();
+  }, [geometry]);
+  useEffect(() => {
+    if (!highlight) return undefined;
+    return () => highlight.geometry.dispose();
+  }, [highlight]);
+  useEffect(() => { if (!facePick) setHover(null); }, [facePick]);
+
+  if (!geometry || !visible) return null;
+
+  const faceUnder = (event) => {
+    const { welded } = getRawMesh();
+    return welded ? faceOfTriangle(detectFeatures(welded), event.faceIndex) : null;
+  };
+
+  const pick = facePick ? {
+    onPointerMove: (event) => {
+      event.stopPropagation();
+      const face = faceUnder(event);
+      if ((face?.id ?? null) !== (hover?.id ?? null)) setHover(face);
+    },
+    onPointerOut: () => setHover(null),
+    onClick: (event) => {
+      event.stopPropagation();
+      const face = faceUnder(event);
+      if (!face) return;
+      useSketchStore.getState().setFacePick(false);
+      const id = useFeatureStore.getState().sketchOnFace({ face });
+      const plane = useSketchStore.getState().sketches.find((s) => s.id === id)?.plane;
+      if (!plane) return;
+      const { n, v } = planeBasis(plane);
+      useCamStore.getState().normalTo(n, v);
+    },
+  } : {};
+
+  return (
+    <group name="sketch-part">
+      <mesh
+        name="built-part"
+        geometry={geometry}
+        renderOrder={-1}
+        onAfterRender={(renderer) => renderer.clearDepth()}
+        {...pick}
+      >
+        <meshStandardMaterial color={PART_COLOR} metalness={0.1} roughness={0.65} side={THREE.DoubleSide} />
+      </mesh>
+      {highlight?.kind === 'face' && (
+        <mesh geometry={highlight.geometry}>
+          <meshBasicMaterial
+            color={CAD.skHover} transparent opacity={0.6} side={THREE.DoubleSide} depthWrite={false}
+          />
+        </mesh>
+      )}
+    </group>
   );
 }
 

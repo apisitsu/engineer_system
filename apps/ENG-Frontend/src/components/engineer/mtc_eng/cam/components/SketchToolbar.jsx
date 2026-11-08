@@ -16,6 +16,9 @@ import {
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useSketchStore } from '../stores/sketchStore.js';
+import { useCamPlanStore } from '../stores/camPlanStore.js';
+import { useCamStore } from '../stores/camStore.js';
+import { planeBasis } from '../engine/sketch/plane.js';
 import RibbonButton from './RibbonButton.jsx';
 import SketchesPanel from './SketchesPanel.jsx';
 import BuildPanel from './BuildPanel.jsx';
@@ -52,6 +55,10 @@ const OffsetIcon = glyph(<><path d="M4 16c4-8 12-8 16 0" /><path d="M4 20c4-8 12
 // planes. Extrude: a profile with the solid pushed off it.
 const PlanesIcon = glyph(<><path d="M3 8.5l8-3.5 10 3-8 3.5z" /><path d="M3 8.5v7l8 3.5v-7" /><path d="M21 8v7l-10 4" opacity="0.55" /></>);
 const ExtrudeIcon = glyph(<><rect x="3.5" y="9.5" width="10" height="8" /><path d="M3.5 9.5l6-5h10l-6 5" /><path d="M19.5 4.5v8l-6 5" /></>);
+// Sketch on Face: a block with its top face picked. Normal To: a plane seen square,
+// with the line of sight running into it.
+const SketchOnFaceIcon = glyph(<><path d="M4 9l8-4 8 4-8 4z" fill="currentColor" fillOpacity="0.3" /><path d="M4 9v7l8 4 8-4V9M12 13v7" /></>);
+const NormalToIcon = glyph(<><rect x="5" y="5" width="14" height="14" /><path d="M12 12v-9M9.5 5.5L12 3l2.5 2.5" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /></>);
 
 const TOOLS = [
   { value: 'select', label: 'Select', Icon: SelectIcon, hint: 'Click to select · drag empty space for a box (left→right encloses, right→left also grabs what it touches) · drag a point to move it · double-click a dimension to edit it' },
@@ -585,6 +592,11 @@ export default function SketchToolbar({ ribbonSlot = null }) {
   const mirror = useSketchStore((s) => s.mirror);
   const beginOffset = useSketchStore((s) => s.beginOffset);
   const polygonSides = useSketchStore((s) => s.polygonSides);
+  const facePick = useSketchStore((s) => s.facePick);
+  const setFacePick = useSketchStore((s) => s.setFacePick);
+  const activePlane = useSketchStore((s) => (s.sketches.find((x) => x.id === s.activeId) ?? s.sketches[0])?.plane);
+  const hasPart = useCamPlanStore((s) => Boolean(s.analysis));
+  const normalTo = useCamStore((s) => s.normalTo);
   const setPolygonSides = useSketchStore((s) => s.setPolygonSides);
 
   const activeHint = TOOLS.find((t) => t.value === tool)?.hint;
@@ -741,6 +753,30 @@ export default function SketchToolbar({ ribbonSlot = null }) {
           </Tooltip>
         )}
       />
+      <Tooltip
+        title={hasPart
+          ? (facePick ? 'Click a face of the part to sketch on it · Esc cancels' : 'Sketch on a face of the part: press, then click the face')
+          : 'Build or import a part first'}
+        placement="bottom"
+      >
+        <RibbonButton
+          icon={<SketchOnFaceIcon />}
+          label="Sketch on Face"
+          active={facePick}
+          disabled={!hasPart}
+          onClick={() => setFacePick(!facePick)}
+        />
+      </Tooltip>
+      <Tooltip title="Normal To — look straight at this sketch's plane · press again to look from the other side" placement="bottom">
+        <RibbonButton
+          icon={<NormalToIcon />}
+          label="Normal To"
+          onClick={() => {
+            const { n, v } = planeBasis(activePlane);
+            normalTo(n, v);
+          }}
+        />
+      </Tooltip>
       <BuildPanel
         trigger={(
           <Tooltip title="Build — extrude or revolve this sketch into a solid and send it to CAM" placement="bottom">

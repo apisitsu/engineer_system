@@ -291,6 +291,7 @@ export default function SketchLayer() {
   const sketches = useSketchStore((s) => s.sketches);
   const activeId = useSketchStore((s) => s.activeId);
   const tool = useSketchStore((s) => s.tool);
+  const facePick = useSketchStore((s) => s.facePick);
   const selection = useSketchStore((s) => s.selection);
   const pending = useSketchStore((s) => s.pending);
   const cursor = useSketchStore((s) => s.cursor);
@@ -437,6 +438,7 @@ export default function SketchLayer() {
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.key === 'Escape') {
+        if (useSketchStore.getState().facePick) useSketchStore.getState().setFacePick(false);
         cancelPending();
         cancelBoxSelect();
         clearDimSelect();
@@ -563,7 +565,9 @@ export default function SketchLayer() {
           razor-thin line ray; in the Select tool a *drag* on empty space is a
           marquee (`Viewport` turns OrbitControls' left-drag rotate off while
           Select is active so the drag is ours). */}
-      {(drawing || picking) && (
+      {/* Not while Sketch on Face is waiting: the plane would take the click
+          meant for the part behind it. */}
+      {(drawing || picking) && !facePick && (
         <mesh
           ref={planeMeshRef}
           onPointerDown={(e) => {

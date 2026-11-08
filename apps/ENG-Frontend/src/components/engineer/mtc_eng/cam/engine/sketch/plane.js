@@ -90,6 +90,29 @@ export function worldToPlane(plane, p) {
 }
 
 /**
+ * The world box round a box drawn in sketch (x, y), wherever its plane sits — what
+ * a camera fit needs. `null` in, `null` out.
+ *
+ * @param {object} plane
+ * @param {{min:number[], max:number[]}|null} box  sketch-space; only x and y are read
+ */
+export function boundsOnPlane(plane, box) {
+  if (!box) return null;
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const x of [box.min[0], box.max[0]]) {
+    for (const y of [box.min[1], box.max[1]]) {
+      const p = planeToWorld(plane, x, y);
+      for (let k = 0; k < 3; k++) {
+        min[k] = Math.min(min[k], p[k]);
+        max[k] = Math.max(max[k], p[k]);
+      }
+    }
+  }
+  return { min, max };
+}
+
+/**
  * The plane's frame as a **column-major 16-element** array — the order
  * `THREE.Matrix4.fromArray` and `matrixAutoUpdate = false` want. Columns are
  * u, v, n, origin, so applying it to a group makes local (x, y, 0) render at

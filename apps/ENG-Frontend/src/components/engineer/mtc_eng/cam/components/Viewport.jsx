@@ -13,7 +13,9 @@ import * as THREE from 'three';
 import Backplot from './Backplot.jsx';
 import StockMesh from './StockMesh.jsx';
 import StockPreview from './StockPreview.jsx';
-import PartMesh, { FeatureHighlight, DatumPickHighlight, OriginMarker, RotaryAxisLine } from './PartMesh.jsx';
+import PartMesh, {
+  FeatureHighlight, DatumPickHighlight, OriginMarker, RotaryAxisLine, SketchPart,
+} from './PartMesh.jsx';
 import { CHUCK, chuckBodyRadius } from '../engine/view/setup.js';
 import SketchLayer from './SketchLayer.jsx';
 import { getBuf, setView } from '../engine/bufferCache.js';
@@ -90,7 +92,7 @@ function CameraRig({ bounds, sketchFit, view, viewNonce, controlsRef, mode }) {
   // playback (which re-renders every tick but changes none of these) can't snap
   // the camera back to the fit and undo the user's zoom.
   const fitKey = [
-    mode, view, viewNonce,
+    mode, typeof view === 'object' ? view.dir.join(',') : view, viewNonce,
     bounds ? bounds.min.map((n) => Math.round(n * 100)).join(',') : 'x',
     bounds ? bounds.max.map((n) => Math.round(n * 100)).join(',') : 'x',
   ].join('|');
@@ -650,9 +652,13 @@ export function SceneContents({
       <AxisLabels len={22} />
 
       {/* CAM geometry (backplot, stock, tool, lathe fixtures) belongs to the
-          Milling / Turning pages; the Sketch page shows only the sketcher. */}
+          Milling / Turning pages; the Sketch page shows the sketcher and the part
+          it is building on. */}
       {sketching ? (
-        <SketchLayer />
+        <>
+          <SketchPart meshVer={partVer} visible={showPart} />
+          <SketchLayer />
+        </>
       ) : (
         <>
           {mode === 'turn' && <SpindleAxis bounds={bounds} />}
