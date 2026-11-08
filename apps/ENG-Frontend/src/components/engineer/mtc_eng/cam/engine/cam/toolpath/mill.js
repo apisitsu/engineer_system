@@ -188,6 +188,9 @@ export function contourOp(mesh, part, opts) {
  * The diameter is reported as the **circumscribed** value, since STL inscribes
  * its polygon inside the true circle and so always reads small.
  */
+/** Empty probes in a row that end a hole (see `detectHoles`). */
+const MISSES = 3;
+
 export function detectHoles(mesh, part, opts = {}) {
   const { roundness = 0.02, probeDepth = 0.5 } = opts;
   const z = part.top - probeDepth;
@@ -198,9 +201,7 @@ export function detectHoles(mesh, part, opts = {}) {
     if (!l.isHole) continue;
     const pts = l.points;
     const n = pts.length / 2;
-    let cx = 0, cy = 0;
-    for (let i = 0; i < n; i++) { cx += pts[i * 2]; cy += pts[i * 2 + 1]; }
-    cx /= n; cy /= n;
+    const [cx, cy] = areaCentroid(pts);
 
     let sum = 0, min = Infinity, max = -Infinity;
     for (let i = 0; i < n; i++) {
@@ -210,15 +211,30 @@ export function detectHoles(mesh, part, opts = {}) {
     const mean = sum / n;
     if (mean <= 0 || (max - min) / mean > roundness) continue;
 
-    // Find how deep it goes by probing down until the loop disappears.
+    // Find how deep it goes by probing down until the loop disappears. One level
+    // or two can come back empty where a boolean left the wall imperfect — a hole
+    // that reappears below them is the same hole, not a new one — so it is only
+    // over when it has been gone for MISSES levels running.
     let depth = probeDepth;
     const stepZ = Math.max((part.top - part.bottom) / 40, 0.2);
+    let missed = 0;
     for (let probe = z; probe >= part.bottom; probe -= stepZ) {
       const here = sliceLoops(mesh, 2, probe).loops;
       const still = here.some((h) => h.isHole
         && Math.abs(centroidDist(h.points, cx, cy)) < mean * 0.5);
-      if (!still) break;
+      if (!still) {
+        missed += 1;
+        if (missed >= MISSES) break;
+        continue;
+      }
+      missed = 0;
       depth = part.top - probe;
+    }
+    // The same hole just above the bottom face means it goes through, whatever
+    // the probes between made of a wall a boolean left uneven.
+    const nearBottom = sliceLoops(mesh, 2, part.bottom + probeDepth).loops;
+    if (nearBottom.some((h) => h.isHole && centroidDist(h.points, cx, cy) < mean * 0.5)) {
+      depth = part.top - part.bottom - probeDepth;
     }
 
     holes.push({
@@ -233,10 +249,34 @@ export function detectHoles(mesh, part, opts = {}) {
 }
 
 function centroidDist(pts, cx, cy) {
+  const [ax, ay] = areaCentroid(pts);
+  return Math.hypot(ax - cx, ay - cy);
+}
+
+/**
+ * The centre of the area a loop encloses — not the average of its corners.
+ *
+ * A loop cut from a mesh a boolean has been through has its corners bunched
+ * where the evaluator split the wall and sparse elsewhere; averaging them pulled
+ * the "centre" of a Ø6 hole far enough off to fail the roundness test, and the
+ * hole went undrilled. The area centroid depends only on the shape.
+ */
+function areaCentroid(pts) {
   const n = pts.length / 2;
-  let ax = 0, ay = 0;
-  for (let i = 0; i < n; i++) { ax += pts[i * 2]; ay += pts[i * 2 + 1]; }
-  return Math.hypot(ax / n - cx, ay / n - cy);
+  let a = 0, x = 0, y = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const cross = pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1];
+    a += cross;
+    x += (pts[i * 2] + pts[j * 2]) * cross;
+    y += (pts[i * 2 + 1] + pts[j * 2 + 1]) * cross;
+  }
+  if (Math.abs(a) < 1e-12) {
+    let sx = 0, sy = 0;
+    for (let i = 0; i < n; i++) { sx += pts[i * 2]; sy += pts[i * 2 + 1]; }
+    return [sx / n, sy / n];
+  }
+  return [x / (3 * a), y / (3 * a)];
 }
 
 /**

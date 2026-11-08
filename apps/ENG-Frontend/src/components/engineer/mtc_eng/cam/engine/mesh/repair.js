@@ -28,15 +28,19 @@
  * Plain arrays in and out, like the rest of `engine/`.
  *
  * @param {{positions:Float32Array, triangleCount:number}} soup
- * @param {{tol?:number}} [opts]  mm
+ * @param {{tol?:number, edgeTol?:number}} [opts]  mm. `tol` is how close two
+ *   corners must be to be one; `edgeTol`, how close a corner must be to an open
+ *   edge to sit on it. They are separate because they want different sizes: a
+ *   corner computed along a long edge in single precision can miss the line by
+ *   more than two genuinely distinct corners at a hole's mouth are apart.
  * @returns {{positions:Float32Array, triangleCount:number}}
  */
-export function repairSoup(soup, { tol = 1e-4 } = {}) {
+export function repairSoup(soup, { tol = 1e-4, edgeTol = tol } = {}) {
   const { verts, tris } = weld(soup.positions, tol);
 
   // Cells about a fiftieth of the part: an edge then crosses a handful of them,
   // where cells the size of the tolerance would number in the hundreds of thousands.
-  const grid = vertexGrid(verts, Math.max(diagonalOf(verts) / 50, tol * 10));
+  const grid = vertexGrid(verts, Math.max(diagonalOf(verts) / 50, edgeTol * 10));
   // Directed edges of every live triangle, so an edge with a partner running the
   // other way is known closed. Kept current as triangles are dropped and split.
   const edges = new Map();
@@ -60,7 +64,7 @@ export function repairSoup(soup, { tol = 1e-4 } = {}) {
     const t = work[i];
     // A split of a sliver can leave a half with no area; it covers nothing.
     if (area2(verts, t) <= tol * tol) { count(t, -1); continue; }
-    const split = cornerOnEdge(verts, grid, t, tol, open);
+    const split = cornerOnEdge(verts, grid, t, edgeTol, open);
     if (!split) { out.push(t); continue; }
     const { edge, v } = split;
     const a = t[edge];

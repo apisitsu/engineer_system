@@ -50,6 +50,16 @@ export function RevolveIcon({ inverse = false }) {
   );
 }
 
+/** A hole seen from above and in section: a ring over a bore. */
+export function HoleIcon({ inverse = false }) {
+  return (
+    <svg {...base} stroke={ink(inverse)} strokeWidth="1.4" strokeLinejoin="round">
+      <path d="M2 5h12v9H2z" fill={fillOf(inverse)} />
+      <path d="M6 5v6l2 2 2-2V5" />
+    </svg>
+  );
+}
+
 export function ImportIcon({ inverse = false }) {
   return (
     <svg {...base} stroke={ink(inverse)} strokeWidth="1.4" strokeLinejoin="round">
@@ -85,5 +95,6 @@ export function LinkIcon({ title = 'Follows the face it was placed on' }) {
 export function FeatureIcon({ kind, inverse = false }) {
   if (kind === 'revolve') return <RevolveIcon inverse={inverse} />;
   if (kind === 'import') return <ImportIcon inverse={inverse} />;
+  if (kind === 'hole') return <HoleIcon inverse={inverse} />;
   return <ExtrudeIcon inverse={inverse} />;
 }
