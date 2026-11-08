@@ -63,6 +63,29 @@ export function repairSoup(soup, { tol = 1e-4 } = {}) {
   return { ...soup, positions, triangleCount: out.length };
 }
 
+/**
+ * How many edges of the surface have no partner running the other way — the open
+ * edges and the wrongly wound ones. Zero for a closed, consistently wound solid.
+ * Corners are matched exactly, so run it on what `repairSoup` returned.
+ */
+export function openEdgeCount(soup) {
+  const p = soup.positions;
+  const key = (i) => `${p[i]},${p[i + 1]},${p[i + 2]}`;
+  const edges = new Map();
+  for (let t = 0; t < soup.triangleCount; t++) {
+    for (let k = 0; k < 3; k++) {
+      const e = `${key(t * 9 + k * 3)}|${key(t * 9 + ((k + 1) % 3) * 3)}`;
+      edges.set(e, (edges.get(e) || 0) + 1);
+    }
+  }
+  let n = 0;
+  for (const [e, c] of edges) {
+    const bar = e.indexOf('|');
+    if ((edges.get(`${e.slice(bar + 1)}|${e.slice(0, bar)}`) || 0) !== c) n++;
+  }
+  return n;
+}
+
 /** One index per distinct corner, merging any closer than `tol`. */
 function weld(p, tol) {
   const verts = [];

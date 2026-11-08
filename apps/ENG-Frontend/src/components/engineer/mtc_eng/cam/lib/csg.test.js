@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { meshBoolean, MESH_OPS } from './csg.js';
+import { openEdgeCount } from '../engine/mesh/repair.js';
 import { extrudeRegion, revolveRegion } from '../engine/solid/extrude.js';
 import { volume } from '../engine/solid/solidAssert.js';
 
@@ -109,5 +110,23 @@ describe('meshBoolean — a cut whose surface lies on the part’s', () => {
     const out = meshBoolean(part, pocket, 'cut');
     expect(openEdges(out)).toBe(0);
     nearVolume(volume(out), 40 * 40 * 20 - 20 * 20 * 10);
+  });
+});
+
+describe('meshBoolean — when the cleaner mesh is the wrong solid', () => {
+  it('keeps the cut that removes all it should, over a closed one that does not', () => {
+    // A half-turn step at the end of a bar. Grown, the cut leaves open edges where
+    // its end faces meet the bar's corners; as drawn it closes better but its
+    // skin lies on the bar's and some 58 mm³ that should go is kept. The shape
+    // has to be right first.
+    const bar = revolveRegion({ outer: square(0, 0, 60, 20) }, { axis: 'x' });
+    const step = revolveRegion({ outer: square(50, 12, 60, 20) }, { axis: 'x', angle: Math.PI });
+    nearVolume(volume(meshBoolean(bar, step, 'cut')), volume(bar) - volume(step));
+  });
+
+  it('counts the open edges of a surface', () => {
+    const quad = { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0]), triangleCount: 2 };
+    expect(openEdgeCount(quad)).toBe(4); // the rim; the shared diagonal is matched
+    expect(openEdgeCount(box(0, 0, 1, 1, 0, 1))).toBe(0);
   });
 });
