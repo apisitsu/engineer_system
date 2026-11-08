@@ -21,7 +21,9 @@ import { useSketchStore } from '../stores/sketchStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
 import { useFeatureStore } from '../stores/featureStore.js';
 import { planeLabel } from '../engine/sketch/plane.js';
+import { centerlines } from '../engine/sketch/model.js';
 import { BOOLEAN_OPS } from '../engine/solid/regionBoolean.js';
+import RevolveAxis, { axisFromValue, defaultAxisValue } from './RevolveAxis.jsx';
 import { CAD } from '../theme.js';
 
 const { Text } = Typography;
@@ -106,7 +108,11 @@ export default function BuildPanel({ trigger, preset }) {
   const [chosenOp, setOp] = useState('extrude');
   const op = preset?.op ?? chosenOp;
   const [depth, setDepth] = useState(10);
-  const [axis, setAxis] = useState('x');
+  const sk = useSketchStore((s) => s.sk);
+  // `null` until the operator picks one: until then a centerline on the sketch is
+  // the axis, and the sketch's X axis when there is none. A pick of a centerline
+  // that has since been deleted falls back the same way.
+  const [axisChoice, setAxis] = useState(null);
   const [angle, setAngle] = useState(360);
   const [combine, setCombine] = useState('none');
   const [merge, setMerge] = useState('new');
@@ -123,6 +129,9 @@ export default function BuildPanel({ trigger, preset }) {
   const state = regionsOf(combineOp);
   const summary = describe(state, combineOp);
   const multi = regionsOf(null).regions.length > 1;
+  const lines = centerlines(sk);
+  const choiceGone = axisChoice?.startsWith('line:') && !lines.some((l) => `line:${l.id}` === axisChoice);
+  const axis = axisChoice && !choiceGone ? axisChoice : defaultAxisValue(sk);
 
   // A boss on an empty tree is the first body, so it has nothing to join yet.
   let mergeOp = hasPart ? merge : 'new';
@@ -135,7 +144,7 @@ export default function BuildPanel({ trigger, preset }) {
     setBusy(true);
     try {
       const shape = op === 'revolve'
-        ? { op, axis, angle: (angle * Math.PI) / 180 }
+        ? { op, ...axisFromValue(axis), angle: (angle * Math.PI) / 180 }
         : { op, depth };
       await build({ ...shape, combine: combineOp, merge: mergeOp });
     } finally {
@@ -181,13 +190,7 @@ export default function BuildPanel({ trigger, preset }) {
         </Space>
       ) : (
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
-          <Segmented
-            size="small"
-            block
-            value={axis}
-            onChange={setAxis}
-            options={[{ label: 'About X', value: 'x' }, { label: 'About Y', value: 'y' }]}
-          />
+          <RevolveAxis doc={sk} value={axis} onChange={setAxis} long block data-revolve-axis />
           <InputNumber
             size="small"
             value={angle}
@@ -199,7 +202,9 @@ export default function BuildPanel({ trigger, preset }) {
             style={{ width: '100%' }}
           />
           <Text style={{ color: CAD.dim, fontSize: 10 }}>
-            The profile must sit wholly on one side of the axis — draw it against a centreline.
+            {lines.length
+              ? 'The profile must sit wholly on one side of the axis.'
+              : 'The profile must sit wholly on one side of the axis. Draw a centerline (a Construction line) to turn about it instead.'}
           </Text>
         </Space>
       )}

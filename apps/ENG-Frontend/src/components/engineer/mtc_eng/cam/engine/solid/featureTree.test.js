@@ -382,3 +382,66 @@ describe('the tables stay coherent', () => {
     }
   });
 });
+
+describe('revolve about a centerline', () => {
+  /** The rectangle plus a construction line from a to b, on one sketch. */
+  function withCenterline(rect, a, b) {
+    const sk = rectSketch(...rect);
+    const line = addLine(sk, addPoint(sk, ...a), addPoint(sk, ...b));
+    sk.entities.get(line).construction = true;
+    return { sk, line };
+  }
+  const boundsOfSoup = (soup) => {
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < soup.positions.length; i += 3) {
+      for (let k = 0; k < 3; k++) {
+        lo[k] = Math.min(lo[k], soup.positions[i + k]);
+        hi[k] = Math.max(hi[k], soup.positions[i + k]);
+      }
+    }
+    return { lo, hi };
+  };
+
+  it('turns the profile about the line, not about the sketch’s own axis', () => {
+    // A 60 × 20 profile standing on a centerline at y = 5: a Ø40 bar about y = 5.
+    const { sk, line } = withCenterline([0, 5, 60, 25], [0, 5], [60, 5]);
+    const f = createFeature('revolve', { sketchId: 1, axisLine: line });
+    const { soup, errors } = rebuildFeatures([f], ctx({ 1: { doc: sk, plane: XY } }));
+    expect(errors).toEqual([]);
+    const { lo, hi } = boundsOfSoup(soup);
+    expect(lo[0]).toBeCloseTo(0, 6);
+    expect(hi[0]).toBeCloseTo(60, 6);
+    expect(lo[1]).toBeCloseTo(-15, 6);
+    expect(hi[1]).toBeCloseTo(25, 6);
+    expect(hi[2]).toBeCloseTo(20, 6);
+    expect(volume(soup)).toBeCloseTo(Math.PI * 20 * 20 * 60, -2);
+  });
+
+  it('turns about a vertical centerline as readily as a horizontal one', () => {
+    // Profile x 10..30 beside a centerline at x = 10, running up Y: a disc about it.
+    const { sk, line } = withCenterline([10, 0, 30, 40], [10, 0], [10, 1]);
+    const f = createFeature('revolve', { sketchId: 1, axisLine: line });
+    const { soup } = rebuildFeatures([f], ctx({ 1: { doc: sk, plane: XY } }));
+    const { lo, hi } = boundsOfSoup(soup);
+    expect(lo[0]).toBeCloseTo(-10, 6);
+    expect(hi[0]).toBeCloseTo(30, 6);
+    expect(lo[1]).toBeCloseTo(0, 6);
+    expect(hi[1]).toBeCloseTo(40, 6);
+  });
+
+  it('says so when the centerline has been deleted', () => {
+    const { sk, line } = withCenterline([0, 5, 60, 25], [0, 5], [60, 5]);
+    const f = createFeature('revolve', { sketchId: 1, axisLine: line });
+    sk.entities.delete(line);
+    const { errors } = rebuildFeatures([f], ctx({ 1: { doc: sk, plane: XY } }));
+    expect(errors[0].message).toMatch(/centerline .* gone/);
+  });
+
+  it('keeps the centerline through a project file, and names it in the tree', () => {
+    const [f] = parseFeatures([{ kind: 'revolve', id: 40, sketchId: 1, axisLine: 12 }]);
+    expect(f.axisLine).toBe(12);
+    expect(describeFeature(f)).toMatch(/about the centerline/);
+    expect(createFeature('revolve', {}).axisLine).toBeNull();
+  });
+});

@@ -34,6 +34,7 @@ import {
 import { useSketchStore } from '../stores/sketchStore.js';
 import { describeFeature } from '../engine/solid/featureTree.js';
 import { planeLabel } from '../engine/sketch/plane.js';
+import RevolveAxis, { axisValueOf, axisFromValue } from './RevolveAxis.jsx';
 import { CAD } from '../theme.js';
 
 const { Text } = Typography;
@@ -70,6 +71,12 @@ const PANEL = {
 /** The parameters of the selected feature. */
 function FeatureEditor({ feature }) {
   const update = useFeatureStore((s) => s.updateFeature);
+  // The sketch it was built from, for its centerlines. The open sketch's live
+  // document is `sk`; the others keep theirs on their entry.
+  const doc = useSketchStore((s) => (feature.sketchId === s.activeId
+    ? s.sk
+    : s.sketches.find((x) => x.id === feature.sketchId)?.doc));
+  useSketchStore((s) => s.version); // a centerline drawn or deleted shows here at once
   if (feature.kind === 'import') {
     return (
       <Text style={{ color: CAD.dim, fontSize: 10 }}>
@@ -102,11 +109,10 @@ function FeatureEditor({ feature }) {
         </Space>
       ) : (
         <Space size={4} style={{ width: '100%' }}>
-          <Segmented
-            size="small"
-            value={feature.axis}
-            onChange={(v) => update(feature.id, { axis: v })}
-            options={[{ label: 'X', value: 'x' }, { label: 'Y', value: 'y' }]}
+          <RevolveAxis
+            doc={doc}
+            value={axisValueOf(feature.axis, feature.axisLine)}
+            onChange={(v) => update(feature.id, axisFromValue(v))}
           />
           <InputNumber
             size="small"

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PLANE_PRESETS, DEFAULT_PLANE, planeBasis, planeToWorld, worldToPlane,
-  planeMatrix, planeLabel, parsePlane, planeFromFace, boundsOnPlane,
+  planeMatrix, planeLabel, parsePlane, planeFromFace, boundsOnPlane, lineFrame,
 } from './plane.js';
 
 const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
@@ -191,5 +191,21 @@ describe('boundsOnPlane', () => {
 
   it('is null for nothing drawn', () => {
     expect(boundsOnPlane({ preset: 'XY', offset: 0 }, null)).toBeNull();
+  });
+});
+
+describe('lineFrame', () => {
+  it('puts the line on X and keeps the plane facing the same way', () => {
+    const f = lineFrame({ preset: 'XY', offset: 3 }, [10, 0], [10, 5]);
+    expect(f.local(10, 7)).toEqual([7, 0]);
+    expect(f.local(12, 0)).toEqual([0, -2]);
+    const b = planeBasis(f.plane);
+    expect(b.origin).toEqual([10, 0, 3]);
+    expect(b.u.map((x) => Math.round(x) || 0)).toEqual([0, 1, 0]);
+    expect(b.n.map((x) => Math.round(x) || 0)).toEqual([0, 0, 1]);
+  });
+
+  it('refuses a line of no length', () => {
+    expect(() => lineFrame({ preset: 'XY', offset: 0 }, [1, 1], [1, 1])).toThrow(/no length/);
   });
 });

@@ -46,7 +46,8 @@
 import { sketchRegions } from '../sketch/loops.js';
 import { combineRegions } from './regionBoolean.js';
 import { buildSolid } from './extrude.js';
-import { resolvePlaneRef } from '../sketch/plane.js';
+import { resolvePlaneRef, lineFrame } from '../sketch/plane.js';
+import { centerlines } from '../sketch/model.js';
 import { boundsOf } from '../mesh/analyze.js';
 
 /** What a feature can be. `import` is the mesh a file was read into. */
@@ -96,6 +97,9 @@ export function createFeature(kind, props = {}) {
     depth: Number.isFinite(props.depth) ? props.depth : 10,
     base: Number.isFinite(props.base) ? props.base : 0,
     axis: props.axis === 'y' ? 'y' : 'x',
+    // A centerline on the sketch to turn about, by its line id. When set it wins
+    // over `axis`, which then only says what to fall back to.
+    axisLine: Number.isFinite(props.axisLine) ? props.axisLine : null,
     angle: Number.isFinite(props.angle) ? props.angle : Math.PI * 2,
     segments: Number.isFinite(props.segments) ? props.segments : null,
   };
@@ -145,7 +149,7 @@ function makeFeatureSolid(feature, {
       ? 'its sketch no longer encloses a closed profile'
       : 'its sketch is empty');
   }
-  return buildSolid(regions, {
+  const shape = {
     op: feature.kind,
     plane,
     depth: feature.depth,
@@ -153,7 +157,32 @@ function makeFeatureSolid(feature, {
     axis: feature.axis,
     angle: feature.angle,
     segments: feature.segments ?? undefined,
-  });
+  };
+  if (feature.kind === 'revolve' && feature.axisLine != null) {
+    return revolveAboutLine(regions, entry.doc, feature.axisLine, shape);
+  }
+  return buildSolid(regions, shape);
+}
+
+/**
+ * Revolve about a centerline drawn on the sketch: the profile is re-expressed in a
+ * frame whose X axis is that line, and turned about X there (`lineFrame`).
+ */
+function revolveAboutLine(regions, doc, lineId, shape) {
+  const line = centerlines(doc).find((l) => l.id === lineId);
+  if (!line) throw new Error('the centerline it turns about is gone from its sketch');
+  const frame = lineFrame(shape.plane, line.a, line.b);
+  const move = (loop) => {
+    const out = new Array(loop.length);
+    for (let i = 0; i < loop.length; i += 2) {
+      const [x, y] = frame.local(loop[i], loop[i + 1]);
+      out[i] = x;
+      out[i + 1] = y;
+    }
+    return out;
+  };
+  const moved = regions.map((r) => ({ ...r, outer: move(r.outer), holes: (r.holes || []).map(move) }));
+  return buildSolid(moved, { ...shape, plane: frame.plane, axis: 'x' });
 }
 
 /**
@@ -272,7 +301,8 @@ export function describeFeature(f, sketchName) {
   const how = f.merge === 'new' ? '' : ` · ${f.merge}`;
   if (f.kind === 'revolve') {
     const deg = Math.round((f.angle * 180) / Math.PI);
-    return `Revolve ${deg}° about ${f.axis.toUpperCase()}${where}${how}`;
+    const about = f.axisLine != null ? 'the centerline' : f.axis.toUpperCase();
+    return `Revolve ${deg}° about ${about}${where}${how}`;
   }
   return `Extrude ${f.depth} mm${f.base ? ` from ${f.base}` : ''}${where}${how}`;
 }

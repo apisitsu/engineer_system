@@ -90,6 +90,34 @@ export function worldToPlane(plane, p) {
 }
 
 /**
+ * A frame whose X axis is a line drawn on the sketch — what a revolve about a
+ * centerline needs. The revolve itself only knows how to turn about a frame's own
+ * X axis, so the profile is re-expressed in this frame (`local`) and built on its
+ * plane (`plane`), which is the sketch's plane turned in itself and moved to the
+ * line. Same plane, same facing; only the in-plane axes differ.
+ *
+ * @param {object} plane  the sketch's plane
+ * @param {number[]} a  the line's start, sketch (x, y)
+ * @param {number[]} b  the line's end
+ * @returns {{plane: object, local: (x:number, y:number) => number[]}}
+ */
+export function lineFrame(plane, a, b) {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (!(len > 1e-12)) throw new Error('A centerline of no length is no axis.');
+  const cx = (b[0] - a[0]) / len;
+  const cy = (b[1] - a[1]) / len;
+  const { u, v } = planeBasis(plane);
+  return {
+    plane: {
+      origin: planeToWorld(plane, a[0], a[1]),
+      u: add(scale(u, cx), scale(v, cy)),
+      v: add(scale(u, -cy), scale(v, cx)),
+    },
+    local: (x, y) => [(x - a[0]) * cx + (y - a[1]) * cy, -(x - a[0]) * cy + (y - a[1]) * cx],
+  };
+}
+
+/**
  * The world box round a box drawn in sketch (x, y), wherever its plane sits — what
  * a camera fit needs. `null` in, `null` out.
  *

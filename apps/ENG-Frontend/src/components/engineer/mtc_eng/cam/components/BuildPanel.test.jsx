@@ -134,6 +134,25 @@ describe('BuildPanel — one named feature from the Ribbon', () => {
     await pressBuild();
     expect(build).toHaveBeenCalledWith(expect.objectContaining({ op: 'revolve', merge: 'cut' }));
   });
+
+  it('turns about the sketch’s X axis when it has no centerline', async () => {
+    withPart(false);
+    await open(panel({ name: 'Revolved Boss/Base', op: 'revolve', cut: false }));
+    await pressBuild();
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ axis: 'x', axisLine: null }));
+  });
+
+  it('takes the centerline as the axis, as SolidWorks does, once one is drawn', async () => {
+    const sk = rectSketch();
+    const line = addLine(sk, addPoint(sk, 0, -5), addPoint(sk, 40, -5));
+    sk.entities.get(line).construction = true;
+    setSketch(sk);
+    withPart(false);
+    const text = await open(panel({ name: 'Revolved Boss/Base', op: 'revolve', cut: false }));
+    expect(text).toContain('Centerline');
+    await pressBuild();
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ op: 'revolve', axisLine: line }));
+  });
 });
 
 beforeEach(() => {
