@@ -26,7 +26,7 @@ import {
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
   nearestIntersection, nearestQuadrant, nearestMidpoint, entitiesInBox, angleGuide,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
-  axisFromPlacement, dimensionLockDir, projectOnto,
+  axisFromPlacement, dimensionLockDir, projectOnto, snapshotEntities, hydrateSnapshot,
 } from '../engine/sketch/edit.js';
 import {
   DEFAULT_PLANE, parsePlane, planeFromFace, planeLabel,
@@ -35,7 +35,10 @@ import { sketchRegions } from '../engine/sketch/loops.js';
 import { dxfToSketch } from '../engine/sketch/dxfImport.js';
 import { buildSlot, buildPolygon, axisDistance } from '../engine/sketch/shapes.js';
 import { combineRegions } from '../engine/solid/regionBoolean.js';
-import { useCamPlanStore } from './camPlanStore.js';
+import {
+  partReferences, pickPartRef, placePartRef, dropUnusedPartRefs, followPartRefs,
+} from '../engine/sketch/partRefs.js';
+import { useCamPlanStore, getRawMesh } from './camPlanStore.js';
 
 const DEG = Math.PI / 180;
 
@@ -55,6 +58,9 @@ const ANGLE_GUIDE_DEG = 8;
 // actually locks against, instead of a second, drifting guess.
 export const AXIS_LOCK_FACTOR = 0.45;
 const HISTORY = 50; // max undo depth
+// mm — each Paste steps the copy this far (diagonally) from the last, so
+// repeated pastes of the same clipboard don't pile up on one spot (SW-style).
+const PASTE_STEP = 10;
 
 /** Pin `pointId` onto a line / circle / arc with the matching relation. No-op on any other type; a redundant relation is swallowed. */
 function pinPointOn(sk, pointId, entId) {
@@ -117,6 +123,27 @@ const INITIAL_DOC = newSketch();
 /** The name Sketch on Face gives a sketch: where it is. */
 const faceSketchName = (plane) => `Face ${planeLabel(plane)}`;
 
+/** The sketch entity at (x, y), by the order a click picks them in. */
+function entityAt(sk, x, y, tol) {
+  return hitTestPoint(sk, x, y, tol) ?? hitTestLine(sk, x, y, tol)
+    ?? hitTestCircle(sk, x, y, tol) ?? hitTestArc(sk, x, y, tol);
+}
+
+// Projecting a mesh's edges is not per-frame work; it holds until the part or plane changes.
+let _partRefs = { mesh: null, plane: null, refs: { segments: [], circles: [], points: [] } };
+function partRefsFor(plane) {
+  const mesh = getRawMesh().welded;
+  if (!mesh) return { segments: [], circles: [], points: [] };
+  const key = JSON.stringify(plane);
+  if (_partRefs.mesh !== mesh || _partRefs.plane !== key) {
+    _partRefs = { mesh, plane: key, refs: partReferences(mesh, plane) };
+  }
+  return _partRefs.refs;
+}
+
+/** Nothing drawn: only the origin every sketch starts with. */
+const isBlank = (doc) => !doc.constraints.length && [...doc.entities.values()].every((e) => e.origin);
+
 export const useSketchStore = create((set, get) => ({
   // A sketch is a document plus the plane it is drawn on. `sk` is the *active*
   // document and is the **same object** as `sketches[active].doc`, not a copy —
@@ -149,6 +176,13 @@ export const useSketchStore = create((set, get) => ({
   dimensionPending: null, // { kind, refs, label, current } set on a dimension-mode empty-click → shows the inline value input
   offsetPending: false, // true while the Offset rail button is waiting for its distance
   facePick: false, // true while Sketch on Face waits for a face of the part to be clicked
+  sketchOpen: false, // a sketch is being edited; false on the Sketch page means a plane or face is picked to start one
+  mirrorPending: false, // true while the Mirror panel waits for the entities and the axis to be picked
+  partRefHover: null, // the part edge or corner a dimension click would take right now
+  linearPatternPending: false, // true while the Linear Pattern rail button is waiting for count/spacing
+  circularPatternPending: false, // true while the Circular Pattern rail button is waiting for count/angle
+  clipboard: null, // snapshotEntities() capture from the last Copy — lives on the store (not per sketch), so Paste works after switching sketches
+  pasteCount: 0, // successive pastes of the same clipboard step further out each time; reset on a fresh Copy
   editingConstraint: null, // { index, kind, label, angular, value } set when a placed dimension is double-clicked → shows the edit input
   pickTol: SNAP, // world-unit pick/snap tolerance — kept ~constant on screen (set per camera zoom)
   dragging: null, // { id, wasFixed, moved } while a point is being dragged (SW drag-to-modify)
@@ -221,6 +255,7 @@ export const useSketchStore = create((set, get) => ({
       activeId: entry.id,
       nextSketchId: nextSketchId + 1,
       sk: doc,
+      sketchOpen: true,
       past: [], future: [],
       selection: [], pending: null, pending2: null, snap: null, axisSnap: null,
       lineAngle: null, solveResult: null, error: null,
@@ -228,6 +263,45 @@ export const useSketchStore = create((set, get) => ({
     });
     get()._bump();
     return entry.id;
+  },
+
+  /**
+   * Start sketching on a plane, the way picking a plane does in a CAD: a new
+   * sketch, opened. A blank active sketch is used instead of leaving it behind
+   * empty, unless it is in `keep` (features are built from it).
+   */
+  beginSketch({ name, plane, keep = [] } = {}) {
+    const active = get().activeSketch();
+    if (!active || keep.includes(active.id) || !isBlank(active.doc)) {
+      return get().addSketch({ name, plane });
+    }
+    const placed = parsePlane(plane || DEFAULT_PLANE);
+    const kept = active.name === faceSketchName(active.plane) ? `Sketch${active.id}` : active.name;
+    set({
+      sketches: get().sketches.map((s) => (s.id === active.id
+        ? { ...s, name: name || kept, plane: placed }
+        : s)),
+      sketchOpen: true,
+      error: null,
+    });
+    get()._bump();
+    return active.id;
+  },
+
+  /** Open an existing sketch for editing. */
+  openSketch(id) {
+    if (id !== get().activeId && !get().setActiveSketch(id)) return false;
+    set({ sketchOpen: true });
+    return true;
+  },
+
+  /** Stop editing: nothing half-drawn or selected carries over to the next time it opens. */
+  closeSketch() {
+    if (!get().sketchOpen) return false;
+    get().setTool('select');
+    set({ sketchOpen: false, selection: [] });
+    if (dropUnusedPartRefs(get().sk)) get()._bump();
+    return true;
   },
 
   /**
@@ -292,7 +366,7 @@ export const useSketchStore = create((set, get) => ({
    * changes. A plane taken from the displayed face was right only while the two
    * frames happened to agree.
    */
-  sketchOnFace({ onto = null, face: given = null } = {}) {
+  sketchOnFace({ onto = null, face: given = null, keep = [] } = {}) {
     const face = given || useCamPlanStore.getState().selectedFeature;
     if (!face?.normal || !face?.centroid) {
       set({ error: 'Pick a face on the part first — click it in the viewport.' });
@@ -304,7 +378,7 @@ export const useSketchStore = create((set, get) => ({
       set({ error: null });
       return onto;
     }
-    const id = get().addSketch({ name: faceSketchName(plane), plane });
+    const id = get().beginSketch({ name: faceSketchName(plane), plane, keep });
     set({ error: null });
     return id;
   },
@@ -325,6 +399,7 @@ export const useSketchStore = create((set, get) => ({
         past: next[0].past || [],
         future: next[0].future || [],
         selection: [],
+        sketchOpen: false,
       });
     } else {
       set({ sketches: sketches.filter((s) => s.id !== id) });
@@ -372,7 +447,9 @@ export const useSketchStore = create((set, get) => ({
   },
 
   setTool(tool) {
-    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false, facePick: false, boxSelect: null, _boxStart: null, selectedDims: [], contextMenu: null });
+    set({
+      tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false, linearPatternPending: false, circularPatternPending: false, mirrorPending: false, partRefHover: null, facePick: false, boxSelect: null, _boxStart: null, selectedDims: [], contextMenu: null,
+    });
   },
 
   /**
@@ -582,6 +659,9 @@ export const useSketchStore = create((set, get) => ({
     if (get().pending != null || get().pending2 != null) {
       set({ pending: null, pending2: null, axisSnap: null, lineAngle: null });
     }
+    set({
+      offsetPending: false, linearPatternPending: false, circularPatternPending: false, mirrorPending: false,
+    });
   },
 
   /**
@@ -886,15 +966,19 @@ export const useSketchStore = create((set, get) => ({
       // the cursor; all route through toggleSelect. Empty space clears the
       // selection — except in dimension mode, where an empty click with a
       // dimensionable selection asks the view to prompt for a value.
-      const hit = hitTestPoint(sk, x, y, tol);
+      const hit = entityAt(sk, x, y, tol);
       if (hit != null) { get().toggleSelect(hit); return; }
-      const lineHit = hitTestLine(sk, x, y, tol);
-      if (lineHit != null) { get().toggleSelect(lineHit); return; }
-      const circleHit = hitTestCircle(sk, x, y, tol);
-      if (circleHit != null) { get().toggleSelect(circleHit); return; }
-      const arcHit = hitTestArc(sk, x, y, tol);
-      if (arcHit != null) { get().toggleSelect(arcHit); return; }
       if (tool === 'dimension') {
+        // A part edge counts as a pick until two things are chosen; after that a
+        // click anywhere, on an edge too, is where the dimension goes.
+        const ref = get().selection.length < 2 ? pickPartRef(get().partRefs(), x, y, tol) : null;
+        if (ref) {
+          get()._snapshot();
+          const id = placePartRef(sk, ref);
+          set({ selection: get().selection.concat([id]), partRefHover: null });
+          get()._bump();
+          return;
+        }
         // Where the dimension is placed picks its orientation, the way
         // SolidWorks reads it off the drag: click below/above a pair for a
         // horizontal (dX) dimension, out to the side for a vertical (dY) one,
@@ -915,6 +999,64 @@ export const useSketchStore = create((set, get) => ({
       }
       set({ selection: [] });
     }
+  },
+
+  /** The part's edges on the open sketch's plane. */
+  partRefs() {
+    return partRefsFor(get().activeSketch().plane);
+  },
+
+  /**
+   * The part has just changed: carry every sketch's references across and re-solve
+   * the sketches they moved, so what is dimensioned from an edge goes with it.
+   *
+   * @param {object} beforeMesh the welded part as it was
+   * @param {Map} planesBefore sketch id → its plane before the rebuild
+   * @returns the ids of the sketches that moved, and how many references have no counterpart
+   */
+  async followPartChange(beforeMesh, planesBefore) {
+    const afterMesh = getRawMesh().welded;
+    const result = { moved: [], lost: 0 };
+    if (!beforeMesh || !afterMesh || beforeMesh === afterMesh) return result;
+    for (const entry of get().sketches) {
+      if ([...entry.doc.entities.values()].some((e) => e.ref)) {
+        const { moved, lost } = followPartRefs(
+          entry.doc,
+          partReferences(beforeMesh, planesBefore.get(entry.id) ?? entry.plane),
+          partReferences(afterMesh, entry.plane),
+        );
+        result.lost += lost;
+        if (moved) {
+          result.moved.push(entry.id);
+          let doc = entry.doc;
+          try {
+            const res = await worker().solve(serialize(entry.doc));
+            doc = deserialize(res.sketch);
+            for (const con of doc.constraints) {
+              const v = con.driven ? measureConstraint(doc, con.kind, con.refs) : NaN;
+              if (Number.isFinite(v)) con.value = v;
+            }
+          } catch (e) {
+            set({ error: String(e?.message || e) });
+          }
+          set({
+            sketches: get().sketches.map((s) => (s.id === entry.id ? { ...s, doc } : s)),
+            ...(get().activeId === entry.id ? { sk: doc } : {}),
+          });
+          get()._bump();
+        }
+      }
+    }
+    return result;
+  },
+
+  /** Track which part edge a dimension click would take. Sketch geometry under the cursor comes first. */
+  hoverPartRef(x, y) {
+    const tol = get().pickTol || SNAP;
+    const ref = entityAt(get().sk, x, y, tol) == null && get().selection.length < 2
+      ? pickPartRef(get().partRefs(), x, y, tol)
+      : null;
+    if (JSON.stringify(ref) !== JSON.stringify(get().partRefHover)) set({ partRefHover: ref });
   },
 
   /** Apply a constraint to the current selection, then re-solve. */
@@ -1297,7 +1439,9 @@ export const useSketchStore = create((set, get) => ({
    */
   async solve({ revertOnConflict = false, drivenFallback = null } = {}) {
     try {
+      const solving = get().activeId;
       const res = await worker().solve(serialize(get().sk));
+      if (get().activeId !== solving) return; // another sketch is open now; this result is not its geometry
       const result = {
         success: res.success,
         status: res.status,
@@ -1315,8 +1459,10 @@ export const useSketchStore = create((set, get) => ({
         }
         if (revertOnConflict && get().past.length) {
           const past = get().past;
+          const restored = deserialize(past[past.length - 1]); // undo the offending constraint
           set({
-            sk: deserialize(past[past.length - 1]), // undo the offending constraint
+            sk: restored,
+            sketches: get()._docs(restored),
             past: past.slice(0, -1),
             selection: [],
             error: 'That would over-define the sketch — constraint reverted',
@@ -1334,7 +1480,7 @@ export const useSketchStore = create((set, get) => ({
         const v = measureConstraint(solved, con.kind, con.refs);
         if (Number.isFinite(v)) con.value = v;
       }
-      set({ sk: solved, solveResult: result });
+      set({ sk: solved, sketches: get()._docs(solved), solveResult: result });
       get()._bump();
     } catch (e) {
       set({ error: String(e?.message || e) });
@@ -1351,7 +1497,7 @@ export const useSketchStore = create((set, get) => ({
    */
   beginDrag(id) {
     const pt = get().sk.entities.get(id);
-    if (!pt || pt.type !== 'point' || pt.origin) return false;
+    if (!pt || pt.type !== 'point' || pt.origin || pt.ref) return false;
     set({ dragging: { id, wasFixed: !!pt.fixed, moved: false }, _dragTarget: null });
     pt.fixed = true;
     return true;
@@ -1389,8 +1535,10 @@ export const useSketchStore = create((set, get) => ({
         catch (e) { set({ error: String(e?.message || e) }); break; }
         // Bail if the drag ended (or switched points) while we were solving.
         if (get().dragging?.id !== d.id) break;
+        const dragged = deserialize(res.sketch);
         set({
-          sk: deserialize(res.sketch),
+          sk: dragged,
+          sketches: get()._docs(dragged),
           solveResult: { success: res.success, status: res.status, conflicting: res.conflicting, redundant: res.redundant },
         });
         get()._bump();
@@ -1507,10 +1655,9 @@ export const useSketchStore = create((set, get) => ({
    */
   mirror() {
     const { sk, selection } = get();
-    const lines = selection.filter((id) => sk.entities.get(id)?.type === 'line');
-    const axis = lines.find((id) => sk.entities.get(id).construction) ?? (lines.length === 1 ? lines[0] : null);
+    const axis = get().mirrorAxis();
     if (axis == null) {
-      set({ error: 'Mirror needs one axis line (make it construction) plus entities to mirror' });
+      set({ error: 'Mirror needs a line to mirror about, plus entities to mirror' });
       return;
     }
     const toMirror = selection.filter((id) => id !== axis);
@@ -1518,7 +1665,7 @@ export const useSketchStore = create((set, get) => ({
     get()._snapshot();
     const created = mirrorEdit(sk, toMirror, axis);
     if (!created) { get()._undoSnapshot(); set({ error: 'Nothing could be mirrored' }); return; }
-    set({ selection: [], error: null });
+    set({ selection: [], error: null, mirrorPending: false });
     get()._bump();
     get().solve();
   },
@@ -1529,13 +1676,25 @@ export const useSketchStore = create((set, get) => ({
    * distance the same way Chamfer/Dimension do.
    */
   beginOffset() {
+    get().setTool('select');
+    set({ offsetPending: true });
+  },
+
+  /** The line a mirror goes about: a construction line if one is picked, else the last line picked. */
+  mirrorAxis() {
     const { sk, selection } = get();
-    const geom = selection.filter((id) => {
-      const t = sk.entities.get(id)?.type;
-      return t === 'line' || t === 'circle' || t === 'arc';
-    });
-    if (!geom.length) { set({ error: 'Select lines/circles/arcs to offset' }); return; }
-    set({ offsetPending: true, error: null });
+    const lines = selection.filter((id) => sk.entities.get(id)?.type === 'line');
+    return lines.find((id) => sk.entities.get(id).construction) ?? lines[lines.length - 1] ?? null;
+  },
+
+  /** Open the Mirror panel; what to mirror and the axis are picked with it open. */
+  beginMirror() {
+    get().setTool('select');
+    set({ mirrorPending: true });
+  },
+
+  cancelMirror() {
+    set({ mirrorPending: false });
   },
 
   /** Dismiss the inline offset input without applying. */
@@ -1561,6 +1720,155 @@ export const useSketchStore = create((set, get) => ({
     const created = offsetChain(sk, geom, dist);
     if (!created.length) { get()._undoSnapshot(); set({ error: 'Nothing could be offset (radius would collapse?)' }); return; }
     set({ selection: [], error: null, offsetPending: false });
+    get()._bump();
+    get().solve();
+  },
+
+  /**
+   * Copy the current selection to the sketch clipboard (SW "Copy") — every
+   * selected point/line/circle/arc plus any relation entirely inside that set
+   * (see `snapshotEntities`). Lives on the store rather than per sketch, so a
+   * copy survives switching the active sketch — paste into a different one.
+   * Resets the paste step-out counter, so the next Paste lands at the base
+   * offset again rather than continuing a previous clipboard's cascade.
+   */
+  copySelection() {
+    const { sk, selection } = get();
+    const snap = snapshotEntities(sk, selection);
+    if (!snap) { set({ error: 'Select something to copy' }); return; }
+    set({ clipboard: snap, pasteCount: 0, error: null });
+  },
+
+  /**
+   * Paste the clipboard into the active sketch, stepped `PASTE_STEP` mm
+   * diagonally from where it was copied — SW drops a paste a fixed step away
+   * rather than exactly on top of the original, so it's visible and pickable
+   * right away. Repeated pastes of the same clipboard step further each time
+   * (`pasteCount`), so stamping out several copies doesn't pile them on one
+   * spot; a fresh Copy resets the count. The new entities become the
+   * selection, so a paste can be immediately dragged into place.
+   */
+  paste() {
+    const { sk, clipboard, pasteCount } = get();
+    if (!clipboard) { set({ error: 'Nothing to paste — copy something first' }); return; }
+    get()._snapshot();
+    const n = pasteCount + 1;
+    const dx = PASTE_STEP * n;
+    const dy = -PASTE_STEP * n;
+    const created = hydrateSnapshot(sk, clipboard, (x, y) => ({ x: x + dx, y: y + dy }));
+    if (!created.length) { get()._undoSnapshot(); set({ error: 'Nothing could be pasted' }); return; }
+    set({ selection: created, error: null, pasteCount: n });
+    get()._bump();
+    get().solve();
+  },
+
+  /** Open the inline count/spacing entry for Linear Pattern (the rail button). */
+  beginLinearPattern() {
+    get().setTool('select');
+    set({ linearPatternPending: true });
+  },
+
+  /** Dismiss the inline Linear Pattern input without applying. */
+  cancelLinearPattern() {
+    set({ linearPatternPending: false });
+  },
+
+  /**
+   * Stamp `count` copies of the selected lines/circles/arcs in a straight
+   * line, (`dx`, `dy`) mm apart (SW "Linear Pattern" — one direction; run it
+   * twice for a grid). `count` is the total instances **including** the
+   * original, which stays exactly where it is — only `count - 1` new copies
+   * are stamped, at i·(dx, dy) for i = 1..count-1. Each copy keeps whatever
+   * relations were entirely internal to the selection (e.g. a patterned
+   * rectangle is still a rectangle), via the same capture/replay
+   * `copySelection`/`paste` use.
+   */
+  linearPattern(count, dx, dy) {
+    const { sk, selection } = get();
+    const geom = selection.filter((id) => {
+      const t = sk.entities.get(id)?.type;
+      return t === 'line' || t === 'circle' || t === 'arc';
+    });
+    if (!geom.length) { set({ error: 'Select lines/circles/arcs to pattern' }); return; }
+    const n = Math.round(count);
+    if (!(n >= 2 && n <= 200)) { set({ error: 'Count must be 2–200' }); return; }
+    if (!Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) {
+      set({ error: 'Pattern needs a non-zero spacing' });
+      return;
+    }
+    const snap = snapshotEntities(sk, geom);
+    if (!snap) { set({ error: 'Nothing could be patterned' }); return; }
+    get()._snapshot();
+    const created = [];
+    for (let i = 1; i < n; i += 1) {
+      created.push(...hydrateSnapshot(sk, snap, (x, y) => ({ x: x + dx * i, y: y + dy * i })));
+    }
+    if (!created.length) { get()._undoSnapshot(); set({ error: 'Nothing could be patterned' }); return; }
+    set({
+      selection: created, error: null, linearPatternPending: false,
+    });
+    get()._bump();
+    get().solve();
+  },
+
+  /** Open the inline count/angle entry for Circular Pattern (the rail button). */
+  beginCircularPattern() {
+    get().setTool('select');
+    set({ circularPatternPending: true });
+  },
+
+  /** Dismiss the inline Circular Pattern input without applying. */
+  cancelCircularPattern() {
+    set({ circularPatternPending: false });
+  },
+
+  /**
+   * Stamp `count` copies of the selected lines/circles/arcs in a circle about
+   * a centre — a point in the selection besides the geometry being patterned,
+   * if there is one, else the sketch origin (SW "Circular Pattern"). `count`
+   * includes the original, same convention as `linearPattern`. A full 360°
+   * sweep (the default) spaces every copy evenly all the way around; a
+   * smaller `angleDeg` fans them out from the original across just that much.
+   */
+  circularPattern(count, angleDeg) {
+    const { sk, selection } = get();
+    const geom = selection.filter((id) => {
+      const t = sk.entities.get(id)?.type;
+      return t === 'line' || t === 'circle' || t === 'arc';
+    });
+    if (!geom.length) { set({ error: 'Select lines/circles/arcs to pattern' }); return; }
+    const n = Math.round(count);
+    if (!(n >= 2 && n <= 200)) { set({ error: 'Count must be 2–200' }); return; }
+    if (!Number.isFinite(angleDeg) || angleDeg === 0) { set({ error: 'Pattern needs a non-zero sweep angle' }); return; }
+    const centerPointId = selection.find((id) => !geom.includes(id) && sk.entities.get(id)?.type === 'point');
+    const originId = [...sk.entities.values()].find((e) => e.origin)?.id;
+    const cid = centerPointId ?? originId;
+    const center = cid != null ? sk.entities.get(cid) : null;
+    if (!center) { set({ error: 'No centre to pattern about' }); return; }
+    const snap = snapshotEntities(sk, geom);
+    if (!snap) { set({ error: 'Nothing could be patterned' }); return; }
+    get()._snapshot();
+    // A full sweep spaces n copies evenly all the way around (step = 360°/n,
+    // so the gap from the last copy back to the original matches every other
+    // gap); a partial sweep fans them from the original to the sweep's far
+    // end (step = angle/(n-1)).
+    const full = Math.abs(angleDeg) >= 360 - 1e-6;
+    const step = (full ? 360 / n : angleDeg / (n - 1)) * DEG;
+    const created = [];
+    for (let i = 1; i < n; i += 1) {
+      const a = step * i;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      created.push(...hydrateSnapshot(sk, snap, (x, y) => {
+        const rx = x - center.x;
+        const ry = y - center.y;
+        return { x: center.x + rx * cos - ry * sin, y: center.y + rx * sin + ry * cos };
+      }));
+    }
+    if (!created.length) { get()._undoSnapshot(); set({ error: 'Nothing could be patterned' }); return; }
+    set({
+      selection: created, error: null, circularPatternPending: false,
+    });
     get()._bump();
     get().solve();
   },
@@ -1756,6 +2064,7 @@ export const useSketchStore = create((set, get) => ({
       activeId: active.id,
       nextSketchId: Math.max(...sketches.map((s) => s.id)) + 1,
       sk: active.doc,
+      sketchOpen: false,
       past: [], future: [],
       selection: [], pending: null, pending2: null, snap: null, axisSnap: null,
       lineAngle: null, solveResult: null, error: null,

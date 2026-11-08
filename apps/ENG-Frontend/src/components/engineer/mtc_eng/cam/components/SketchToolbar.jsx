@@ -18,7 +18,8 @@ import { createPortal } from 'react-dom';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
 import { useCamStore } from '../stores/camStore.js';
-import { planeBasis } from '../engine/sketch/plane.js';
+import { PLANE_PRESETS, planeBasis } from '../engine/sketch/plane.js';
+import { useFeatureStore } from '../stores/featureStore.js';
 import RibbonButton from './RibbonButton.jsx';
 import SketchesPanel from './SketchesPanel.jsx';
 import BuildPanel from './BuildPanel.jsx';
@@ -51,6 +52,14 @@ const ChamferIcon = glyph(<path d="M5 20V10L11 4H20" />);
 const ConstructionIcon = glyph(<path d="M4 18L20 6" strokeDasharray="3 2.5" />);
 const MirrorIcon = glyph(<><path d="M12 3v18" strokeDasharray="3 2" /><path d="M9 7L4 12l5 5z" /><path d="M15 7l5 5-5 5z" /></>);
 const OffsetIcon = glyph(<><path d="M4 16c4-8 12-8 16 0" /><path d="M4 20c4-8 12-8 16 0" opacity="0.55" /></>);
+// Linear Pattern: a shape repeating along a line, fading out — the repeats,
+// not the direction, are the point, so no arrow is drawn.
+const LinearPatternIcon = glyph(<><rect x="3.5" y="9" width="5" height="6" /><rect x="10" y="9" width="5" height="6" opacity="0.6" /><rect x="16.5" y="9" width="4" height="6" opacity="0.3" /></>);
+// Circular Pattern: the same repeats, arranged around a centre.
+const CircularPatternIcon = glyph(<><rect x="10" y="3.3" width="4" height="4" /><rect x="16.7" y="7.3" width="4" height="4" opacity="0.6" /><rect x="16.7" y="14.7" width="4" height="4" opacity="0.3" /><rect x="10" y="18.7" width="4" height="4" opacity="0.3" /><rect x="3.3" y="14.7" width="4" height="4" opacity="0.3" /><rect x="3.3" y="7.3" width="4" height="4" opacity="0.6" /></>);
+// Copy / Paste: the familiar stacked-rectangle and clipboard glyphs.
+const CopyIcon = glyph(<><rect x="8.5" y="8.5" width="11" height="11" rx="1" /><path d="M5.5 15.5V5.5a1 1 0 0 1 1-1h10" opacity="0.55" /></>);
+const PasteIcon = glyph(<><rect x="6" y="5" width="12" height="15" rx="1" /><path d="M9.5 5V3.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8V5" /></>);
 // 2D→3D. Planes: two sheets at an angle, the way a CAD tree draws its reference
 // planes. Extrude: a profile with the solid pushed off it.
 const PlanesIcon = glyph(<><path d="M3 8.5l8-3.5 10 3-8 3.5z" /><path d="M3 8.5v7l8 3.5v-7" /><path d="M21 8v7l-10 4" opacity="0.55" /></>);
@@ -69,7 +78,7 @@ const TOOLS = [
   { value: 'polygon', label: 'Polygon', Icon: PolygonIcon, hint: 'Click the centre, then a corner (sets size and rotation) · pick the number of sides on the rail' },
   { value: 'circle', label: 'Circle', Icon: CircleIcon, hint: 'Click centre, then a point on the rim' },
   { value: 'arc', label: 'Arc', Icon: ArcIcon, hint: 'Click centre, start, then end (sweeps CCW) · Esc cancels' },
-  { value: 'dimension', label: 'Dimension', Icon: DimIcon, hint: 'Pick 1 pt (to origin) / 2 pts / 1 line / 1 circle / 1 arc / pt+line / 2 lines (gap or angle) / line+circle / 2 circles — set value, or click empty space to apply' },
+  { value: 'dimension', label: 'Dimension', Icon: DimIcon, hint: 'Pick 1 pt (to origin) / 2 pts / 1 line / 1 circle / 1 arc / pt+line / 2 lines (gap or angle) / line+circle / 2 circles, or an edge or corner of the part — set value, or click empty space to apply' },
   { value: 'trim', label: 'Trim', Icon: TrimIcon, hint: 'Click a line, circle or arc to trim it at its intersections' },
   { value: 'chamfer', label: 'Chamfer / Fillet', Icon: ChamferIcon, hint: 'Click the two elements that share a corner (2 lines, or a line + arc / 2 arcs), choose C (chamfer) or R (fillet — the only option when a curve is involved), then type the size' },
 ];
@@ -528,14 +537,66 @@ function ChamferInput() {
  * (`offsetPending`) and this asks for the distance, matching how Chamfer and
  * Dimension take their values. Negative flips the side.
  */
+const geomCount = (s) => s.selection.filter((id) => {
+  const t = s.sk.entities.get(id)?.type;
+  return t === 'line' || t === 'circle' || t === 'arc';
+}).length;
+
+/** How many entities the open panel will act on, or the prompt to pick some. */
+function PickPrompt({ count }) {
+  return (
+    <Text style={{ color: count ? CAD.dim : CAD.skOver, fontSize: 11, whiteSpace: 'nowrap' }}>
+      {count ? `${count} selected` : 'Click the geometry in the sketch'}
+    </Text>
+  );
+}
+
+/**
+ * Mirror: pick what to mirror and then the line to mirror about, with the panel
+ * open. A construction line, if one is picked, is always the axis.
+ */
+function MirrorInput() {
+  const mirrorPending = useSketchStore((s) => s.mirrorPending);
+  const mirror = useSketchStore((s) => s.mirror);
+  const cancelMirror = useSketchStore((s) => s.cancelMirror);
+  const selected = useSketchStore((s) => s.selection.length);
+  const axisReady = useSketchStore((s) => s.mirrorAxis() != null);
+
+  if (!mirrorPending) return null;
+  const ready = axisReady && selected >= 2;
+
+  return (
+    <div
+      onKeyDown={(e) => { if (e.key === 'Escape') cancelMirror(); }}
+      style={{
+        position: 'absolute', top: 60, left: 12, zIndex: 6,
+        display: 'flex', gap: 6, alignItems: 'center',
+        background: CAD.glassSolid, border: `1px solid ${CAD.skTangent}`,
+        padding: '6px 10px', borderRadius: 4, boxShadow: FLOAT_SHADOW,
+      }}
+      data-mirror-panel
+    >
+      <Text style={{ color: CAD.icon, fontSize: 12 }}>Mirror</Text>
+      <Text style={{ color: ready ? CAD.dim : CAD.skOver, fontSize: 11, whiteSpace: 'nowrap' }}>
+        {ready
+          ? `${selected - 1} to mirror, about the line picked`
+          : 'Click what to mirror, then the line to mirror about'}
+      </Text>
+      <Button size="small" type="primary" disabled={!ready} onClick={() => mirror()}>Set</Button>
+      <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelMirror}>✕</Button>
+    </div>
+  );
+}
+
 function OffsetInput() {
+  const picked = useSketchStore(geomCount);
   const offsetPending = useSketchStore((s) => s.offsetPending);
   const offset = useSketchStore((s) => s.offset);
   const cancelOffset = useSketchStore((s) => s.cancelOffset);
   const [val, setVal] = useState(5);
 
   if (!offsetPending) return null;
-  const apply = () => { if (Number.isFinite(val) && val !== 0) offset(val); };
+  const apply = () => { if (picked && Number.isFinite(val) && val !== 0) offset(val); };
 
   return (
     <div
@@ -548,6 +609,7 @@ function OffsetInput() {
       }}
     >
       <Text style={{ color: CAD.icon, fontSize: 12 }}>Offset</Text>
+      <PickPrompt count={picked} />
       <UnitInput
         autoFocus
         value={val}
@@ -555,8 +617,87 @@ function OffsetInput() {
         onPressEnter={apply}
         unit="mm"
       />
-      <Button size="small" type="primary" onClick={apply}>Set</Button>
+      <Button size="small" type="primary" disabled={!picked} onClick={apply}>Set</Button>
       <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelOffset}>✕</Button>
+    </div>
+  );
+}
+
+/**
+ * Inline count/spacing entry for Linear Pattern — the rail button arms it
+ * (`linearPatternPending`), matching how Offset takes its distance. `dX`/`dY`
+ * are the step between consecutive copies (either may be 0, not both).
+ */
+function LinearPatternInput() {
+  const picked = useSketchStore(geomCount);
+  const linearPatternPending = useSketchStore((s) => s.linearPatternPending);
+  const linearPattern = useSketchStore((s) => s.linearPattern);
+  const cancelLinearPattern = useSketchStore((s) => s.cancelLinearPattern);
+  const [count, setCount] = useState(3);
+  const [dx, setDx] = useState(10);
+  const [dy, setDy] = useState(0);
+
+  if (!linearPatternPending) return null;
+  const apply = () => { if (picked && Number.isFinite(count)) linearPattern(count, dx ?? 0, dy ?? 0); };
+
+  return (
+    <div
+      onKeyDown={(e) => { if (e.key === 'Escape') cancelLinearPattern(); }}
+      style={{
+        position: 'absolute', top: 60, left: 12, zIndex: 6,
+        display: 'flex', gap: 6, alignItems: 'center',
+        background: CAD.glassSolid, border: `1px solid ${CAD.skTangent}`,
+        padding: '6px 10px', borderRadius: 4, boxShadow: FLOAT_SHADOW,
+      }}
+    >
+      <Text style={{ color: CAD.icon, fontSize: 12 }}>Linear Pattern</Text>
+      <PickPrompt count={picked} />
+      <Tooltip title="Instances — total copies including the original">
+        <InputNumber controls={false} size="small" min={2} max={200} value={count} onChange={(v) => setCount(v ?? 2)} style={{ width: 56 }} />
+      </Tooltip>
+      <UnitInput autoFocus value={dx} onChange={(v) => setDx(v ?? 0)} onPressEnter={apply} unit="dX mm" width={110} />
+      <UnitInput value={dy} onChange={(v) => setDy(v ?? 0)} onPressEnter={apply} unit="dY mm" width={110} />
+      <Button size="small" type="primary" disabled={!picked} onClick={apply}>Set</Button>
+      <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelLinearPattern}>✕</Button>
+    </div>
+  );
+}
+
+/**
+ * Inline count/angle entry for Circular Pattern — same arming pattern as
+ * Linear Pattern. The centre is whichever selected point isn't part of the
+ * geometry being patterned, else the sketch origin (`circularPattern` picks
+ * it); there's nothing to configure for it here.
+ */
+function CircularPatternInput() {
+  const picked = useSketchStore(geomCount);
+  const circularPatternPending = useSketchStore((s) => s.circularPatternPending);
+  const circularPattern = useSketchStore((s) => s.circularPattern);
+  const cancelCircularPattern = useSketchStore((s) => s.cancelCircularPattern);
+  const [count, setCount] = useState(6);
+  const [angle, setAngle] = useState(360);
+
+  if (!circularPatternPending) return null;
+  const apply = () => { if (picked && Number.isFinite(count) && Number.isFinite(angle) && angle !== 0) circularPattern(count, angle); };
+
+  return (
+    <div
+      onKeyDown={(e) => { if (e.key === 'Escape') cancelCircularPattern(); }}
+      style={{
+        position: 'absolute', top: 60, left: 12, zIndex: 6,
+        display: 'flex', gap: 6, alignItems: 'center',
+        background: CAD.glassSolid, border: `1px solid ${CAD.skTangent}`,
+        padding: '6px 10px', borderRadius: 4, boxShadow: FLOAT_SHADOW,
+      }}
+    >
+      <Text style={{ color: CAD.icon, fontSize: 12 }}>Circular Pattern</Text>
+      <PickPrompt count={picked} />
+      <Tooltip title="Instances — total copies including the original">
+        <InputNumber controls={false} size="small" min={2} max={200} value={count} onChange={(v) => setCount(v ?? 2)} style={{ width: 56 }} />
+      </Tooltip>
+      <UnitInput autoFocus value={angle} onChange={(v) => setAngle(v ?? 0)} onPressEnter={apply} unit="° sweep" width={110} />
+      <Button size="small" type="primary" disabled={!picked} onClick={apply}>Set</Button>
+      <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelCircularPattern}>✕</Button>
     </div>
   );
 }
@@ -589,10 +730,17 @@ export default function SketchToolbar({ ribbonSlot = null }) {
   const deleteSelected = useSketchStore((s) => s.deleteSelected);
   const sk = useSketchStore((s) => s.sk);
   const toggleConstruction = useSketchStore((s) => s.toggleConstruction);
-  const mirror = useSketchStore((s) => s.mirror);
+  const beginMirror = useSketchStore((s) => s.beginMirror);
   const beginOffset = useSketchStore((s) => s.beginOffset);
+  const beginLinearPattern = useSketchStore((s) => s.beginLinearPattern);
+  const beginCircularPattern = useSketchStore((s) => s.beginCircularPattern);
+  const copySelection = useSketchStore((s) => s.copySelection);
+  const paste = useSketchStore((s) => s.paste);
+  const clipboard = useSketchStore((s) => s.clipboard);
   const polygonSides = useSketchStore((s) => s.polygonSides);
   const facePick = useSketchStore((s) => s.facePick);
+  const sketchOpen = useSketchStore((s) => s.sketchOpen);
+  const startSketch = useFeatureStore((s) => s.startSketch);
   const setFacePick = useSketchStore((s) => s.setFacePick);
   const activePlane = useSketchStore((s) => (s.sketches.find((x) => x.id === s.activeId) ?? s.sketches[0])?.plane);
   const hasPart = useCamPlanStore((s) => Boolean(s.analysis));
@@ -603,7 +751,6 @@ export default function SketchToolbar({ ribbonSlot = null }) {
   // Enablement for the sketch-modify tools, from the current selection.
   const selectedTypes = selection.map((id) => sk.entities.get(id)?.type);
   const geomSelected = selectedTypes.some((t) => t === 'line' || t === 'circle' || t === 'arc');
-  const canMirror = selection.length >= 2 && selectedTypes.filter((t) => t === 'line').length >= 1;
 
   // Each `RibbonButton` opts back into pointer events itself, after the floating
   // rail container below turns them off — see that div's comment for why.
@@ -632,8 +779,9 @@ export default function SketchToolbar({ ribbonSlot = null }) {
     pointerEvents: 'auto',
   };
 
-  const rail = (
-    <div {...(docked ? { 'data-sketch-ribbon': true } : { 'data-cam-overlay': 'top' })} style={{
+  const railProps = {
+    ...(docked ? { 'data-sketch-ribbon': true } : { 'data-cam-overlay': 'top' }),
+    style: {
       position: 'absolute', top: 12, left: 12, zIndex: 5,
       display: 'flex', flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap',
       background: CAD.glass, border: `1px solid ${CAD.border}`,
@@ -655,7 +803,42 @@ export default function SketchToolbar({ ribbonSlot = null }) {
       // `pointerEvents: 'auto'` (`RibbonButton` does it for the plain ones).
       pointerEvents: 'none',
       ...(docked ? DOCKED_OVERRIDES : {}),
-    }}>
+    },
+  };
+
+  const sketchesPanel = (
+    <SketchesPanel
+      trigger={(
+        <Tooltip title="Sketches — which one you are drawing, and the plane it sits on" placement="bottom">
+          <RibbonButton icon={<PlanesIcon />} label="Sketches" />
+        </Tooltip>
+      )}
+    />
+  );
+
+  // No sketch open: nothing to draw on, so the rail offers what starts one.
+  const closedRail = (
+    <div {...railProps}>
+      <Text style={{ alignSelf: 'center', padding: '0 8px', color: CAD.label, fontSize: 12 }}>
+        Pick a plane or a face to start a sketch
+      </Text>
+      {Object.entries(PLANE_PRESETS).map(([preset, p]) => (
+        <RibbonButton
+          key={preset}
+          icon={<PlanesIcon />}
+          label={p.label}
+          onClick={() => startSketch({ preset, offset: 0 })}
+          data-sketch-start={preset}
+        />
+      ))}
+      {sep}
+      {sketchesPanel}
+      {error && <Text style={{ alignSelf: 'center', padding: '0 8px', color: CAD.skOver, fontSize: 12 }}>{error}</Text>}
+    </div>
+  );
+
+  const rail = !sketchOpen ? closedRail : (
+    <div {...railProps}>
       {TOOLS.map((t) => (
         <Tooltip key={t.value} title={`${t.label} — ${t.hint}`} placement="bottom">
           <RibbonButton
@@ -697,20 +880,48 @@ export default function SketchToolbar({ ribbonSlot = null }) {
           onClick={() => toggleConstruction()}
         />
       </Tooltip>
-      <Tooltip title="Mirror — reflect the selection about an axis line (make the axis a construction line first)" placement="bottom">
+      <Tooltip title="Mirror — reflect entities about a line: press, click what to mirror, then the line" placement="bottom">
         <RibbonButton
           icon={<MirrorIcon />}
           label="Mirror"
-          disabled={!canMirror}
-          onClick={() => mirror()}
+          onClick={() => beginMirror()}
         />
       </Tooltip>
       <Tooltip title="Offset — copy the selected lines/circles/arcs a set distance away (negative flips the side)" placement="bottom">
         <RibbonButton
           icon={<OffsetIcon />}
           label="Offset"
-          disabled={!geomSelected}
           onClick={() => beginOffset()}
+        />
+      </Tooltip>
+      <Tooltip title="Linear Pattern — stamp copies of the selection in a straight line" placement="bottom">
+        <RibbonButton
+          icon={<LinearPatternIcon />}
+          label="Linear Pattern"
+          onClick={() => beginLinearPattern()}
+        />
+      </Tooltip>
+      <Tooltip title="Circular Pattern — stamp copies of the selection around a centre (a selected point, else the origin)" placement="bottom">
+        <RibbonButton
+          icon={<CircularPatternIcon />}
+          label="Circular Pattern"
+          onClick={() => beginCircularPattern()}
+        />
+      </Tooltip>
+      <Tooltip title="Copy (Ctrl+C) — capture the selection to the sketch clipboard" placement="bottom">
+        <RibbonButton
+          icon={<CopyIcon />}
+          label="Copy"
+          disabled={!selection.length}
+          onClick={() => copySelection()}
+        />
+      </Tooltip>
+      <Tooltip title="Paste (Ctrl+V) — drop the last copy into this sketch, stepped out from where it was copied" placement="bottom">
+        <RibbonButton
+          icon={<PasteIcon />}
+          label="Paste"
+          disabled={!clipboard}
+          onClick={() => paste()}
         />
       </Tooltip>
 
@@ -746,13 +957,7 @@ export default function SketchToolbar({ ribbonSlot = null }) {
           what the drawing lands on; Build is next to it because it is what the
           drawing is for. Saving and opening projects, DXF and the library are in
           the File menu, and Clear sketch is in Edit. */}
-      <SketchesPanel
-        trigger={(
-          <Tooltip title="Sketches — which one you are drawing, and the plane it sits on" placement="bottom">
-            <RibbonButton icon={<PlanesIcon />} label="Sketches" />
-          </Tooltip>
-        )}
-      />
+      {sketchesPanel}
       <Tooltip
         title={hasPart
           ? (facePick ? 'Click a face of the part to sketch on it · Esc cancels' : 'Sketch on a face of the part: press, then click the face')
@@ -825,6 +1030,9 @@ export default function SketchToolbar({ ribbonSlot = null }) {
     <EditDimensionInput />
     <ChamferInput />
     <OffsetInput />
+    <MirrorInput />
+    <LinearPatternInput />
+    <CircularPatternInput />
     </>
   );
 }
