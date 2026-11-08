@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  holeSection, holePositions, holeSolid, drillDiameter, THREADS,
+  holeSection, holePositions, holeSolid, drillDiameter, THREADS, holeSegments,
 } from './hole.js';
 import { createFeature, rebuildFeatures, describeFeature } from './featureTree.js';
 import { meshBoolean } from '../../lib/csg.js';
@@ -22,8 +22,8 @@ function plateAndPoints(points, top = 10) {
   };
 }
 const ctx = (sketches) => ({ sketchOf: (id) => sketches[id] || null, meshBoolean });
-/** A faceted cylinder's volume, as the revolve builds it (one segment per 3°). */
-const faceted = (r, h) => 0.5 * 120 * r * r * Math.sin((2 * Math.PI) / 120) * h;
+/** A faceted cylinder's volume, with the sides a hole of drill radius `rd` is drawn with. */
+const faceted = (r, h, rd = r) => { const n = holeSegments(rd); return 0.5 * n * r * r * Math.sin((2 * Math.PI) / n) * h; };
 
 describe('holePositions', () => {
   it('takes the sketch’s own points, not the corners of its lines', () => {
@@ -79,7 +79,7 @@ describe('Hole feature', () => {
       sketchId: 2, holeType: 'cbore', diameter: 6.6, cbDiameter: 11, cbDepth: 4, end: 'through',
     });
     const { soup } = rebuildFeatures([plate(), hole], ctx(sk));
-    near(volume(soup), 16000 - faceted(5.5, 4) - faceted(3.3, 6));
+    near(volume(soup), 16000 - faceted(5.5, 4, 3.3) - faceted(3.3, 6));
   });
 
   it('stops a blind hole at its depth, point and all', () => {
@@ -115,5 +115,25 @@ describe('which way a hole runs', () => {
     // HolePanel's default: a hole needs reversing only where a boss would.
     expect(defaultReverse({ preset: 'XY', offset: 10 }, bounds, false)).toBe(false);
     expect(defaultReverse({ preset: 'XY', offset: 0 }, bounds, false)).toBe(true);
+  });
+});
+
+describe('a hole’s mouth', () => {
+  it('comes out closed wherever the hole is on a large face', async () => {
+    const { openEdgeCount } = await import('../mesh/repair.js');
+    const { extrudeRegion } = await import('./extrude.js');
+    // Drawn at one side per 3°, a Ø6 left 16 to 43 open edges round its mouth,
+    // depending on where on the face it was.
+    const plate = extrudeRegion({ outer: [-30, -20, 30, -20, 30, 20, -30, 20] }, { depth: 20 });
+    for (const p of [[-15, -8], [15, -8], [-15, 8], [-14, -8]]) {
+      const tool = holeSolid([p], { preset: 'XY', offset: 20 }, { holeType: 'drill', diameter: 6 }, { depth: 21, through: true });
+      expect(openEdgeCount(meshBoolean(plate, tool, 'cut'))).toBe(0);
+    }
+  });
+
+  it('is drawn with fewer sides the smaller it is, within bounds', () => {
+    expect(holeSegments(3)).toBe(63);
+    expect(holeSegments(0.5)).toBe(24);
+    expect(holeSegments(50)).toBe(120);
   });
 });

@@ -38,6 +38,20 @@ export const THREADS = {
   M20: { pitch: 2.5, drill: 17.5 },
 };
 
+/** Shortest side (mm) a hole's wall is faceted at — see `holeSegments`. */
+const FACET = 0.3;
+
+/**
+ * How many sides a hole of radius `r` is drawn with: sides no shorter than
+ * `FACET`, between 24 and 120. The revolve's usual one-per-3° gave a Ø6 hole
+ * sides of 0.16 mm, and the boolean that cuts it cannot keep triangles that thin
+ * apart where they cross a large face: the mouth came out with open edges. At
+ * 0.3 mm a Ø6 is 64-sided and its sides stand under 0.004 mm off the true circle.
+ */
+export function holeSegments(r) {
+  return Math.max(24, Math.min(120, Math.ceil((2 * Math.PI * r) / FACET)));
+}
+
 /** A drill's point: 118° included, the twist drill everyone has. */
 const TIP_HALF = (59 * Math.PI) / 180;
 /** How far above the face a hole starts, so its mouth never lies on the face it opens. */
@@ -126,11 +140,12 @@ export function holeSolid(positions, plane, spec, { depth, through = false, reve
   const section = holeSection(spec, depth, through);
   const { n, u } = planeBasis(plane);
   const axis = reverse ? n : n.map((v) => -v);
+  const sides = segments ?? holeSegments(drillDiameter(spec) / 2);
   const soups = positions.map(([x, y]) => revolveRegion({ outer: section }, {
     axis: 'x',
     // A frame whose X axis is the hole's: from the point, into the part.
     plane: { origin: planeToWorld(plane, x, y), u: axis, v: u },
-    segments,
+    segments: sides,
   }));
   return mergeSoups(soups, 'hole');
 }
