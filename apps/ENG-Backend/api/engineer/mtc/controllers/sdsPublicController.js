@@ -71,6 +71,7 @@ const cnFormat = require('../utils/cnFormat');
 const sdsPrintLog = require('../services/sdsPrintLog');
 const pbring = require('../../pbring/pbringGridService');
 const { renderPdf: renderPbRingPdf } = require('../../pbring/pdfRender');
+const { machineKey } = require('../../pbring/pbringConstants');
 
 const router = express.Router();
 
@@ -96,15 +97,33 @@ const normMachineKey = (s) => String(s || '').toUpperCase().replace(/[-\s]/g, ''
 // the same machine across processes, so an unscoped match could pick the
 // wrong one. No match on a missing process_code: buildStandardGridForMachine/
 // buildTurningGridForMachine both require it, so there is nothing to render.
+//
+// A floor code (IDG-15) is looked up through the same tables as the real
+// pipeline, but its name is NOT passed through sds_machine_type_code: PB Ring
+// machines such as KS-B80PB/KS-R80D are not registered there. An override
+// stops the factory name being tried, because this match is per-CN — a stale
+// factory name could land on a different machine the same CN also runs.
 async function resolvePbRingCombo(cnItemNo, processCode, rawMachineInput) {
   if (!cnItemNo || !processCode || !rawMachineInput) return null;
   const { machines } = await pbring.hasDataForCn(cnItemNo);
-  if (!machines.length) return null;
-  const target = normMachineKey(rawMachineInput);
-  return machines.find((m) =>
-    String(m.process_code) === String(processCode) &&
-    (normMachineKey(m.machine_type_name) === target || normMachineKey(m.machine) === target)
-  ) || null;
+  const inProcess = machines.filter((m) => String(m.process_code) === String(processCode));
+  if (!inProcess.length) return null;
+
+  const findByName = (name) => {
+    const target = normMachineKey(name);
+    const key = machineKey(name); // KS-B80PB → mc_key KSB80
+    return inProcess.find((m) =>
+      normMachineKey(m.machine_type_name) === target ||
+      normMachineKey(m.machine) === target ||
+      m.machine_type_name === key
+    ) || null;
+  };
+
+  const direct = findByName(rawMachineInput);
+  if (direct) return direct;
+  const { override, factory } = await lookupFloorCodeNames(rawMachineInput);
+  const floorName = override || factory;
+  return floorName ? findByName(floorName) : null;
 }
 
 // Match an sds_machine_type_code by name → code → group (active rows only). The factory
@@ -128,6 +147,29 @@ async function sdsMachineByAny(value) {
   return r.rows[0]?.machine_type_name || null;
 }
 
+// Floor code → machine_name from the local override and the factory list, either may be null.
+async function lookupFloorCodeNames(code) {
+  let override = null;
+  let factory = null;
+  try {
+    const o = await engPool.query(
+      `SELECT machine_name FROM sds_machine_code
+        WHERE machine_code = $1 AND machine_name IS NOT NULL AND TRIM(machine_name) <> '' LIMIT 1`,
+      [code]
+    );
+    override = o.rows[0]?.machine_name?.trim() || null;
+  } catch (_) { /* override table optional — fall back to factory + direct match */ }
+  try {
+    const r = await rodpcPool.query(
+      `SELECT machine_name FROM rodpc.m_setup_datasheet
+        WHERE machine_code = $1 AND machine_name IS NOT NULL AND TRIM(machine_name) <> '' LIMIT 1`,
+      [code]
+    );
+    factory = r.rows[0]?.machine_name?.trim() || null;
+  } catch (_) { /* factory DB optional — fall back to direct SDS match */ }
+  return { override, factory };
+}
+
 // Resolve whatever the caller sent as "machine" to a real sds_machine_type_code.machine_type_name.
 // Resolution priority (mirrors buildMachineResolver elsewhere): the local override table
 // sds_machine_code wins, THEN rodpc.m_setup_datasheet, THEN the raw value. The override must
@@ -138,26 +180,9 @@ async function sdsMachineByAny(value) {
 async function resolveMachineTypeName(raw) {
   const v = String(raw || '').trim();
   if (!v) return null;
-  const candidates = [];
-  try {
-    const o = await engPool.query(
-      `SELECT machine_name FROM sds_machine_code
-        WHERE machine_code = $1 AND machine_name IS NOT NULL AND TRIM(machine_name) <> '' LIMIT 1`,
-      [v]
-    );
-    const oname = o.rows[0]?.machine_name && o.rows[0].machine_name.trim();
-    if (oname) candidates.push(oname);         // local override (sds_machine_code) wins
-  } catch (_) { /* override table optional — fall back to factory + direct match */ }
-  try {
-    const r = await rodpcPool.query(
-      `SELECT machine_name FROM rodpc.m_setup_datasheet
-        WHERE machine_code = $1 AND machine_name IS NOT NULL AND TRIM(machine_name) <> '' LIMIT 1`,
-      [v]
-    );
-    const name = r.rows[0]?.machine_name && r.rows[0].machine_name.trim();
-    if (name) candidates.push(name);          // then factory m_setup_datasheet machine_name
-  } catch (_) { /* factory DB optional — fall back to direct SDS match */ }
-  candidates.push(v);                          // also accept a name/code/group passed directly
+  const { override, factory } = await lookupFloorCodeNames(v);
+  // Also accept a name/code/group passed directly.
+  const candidates = [override, factory, v].filter(Boolean);
 
   for (const c of candidates) {
     const name = await sdsMachineByAny(c);
