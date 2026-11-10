@@ -39,7 +39,8 @@ never labelled buttons. Its `CLAUDE.md` is still the best statement of that.
 
 ## Name and window chrome (2026-11-06)
 
-**The module is called "Engineer CAM Lite"** (was "Engineer CAD/CAM"): it is a
+**The module is called "Basic CAM Lite"** (renamed 2026-11-10 from "Engineer CAM
+Lite", before that "Engineer CAD/CAM"): it is a
 shop-floor aid — open and check G-code, backplot and simulate the cut, check
 standard cutting speeds, sketch simple parts — not a full CAM system like Mastercam
 or SolidCAM (no 3D fillet, assemblies, STEP, ellipse/spline). The name is in five

@@ -38,7 +38,7 @@ const ToolGallery = () => {
     },
     {
       id: 'cad-cam',
-      title: 'Engineer CAM Lite',
+      title: 'Basic CAM Lite',
       description: 'Lightweight in-browser workspace — open and check G-code, simulate the cut, sketch simple parts, and save your work to a personal or shared library.',
       icon: <DeploymentUnitOutlined style={{ fontSize: '32px', color: '#2f54eb' }} />,
       path: '/eng/mtc_eng/cam',

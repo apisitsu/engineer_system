@@ -66,8 +66,8 @@ const HomeOverallEng = () => {
     {
       id: 'tools-portal',
       title: 'Engineering Tools Portal',
-      subtitle: 'Specialized Utilities & Engineer CAM Lite',
-      description: 'Centralized toolbox providing specialized production utilities including Lot Status Tracker for real-time tracking and Engineer CAM Lite, a lightweight in-browser G-code and sketch workspace.',
+      subtitle: 'Specialized Utilities & Basic CAM Lite',
+      description: 'Centralized toolbox providing specialized production utilities including Lot Status Tracker for real-time tracking and Basic CAM Lite, a lightweight in-browser G-code and sketch workspace.',
       icon: <ToolOutlined style={{ fontSize: '36px', color: '#13c2c2' }} />,
       path: '/eng/overall_eng/tools',
       gradient: 'linear-gradient(135deg, rgba(19, 194, 194, 0.08) 0%, rgba(19, 194, 194, 0.02) 100%)',
@@ -76,7 +76,7 @@ const HomeOverallEng = () => {
       badgeText: 'Utilities & CAM',
       features: [
         'Real-time Lot Status Tracker for production jobs',
-        'Engineer CAM Lite: G-code check, simulation and 2D sketch',
+        'Basic CAM Lite: G-code check, simulation and 2D sketch',
         'Categorized tool directory with tag search'
       ],
       actionText: 'Open Portal'
