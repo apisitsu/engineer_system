@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Row, Col, Typography, Tag, Button, Input, Tabs, Badge, Layout, Spin } from 'antd';
 import {
-  FileImageOutlined,
-  CalculatorOutlined,
-  FileSearchOutlined,
-  BarChartOutlined,
   SearchOutlined,
   ToolOutlined,
   ArrowRightOutlined,
