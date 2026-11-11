@@ -24,13 +24,13 @@ export const STATUS_META = {
   pending: { step: 'wait', tag: 'default', label: 'Waiting' },
 };
 
-const CSV_HEADER = [
+export const CSV_HEADER = [
   'Lot No', 'Control No', 'Part No', '#', 'Process', 'Code', 'Status',
   'Machine / WC', 'good / ng', 'Cycle', 'Setup', 'Run time', 'Done', 'Total time inprocess',
 ];
 // One row per process step, mirroring the Process detail table exactly —
 // same labels and formatting the user already sees on screen.
-const stepToCsvRow = (h, s) => [
+export const stepToCsvRow = (h, s) => [
   h.lotNo, h.controlNo, h.partsNo,
   s.order, s.nameEn, s.processCode, (STATUS_META[s.status] || STATUS_META.pending).label,
   s.machineLabel ? `${s.machineLabel}${s.wc ? ` · WC ${s.wc}` : ''}` : '—',
@@ -45,7 +45,7 @@ const csvEscape = (v) => {
   const s = v == null ? '' : String(v);
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
-const toCsv = (rows) => rows.map((r) => r.map(csvEscape).join(',')).join('\r\n');
+export const toCsv = (rows) => rows.map((r) => r.map(csvEscape).join(',')).join('\r\n');
 // The deployed GAS uploader only accepts /^[A-Za-z0-9_-]+\.csv$/ (see
 // gas_ti_csv_doPost.gs) — a Thai-only save name has nothing left after
 // stripping, so it falls back to the track id rather than an empty name.
@@ -61,26 +61,34 @@ const utf8ToBase64 = (str) => {
 };
 
 /**
- * Build one CSV file ({ fileName, base64Data, skipped }) for ONE saved track —
- * fetched fresh, independent of whatever is on screen. Returns
- * `{ empty: true, skipped }` when there is nothing to write. `onLot` is called
- * once per lot fetched, for progress.
+ * Fetch ONE saved track fresh (independent of whatever is on screen) and turn
+ * it into CSV rows, header excluded. `onLot` is called once per lot fetched.
  */
-export async function buildTrackCsvFile(track, { onLot } = {}) {
+export async function fetchTrackRows(track, { onLot } = {}) {
   const lots = track.lots || [];
-  if (!lots.length) return { empty: true, skipped: 0 };
+  if (!lots.length) return { rows: [], skipped: 0 };
   const responses = await Promise.all(lots.map((l) =>
     axios.get(`${server.MTC_LOT_TRACK}/${encodeURIComponent(l.lotNo)}`, {
       params: l.controlNo ? { control_no: l.controlNo } : {},
     }).then((r) => r.data).catch(() => null).finally(() => { if (onLot) onLot(); }),
   ));
-  const rows = [CSV_HEADER];
+  const rows = [];
   let skipped = 0;
   responses.forEach((d) => {
     if (!d || !d.found || d.ambiguous) { skipped += 1; return; }
     (d.steps || []).forEach((s) => rows.push(stepToCsvRow(d.header, s)));
   });
-  if (rows.length === 1) return { empty: true, skipped };
+  return { rows, skipped };
+}
+
+/**
+ * Build one CSV file ({ fileName, base64Data, skipped }) for ONE saved track.
+ * Returns `{ empty: true, skipped }` when there is nothing to write.
+ */
+export async function buildTrackCsvFile(track, opts) {
+  const { rows: body, skipped } = await fetchTrackRows(track, opts);
+  if (!body.length) return { empty: true, skipped };
+  const rows = [CSV_HEADER, ...body];
   return { fileName: sanitizeCsvName(track.name, track.id), base64Data: utf8ToBase64(toCsv(rows)), skipped };
 }
 

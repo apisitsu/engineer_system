@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import {
   Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card,
   Table, Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
-  Tooltip, Popconfirm,
+  Tooltip, Popconfirm, Dropdown,
 } from 'antd';
 import {
   SearchOutlined, ReloadOutlined, SyncOutlined, PlusOutlined, CloseOutlined,
   StarFilled, StarOutlined, DeleteOutlined, DownOutlined, ProfileOutlined, CheckCircleFilled,
-  ExportOutlined,
+  ExportOutlined, DownloadOutlined, FileExcelOutlined, FileTextOutlined,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -15,6 +15,7 @@ import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { uploadTiCsvViaGas } from '../../../../utils/uploadTiCsvViaGas';
 import { buildTrackCsvFile, buildAllTrackCsvFiles, fmtMinutes, fmtDays, STATUS_META } from '../../../../utils/lotTrackCsv';
+import { downloadSheets, rowsFromLoaded, fetchAllTrackSheets } from '../../../../utils/lotTrackDownload';
 
 const { Content } = Layout;
 const { Text, Title } = Typography;
@@ -421,6 +422,7 @@ export default function LotStatusTracker() {
   const [busy, setBusy] = useState(false);
   const [exportingId, setExportingId] = useState(null); // saved-track id currently exporting
   const [exportingAll, setExportingAll] = useState(false);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   const patchState = (key, patch) =>
     setStateByKey((m) => ({ ...m, [key]: { ...(m[key] || {}), ...patch } }));
@@ -596,6 +598,43 @@ export default function LotStatusTracker() {
     }
   };
 
+  // ── local download (Excel / CSV to this machine — not Drive) ──────────────
+  const loadedLots = entries.map((e) => stateByKey[e.key]).filter((st) => st?.status === 'ok').map((st) => st.data);
+
+  const downloadCurrent = (format) => {
+    const rows = rowsFromLoaded(loadedLots);
+    if (!rows.length) { message.warning('No process data to download'); return; }
+    const name = activeTrack ? activeTrack.name : entries.map((e) => e.lotNo).slice(0, 3).join('_');
+    downloadSheets([{ name, rows }], { fileName: name, format });
+  };
+
+  const downloadAllSaved = async (format) => {
+    if (!saved.length) { message.info('No saved tracks yet'); return; }
+    setDownloadingAll(true);
+    try {
+      const { sheets, emptyCount, skippedTotal } = await fetchAllTrackSheets(saved);
+      if (!sheets.length) { message.warning('No process data to download across any saved track'); return; }
+      downloadSheets(sheets, { fileName: 'lot_track_all', format });
+      message.success(
+        `Downloaded ${sheets.length} track(s)`
+        + (emptyCount ? ` · ${emptyCount} track(s) had no data` : '')
+        + (skippedTotal ? ` · ${skippedTotal} lot(s) skipped` : ''),
+      );
+    } catch (e) {
+      message.error(e.response?.data?.error || e.message || 'Download failed');
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
+  const downloadMenu = (onPick) => ({
+    items: [
+      { key: 'xlsx', icon: <FileExcelOutlined />, label: 'Excel (.xlsx)' },
+      { key: 'csv', icon: <FileTextOutlined />, label: 'CSV (.csv)' },
+    ],
+    onClick: ({ key }) => onPick(key),
+  });
+
   const single = entries.length <= 1;
 
   const savedPanel = (
@@ -604,15 +643,26 @@ export default function LotStatusTracker() {
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No saved tracks yet" />
       ) : (
         <>
-          <Button
-            block type="dashed" size="small" icon={<ExportOutlined />}
-            loading={exportingAll}
-            disabled={!!exportingId}
-            onClick={exportAllSavedCsv}
-            style={{ marginBottom: 8 }}
-          >
-            Export all ({saved.length}) as CSV
-          </Button>
+          <Space.Compact block style={{ marginBottom: 8 }}>
+            <Tooltip title="Upload every saved track as CSV to the Tooling Inspection Drive folder">
+              <Button
+                type="dashed" size="small" icon={<ExportOutlined />}
+                loading={exportingAll}
+                disabled={!!exportingId || downloadingAll}
+                onClick={exportAllSavedCsv}
+                style={{ flex: 1 }}
+              >
+                Export all ({saved.length}) to Drive
+              </Button>
+            </Tooltip>
+            <Tooltip title="Save every saved track to this computer (Excel: one sheet per track)">
+              <Dropdown menu={downloadMenu(downloadAllSaved)} trigger={['click']} disabled={downloadingAll || exportingAll}>
+                <Button size="small" icon={<DownloadOutlined />} loading={downloadingAll} style={{ flex: 1 }}>
+                  Download all <DownOutlined />
+                </Button>
+              </Dropdown>
+            </Tooltip>
+          </Space.Compact>
           <List
             size="small"
             dataSource={saved}
@@ -682,6 +732,10 @@ export default function LotStatusTracker() {
             </Space.Compact>
 
             <Button icon={<ReloadOutlined />} onClick={reloadAll} disabled={!entries.length}>Reload all</Button>
+
+            <Dropdown menu={downloadMenu(downloadCurrent)} trigger={['click']} disabled={!loadedLots.length}>
+              <Button icon={<DownloadOutlined />} disabled={!loadedLots.length}>Download <DownOutlined /></Button>
+            </Dropdown>
 
             <Popover
               open={savedOpen}
