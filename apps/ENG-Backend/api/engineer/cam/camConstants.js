@@ -8,6 +8,7 @@ const TABLES = {
   CAM_SAVED_WORK: 'cam_saved_work',
   CAM_STD_MATERIAL: 'cam_std_material',
   CAM_STD_VC: 'cam_std_vc',
+  CAM_MACHINE: 'cam_machine',
 };
 
 /** What `kind` a saved record may be — mirrors `engine/savedWork.js` on the client. */
@@ -38,4 +39,10 @@ const STD_OPERATIONS = ['turning', 'milling', 'drilling', 'reaming', 'tap', 'par
  */
 const STD_STATUSES = ['draft', 'approved'];
 
-module.exports = { TABLES, KINDS, SHARED_SHELF, STD_OPERATIONS, STD_STATUSES };
+/**
+ * Axis sets a machine may declare — the same names as `AXES` in the client's
+ * `engine/cam/machines.js`.
+ */
+const MACHINE_AXES = ['mill3', 'mill4', 'mill5bc', 'turn2', 'turn3c', 'swiss'];
+
+module.exports = { TABLES, KINDS, SHARED_SHELF, STD_OPERATIONS, STD_STATUSES, MACHINE_AXES };

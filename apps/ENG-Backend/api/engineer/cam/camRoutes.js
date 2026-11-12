@@ -22,6 +22,7 @@ const router = express.Router();
 
 const camController = require('./camController');
 const camStdController = require('./camStdController');
+const camMachineController = require('./camMachineController');
 const { isAdmin, isEngineer } = require('../../../middleware/mtcAuth');
 
 router.get('/library', camController.listLibrary);
@@ -42,5 +43,11 @@ router.delete('/library', isAdmin, camController.clearLibrary);
 // controller and needs an administrator.
 router.get('/std-vc', camStdController.listStdVc);
 router.put('/std-vc/:key', isEngineer, camStdController.putStdVc);
+
+// The shop's machines (see camMachineService). Everyone reads them — choosing a
+// machine is part of every setup. Adding, editing and resetting is an engineer's.
+router.get('/machines', camMachineController.listMachines);
+router.put('/machines/:id', isEngineer, camMachineController.putMachine);
+router.delete('/machines/:id', isEngineer, camMachineController.deleteMachine);
 
 module.exports = router;
