@@ -43,7 +43,8 @@ never labelled buttons. Its `CLAUDE.md` is still the best statement of that.
 Lite", before that "Engineer CAD/CAM"): it is a
 shop-floor aid — open and check G-code, backplot and simulate the cut, check
 standard cutting speeds, sketch simple parts — not a full CAM system like Mastercam
-or SolidCAM (no 3D fillet, assemblies, STEP, ellipse/spline). The name is in five
+or SolidCAM (fillet/chamfer only on straight edges and axis-aligned round rims —
+see `engine/solid/edgeTreat.js`; no variable fillet, assemblies, STEP, ellipse/spline). The name is in five
 places: the header in `App.jsx`, `MenuBar.jsx` (About), `ToolGallery.jsx`,
 `home_overall.jsx` and the sidebar entry in `menu_sidebar.jsx`. The route, folder
 and `MTC_PATHS.CAM` keep their names.
