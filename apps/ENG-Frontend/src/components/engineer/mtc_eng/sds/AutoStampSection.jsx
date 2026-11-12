@@ -95,7 +95,7 @@ export default function AutoStampSection({
     } finally {
       setLoading(false);
     }
-  }, [applyCfg, message]);
+  }, [applyCfg, configUrl, message]);
 
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
 
