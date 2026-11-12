@@ -30,7 +30,7 @@ const EmailConfigManager = () => {
     const userPerms = useAuthStore(state => state.userPerms);
     // Must match ToolRequest.jsx's isAdmin — otherwise the "Setting" button and this
     // page's own guard disagree about who is let in.
-    const canManage = userDepartment === 'AD' || userRole === 'AD' || (userPerms || []).includes('general_dwg_admin');
+    const canManage = userDepartment === 'AD' || userRole === 'AD' || ['general_dwg_admin', 'all_mtc'].some(p => (userPerms || []).includes(p));
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState([]);
     const [modalVisible, setModalVisible] = useState(false);

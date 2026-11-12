@@ -100,7 +100,9 @@ const SdsV2Page = () => {
   const userDepartment = useAuthStore(state => state.userDepartment);
   const userPerms = useAuthStore(state => state.userPerms);
   const empNo = useAuthStore(state => state.empNo);
-  const isAdmin = userRole === 'AD' || userDepartment === 'AD' || (userPerms || []).includes('sds_admin');
+  // Setting button: same keys the backend's hasFeature() checks for the SDS admin page ('all_mtc' passes every one)
+  const isAdmin = userRole === 'AD' || userDepartment === 'AD'
+    || ['sds_setting_admin', 'sds_excel_image_admin', 'all_mtc'].some(p => (userPerms || []).includes(p));
   // Mirrors the backend's isPbringAdmin = hasFeature('pbring_admin') gate
   // (middleware/mtcAuth.js) — client-side only, so the Sign/Revoke buttons on
   // a PB Ring sheet aren't shown to someone the server will 403 anyway.

@@ -52,7 +52,7 @@ const draftFromCfg = (c = {}) => ({
 export default function AutoStampSection({
   configUrl = server.MTC_SDS_V2_AUTO_STAMP_CONFIG,
   runUrl = server.MTC_SDS_V2_AUTO_STAMP,
-  adminPerm = 'sds_admin',
+  adminPerm = 'sds_report_admin',
   // False for PB Ring — it has no role-config fallback table, so the two
   // "...or leave a single em_id row in the SDS approval role config" hints
   // below would describe a mechanism that doesn't exist for it.
@@ -61,7 +61,7 @@ export default function AutoStampSection({
   const { message } = App.useApp();
   const { userDepartment, userRole, userPerms } = useAuthStore();
   const isAdmin = userDepartment === 'AD' || userRole === 'AD'
-    || (Array.isArray(userPerms) && userPerms.includes(adminPerm));
+    || (Array.isArray(userPerms) && (userPerms.includes(adminPerm) || userPerms.includes('all_mtc')));
 
   const [cfg, setCfg] = useState(null);
   const [draft, setDraft] = useState({});

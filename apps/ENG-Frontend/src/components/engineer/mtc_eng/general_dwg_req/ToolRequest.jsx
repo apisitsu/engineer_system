@@ -54,7 +54,7 @@ const ToolRequestContent = () => {
     // Full AD, or specifically granted the 'general_dwg_admin' feature (see
     // db_migrations/20260922_grant_general_dwg_admin.js) — same pattern as
     // 'tooling_admin'/'sds_admin'. Must match EmailConfigManager.jsx's own guard.
-    const isAdmin = userRole === 'AD' || userDepartment === 'AD' || (userPerms || []).includes('general_dwg_admin');
+    const isAdmin = userRole === 'AD' || userDepartment === 'AD' || ['general_dwg_admin', 'all_mtc'].some(p => (userPerms || []).includes(p));
 
     const [loading, setLoading] = useState(false);
     const [requests, setRequests] = useState([]);
