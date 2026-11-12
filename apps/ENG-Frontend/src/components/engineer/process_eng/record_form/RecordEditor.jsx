@@ -61,12 +61,23 @@ export default function RecordEditor({ initial, templates, onBack, onSaved }) {
     } catch (e) { message.error(errMsg(e)); } finally { setBusy(false); }
   };
 
+  // While set, holds the resolver of the "raise RECORD REV.?" question: true = raise, false = keep, null = cancel the save.
+  const [revAsk, setRevAsk] = useState(null);
+  const askRevise = () => new Promise(resolve => setRevAsk(() => resolve));
+  const answerRevise = v => { revAsk?.(v); setRevAsk(null); };
+
   const save = async (extra = {}) => {
+    const strip = r => JSON.stringify({ ...r, established_date: null, record_rev: 0, revised_date: null, updated_at: null, status: null });
+    const dateOnly = !!rec.id && strip(rec) === strip(saved0.current) && rec.established_date !== saved0.current.established_date;
+    let revise = false;
+    if (rec.id && rec.status === 'recorded' && !dateOnly) {
+      const a = await askRevise();
+      if (a === null) return;
+      revise = a;
+    }
     setBusy(true);
     try {
-      const strip = r => JSON.stringify({ ...r, established_date: null, record_rev: 0, revised_date: null, updated_at: null, status: null });
-      const dateOnly = !!rec.id && strip(rec) === strip(saved0.current) && rec.established_date !== saved0.current.established_date;
-      const body = { ...rec, ...(dateOnly ? { revise: false } : {}), ...extra };
+      const body = { ...rec, revise, ...extra };
       const saved = rec.id ? await recordFormApi.updateRecord(rec.id, body) : await recordFormApi.createRecord(body);
       setRec(saved); saved0.current = saved; setDirty(false); onSaved?.();
       message.success(`Saved${saved.record_rev ? ` (REV. ${revLabel(saved.record_rev)})` : ''}`);
@@ -133,7 +144,7 @@ export default function RecordEditor({ initial, templates, onBack, onSaved }) {
       )}
       {rec.id && rec.status === 'recorded' && (
         <Alert style={{ marginBottom: 12 }} type="info" showIcon
-          message="This record has been recorded. Saving further changes raises RECORD REV. (A, B, …) and sets REVISED DATE automatically." />
+          message="This record has been recorded. On Save you will be asked whether to raise RECORD REV. (A, B, …) and set REVISED DATE to today." />
       )}
 
       <div style={{ overflow: 'auto', paddingBottom: 12 }}>
@@ -147,6 +158,14 @@ export default function RecordEditor({ initial, templates, onBack, onSaved }) {
             <span style={{ marginLeft: 'auto', color: '#888' }}>{r.entry_date ? String(r.entry_date).slice(0, 10) : ''}</span>
           </List.Item>
         )} />
+      </Modal>
+      <Modal open={!!revAsk} title="Raise RECORD REV.?" onCancel={() => answerRevise(null)} destroyOnHidden footer={[
+        <Button key="cancel" onClick={() => answerRevise(null)}>Cancel</Button>,
+        <Button key="keep" onClick={() => answerRevise(false)}>Save, keep REV. {revLabel(rec.record_rev)}</Button>,
+        <Button key="raise" type="primary" onClick={() => answerRevise(true)}>Save as REV. {revLabel(rec.record_rev + 1)}</Button>,
+      ]}>
+        This record has been recorded. Raise RECORD REV. from {revLabel(rec.record_rev)} to {revLabel(rec.record_rev + 1)} and
+        set REVISED DATE to today?
       </Modal>
       <PrintPortal layout={layout} record={rec} />
     </div>

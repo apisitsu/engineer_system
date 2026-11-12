@@ -272,8 +272,8 @@ async function createRecord(body, user) {
  *  - printed + `recordBack`: the form has come back from the floor and is being recorded. A stamp
  *    from the Process Engineer team (stampRecord) must already be on it. It becomes 'recorded' and
  *    RECORD REV. stays N/C — this first return is not a revision.
- *  - recorded: every further save is a revision (record_rev + 1, revised_date = today) unless
- *    `revise: false` (e.g. only the established date was filled in or corrected).
+ *  - recorded: a further save is a revision (record_rev + 1, revised_date = today) only when the
+ *    user confirmed it (`revise: true`); otherwise the changes are saved under the same revision.
  * The stamp fields in `header` are never taken from the client.
  */
 async function updateRecord(id, body, user) {
@@ -288,7 +288,7 @@ async function updateRecord(id, body, user) {
       if (!cur.header?.stamped_by) throw bad('A Process Engineer stamp is required before this record can be saved', 400);
       next = 'recorded';
     } else if (cur.status === 'recorded') {
-      revise = body.revise !== false ? 1 : 0;
+      revise = body.revise === true ? 1 : 0;
     }
     const established = body.established_date === undefined ? undefined : cleanDate(body.established_date);
     await c.query(
