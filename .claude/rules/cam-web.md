@@ -117,6 +117,7 @@ you are replacing the bundler.
 |---|---|---|
 | `workers/sketch.worker.js` | `import wasm from '…planegcs.wasm?url'` → loads `/wasm/planegcs.{js,wasm}` at runtime | webpack has no `?url`, and it **fails outright** on the emscripten glue: the glue's dead Node branch has `new URL('./', import.meta.url)`, which webpack resolves at build time → `Can't resolve './'`. The glue is served as a static asset and imported with `/* webpackIgnore: true */` so webpack never parses it. |
 | `engine/sketch/planegcs.js` | imports `enums.js` / `gcs_wrapper.js` by exact path, not the package root; `createSolver` takes an injected `initModule` | The package root statically imports that same glue. Injection keeps this a pure module — the worker and the Node checks resolve the loader differently. |
+| `lib/manifoldLoader.js` | cam-web: `import 'manifold-3d'` + `manifold.wasm?url`; here: imports `/wasm/manifold.js` with `webpackIgnore`, or `public/wasm/manifold.js` off the disk under Node (`test:cam`, cwd = apps/ENG-Frontend) | Same glue problem as planegcs. And manifold-3d is **not an npm dependency here**: the package drags in ~50 others (gltf-transform, sharp) for its CLI; only `manifold.{js,wasm}` are needed. |
 | `engine/gcode/macro.js` → `macros.js` | renamed | CRA's babel preset always loads `babel-plugin-macros`, which claims any import matching `/[./]macro(\.c?js)?$/` as a *babel* macro and fails the build demanding `createMacro()`. This one is Fanuc's macro, not babel's. |
 | `engine/sketch/annotations.js` | one import hoisted above the body | CRA's eslint makes `import/first` a build **error**; vite doesn't care. |
 
@@ -135,6 +136,12 @@ for a runtime asset to exist on prod — see the gitignored-artifacts rule in
 `predev`/`prestart`/`prebuild`) re-copies them from node_modules and only writes
 when the bytes differ, so they cannot go stale when `@salusoft89/planegcs` is
 upgraded. **If it prints "commit it", commit it.**
+
+`public/wasm/manifold.{js,wasm}` (v3.5.4, Apache-2.0 — `manifold.LICENSE.txt`) are
+committed **by hand** and are not refreshed by `copy-cam-wasm.js`: there is no
+package to copy from. They are the solid boolean (`lib/csg.js`) — closed results,
+exact on touching faces; three-bvh-csg remains only as the fallback for a mesh that
+is not closed. To upgrade, copy both files from a newer `manifold-3d`.
 
 ## Tests: two runners, disjoint file sets
 
