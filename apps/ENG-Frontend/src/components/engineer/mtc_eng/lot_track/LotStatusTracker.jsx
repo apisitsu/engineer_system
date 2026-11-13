@@ -21,7 +21,7 @@ import { downloadSheets, rowsFromLoaded, fetchAllTrackSheets } from '../../../..
 import { sortLots, LOT_SORTS } from '../../../../utils/lotTrackSort';
 import {
   downloadElementAsJpeg, downloadJpegZip, roadmapFileName, paginate, dateStamp, safeFileBase,
-  LOTS_PER_ROW, LOTS_PER_PAGE,
+  LOTS_PER_PAGE,
 } from '../../../../utils/lotRoadmapImage';
 
 const { Content } = Layout;
@@ -86,6 +86,55 @@ const STEP_BOX = {
   pending: { border: '1px dashed #d9d9d9', background: '#fff' },
 };
 
+// What a roadmap step box shows — shared by the on-screen roadmap and the
+// e-mail image so both always tell the same story.
+function stepFacts(steps, i) {
+  const s = steps[i];
+  const bits = [];
+  if (s.status === 'current') {
+    // no production row yet — show what is known while it's WIP
+    if (s.incomingWc) bits.push(`WC ${s.incomingWc}`);
+    if (s.startDate) bits.push(`received ${s.startDate}`);
+    if (s.incomingQty != null) bits.push(`qty in ${s.incomingQty}`);
+  } else {
+    // floor machine code(s) (IDG-xx, SPG-xx…) — a step can run on several
+    if (s.machineCodes?.length) bits.push(s.machineCodes.join(', '));
+    if (s.wc) bits.push(`WC ${s.wc}`);
+    // No per-step start timestamp exists in pc_production, so show only the
+    // recorded completion date — the inter-step gap is carried by the
+    // "Wait in process" chip in the header, not by a fake start→done span.
+    if (s.compDate) bits.push(`done ${s.compDate}`);
+    if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
+    if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
+    if (s.operator) bits.push(s.operator);
+  }
+  // Every step's header shows the PREVIOUS step's settled wait, not its
+  // own — "Wait in process N d" reads as "what the step before this one
+  // waited through before handing the lot on". That shifts every wait
+  // chip one step down from where it was produced (comp[i-1] − comp[i-2]
+  // lands on step i's header, not step i-1's). The in-progress step's own
+  // live running count still shows separately on the connector below it
+  // ("WIP N days" — how long it has held the lot so far).
+  const prev = i > 0 ? steps[i - 1] : null;
+  // >= 0, not > 0: a same-day handoff still gets its own "Wait in process
+  // 0 d" chip rather than being silently dropped. A NEGATIVE dwellDays
+  // means the previous step's own comp_date recorded later than steps
+  // after it in the plan (source-data ordering issue, e.g. a late/rework
+  // update) — flag it instead of just going quiet.
+  const headerWait = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays >= 0
+    ? prev.dwellDays
+    : null;
+  const headerAnomaly = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays < 0
+    ? prev
+    : null;
+  let soFarDays = null;
+  if (s.status === 'current' && s.startDate) {
+    const soFar = -(daysUntil(s.startDate) || 0);
+    if (soFar > 0) soFarDays = soFar;
+  }
+  return { bits, headerWait, headerAnomaly, soFarDays };
+}
+
 function Roadmap({ steps, issuedDate, still }) {
   const RAIL = '#d9d9d9';
   return (
@@ -109,48 +158,7 @@ function Roadmap({ steps, issuedDate, still }) {
       {steps.map((s, i) => {
         const meta = STATUS_META[s.status] || STATUS_META.pending;
         const box = STEP_BOX[s.status] || STEP_BOX.pending;
-        const bits = [];
-        if (s.status === 'current') {
-          // no production row yet — show what is known while it's WIP
-          if (s.incomingWc) bits.push(`WC ${s.incomingWc}`);
-          if (s.startDate) bits.push(`received ${s.startDate}`);
-          if (s.incomingQty != null) bits.push(`qty in ${s.incomingQty}`);
-        } else {
-          // floor machine code(s) (IDG-xx, SPG-xx…) — a step can run on several
-          if (s.machineCodes?.length) bits.push(s.machineCodes.join(', '));
-          if (s.wc) bits.push(`WC ${s.wc}`);
-          // No per-step start timestamp exists in pc_production, so show only the
-          // recorded completion date — the inter-step gap is carried by the
-          // "Wait in process" chip in the header, not by a fake start→done span.
-          if (s.compDate) bits.push(`done ${s.compDate}`);
-          if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
-          if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
-          if (s.operator) bits.push(s.operator);
-        }
-        // Every step's header shows the PREVIOUS step's settled wait, not its
-        // own — "Wait in process N d" reads as "what the step before this one
-        // waited through before handing the lot on". That shifts every wait
-        // chip one step down from where it was produced (comp[i-1] − comp[i-2]
-        // lands on step i's header, not step i-1's). The in-progress step's own
-        // live running count still shows separately on the connector below it
-        // ("WIP N days" — how long it has held the lot so far).
-        const prev = i > 0 ? steps[i - 1] : null;
-        // >= 0, not > 0: a same-day handoff still gets its own "Wait in process
-        // 0 d" chip rather than being silently dropped. A NEGATIVE dwellDays
-        // means the previous step's own comp_date recorded later than steps
-        // after it in the plan (source-data ordering issue, e.g. a late/rework
-        // update) — flag it instead of just going quiet.
-        const headerWait = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays >= 0
-          ? prev.dwellDays
-          : null;
-        const headerAnomaly = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays < 0
-          ? prev
-          : null;
-        let soFarDays = null;
-        if (s.status === 'current' && s.startDate) {
-          const soFar = -(daysUntil(s.startDate) || 0);
-          if (soFar > 0) soFarDays = soFar;
-        }
+        const { bits, headerWait, headerAnomaly, soFarDays } = stepFacts(steps, i);
 
         return (
           <React.Fragment key={s.order}>
@@ -268,48 +276,105 @@ function StatusStrip({ data }) {
   );
 }
 
-// ── roadmap image (JPG for e-mail) — the same facts as a grid card, but the
-// whole roadmap is laid out at full height (no scroll pane, no buttons) so it
-// can be rendered off-screen and captured.
-const SNAP_COL_W = 330;
-const SNAP_SINGLE_W = 560;
+// ── roadmap image (JPG for e-mail) — each lot is a wide band: its facts on the
+// left, the roadmap laid out as a grid of step boxes reading left → right,
+// row by row, so a long route stays readable instead of one tall column.
+const SNAP_STEPS_PER_ROW = 7;
+const SNAP_STEP_W = 190;
+const SNAP_GAP = 22; // room for the → between boxes
+const SNAP_INFO_W = 250;
+const SNAP_GRID_W = SNAP_STEPS_PER_ROW * SNAP_STEP_W + (SNAP_STEPS_PER_ROW - 1) * SNAP_GAP;
+const SNAP_BAND_W = SNAP_INFO_W + 16 + SNAP_GRID_W + 26;
 
-function LotSnapshotCard({ data, width }) {
+function SnapStepBox({ title, code, status, facts, issued }) {
+  const meta = STATUS_META[status] || STATUS_META.pending;
+  const box = STEP_BOX[status] || STEP_BOX.pending;
+  return (
+    <div style={{ width: SNAP_STEP_W, minHeight: 92, boxSizing: 'border-box', borderRadius: 8, padding: '6px 8px', ...box }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <Dot status={status} still />
+        <span style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.25, flex: 1, minWidth: 0 }}>{title}</span>
+      </div>
+      <div style={{ marginTop: 3 }}>
+        {code ? <Tag style={{ marginInlineEnd: 4, fontSize: 11, lineHeight: '17px', padding: '0 4px' }}>{code}</Tag> : null}
+        {issued ? null : <Tag color={meta.tag} style={{ marginInlineEnd: 0, fontSize: 11, lineHeight: '17px', padding: '0 4px' }}>{meta.label}</Tag>}
+      </div>
+      {facts?.headerWait != null ? (
+        <Tag color={facts.headerWait >= 7 ? 'warning' : 'default'} style={{ margin: '3px 0 0', fontSize: 11, lineHeight: '17px', padding: '0 4px' }}>
+          ⏳ Wait {facts.headerWait} d
+        </Tag>
+      ) : null}
+      {facts?.headerAnomaly ? (
+        <Tag color="red" style={{ margin: '3px 0 0', fontSize: 11, lineHeight: '17px', padding: '0 4px' }}>⚠ Date out of order</Tag>
+      ) : null}
+      {facts?.soFarDays != null ? (
+        <Tag color={facts.soFarDays >= 7 ? 'warning' : 'gold'} style={{ margin: '3px 0 0', fontSize: 11, lineHeight: '17px', padding: '0 4px' }}>
+          ⏳ WIP {facts.soFarDays} days
+        </Tag>
+      ) : null}
+      {facts?.bits?.length ? (
+        <div style={{ marginTop: 3, fontSize: 10.5, lineHeight: 1.35, color: '#8c8c8c' }}>{facts.bits.join(' · ')}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function SnapRoadmapGrid({ steps, issuedDate }) {
+  const boxes = [
+    <SnapStepBox key="issued" title="Issued Lot" status="done" issued facts={{ bits: [`issued ${issuedDate || '—'}`] }} />,
+    ...steps.map((s, i) => (
+      <SnapStepBox key={s.order} title={`${s.order}. ${s.nameEn}`} code={s.processCode} status={s.status} facts={stepFacts(steps, i)} />
+    )),
+  ];
+  return (
+    <div style={{ width: SNAP_GRID_W }}>
+      {chunk(boxes, SNAP_STEPS_PER_ROW).map((row, ri, rows) => (
+        <div key={ri} style={{ display: 'flex', alignItems: 'stretch', marginBottom: ri < rows.length - 1 ? 10 : 0 }}>
+          {row.map((b, bi) => (
+            <React.Fragment key={bi}>
+              {bi > 0 ? <div style={{ width: SNAP_GAP, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bfbfbf', fontSize: 14 }}>→</div> : null}
+              {b}
+            </React.Fragment>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LotSnapshotBand({ data }) {
   const { header, summary } = data;
   const di = dueInfo(header.compPlanDate, header.compDate);
   return (
-    <div style={{ width, flex: '0 0 auto', border: '1px solid #e8e8e8', borderRadius: 10, padding: 12, background: '#fff' }}>
-      <div style={{ fontWeight: 700, fontSize: 16 }}>
-        {header.lotNo} <Tag color="blue" style={{ marginInlineStart: 6 }}>{header.controlNo}</Tag>
+    <div style={{ display: 'flex', gap: 16, width: SNAP_BAND_W, boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 10, padding: 12, background: '#fff' }}>
+      <div style={{ width: SNAP_INFO_W, flex: '0 0 auto' }}>
+        <div style={{ fontWeight: 700, fontSize: 18 }}>{header.lotNo}</div>
+        <Tag color="blue" style={{ margin: '2px 0 2px' }}>{header.controlNo}</Tag>
+        <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 6 }}>{header.partsNo}</div>
+        {header.isCancelled ? <Tag color="error" style={{ marginBottom: 6 }}>Cancelled / closed</Tag> : null}
+        <Progress percent={summary.pctComplete} strokeWidth={10} style={{ margin: '0 0 6px' }} />
+        {di ? <Tag color={di.color} style={{ fontSize: 12.5, padding: '1px 8px', marginBottom: 4 }}>{di.text}</Tag> : null}
+        <div style={{ fontSize: 12, color: '#595959' }}>Plan finish {header.compPlanDate || '—'}</div>
+        <div style={{ fontSize: 12, color: '#595959', marginBottom: 6 }}>Issued {header.entryDate || '—'}</div>
+        <div style={{ fontSize: 13 }}>
+          {summary.hasCurrent
+            ? <>Now at <Text strong>{summary.currentOrder}/{summary.totalSteps}</Text> — <Text strong>{summary.currentStepName}</Text></>
+            : <>All {summary.totalSteps} steps complete</>}
+        </div>
+        <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+          Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} · run {fmtMinutes(summary.totalRunMinutes)}
+        </div>
+        <div style={{ fontSize: 10.5, color: '#bfbfbf', marginTop: 8 }}>
+          Synced {fmtDateTime(data.syncAsOf)}<br />Last moved {fmtDateTime(data.lotUpdatedAt)}
+        </div>
       </div>
-      <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 6 }}>{header.partsNo}</div>
-      {header.isCancelled ? <Tag color="error" style={{ marginBottom: 6 }}>Cancelled / closed</Tag> : null}
-      <Progress percent={summary.pctComplete} strokeWidth={10} style={{ margin: '0 0 6px' }} />
-      <div style={{ marginBottom: 6 }}>
-        {di ? <Tag color={di.color} style={{ marginInlineEnd: 6 }}>{di.text}</Tag> : null}
-        <Text type="secondary" style={{ fontSize: 12 }}>Plan finish {header.compPlanDate || '—'}</Text>
-      </div>
-      <div style={{ fontSize: 13 }}>
-        {summary.hasCurrent
-          ? <>Now at <Text strong>{summary.currentOrder}/{summary.totalSteps}</Text> — <Text strong>{summary.currentStepName}</Text></>
-          : <>All {summary.totalSteps} steps complete</>}
-      </div>
-      <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
-        Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} process · run {fmtMinutes(summary.totalRunMinutes)}
-      </div>
-      <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 4 }}>
-        <Roadmap steps={data.steps} issuedDate={header.entryDate} still />
-      </div>
-      <div style={{ fontSize: 10.5, color: '#bfbfbf', marginTop: 6 }}>
-        Data synced {fmtDateTime(data.syncAsOf)} · Last lot moved {fmtDateTime(data.lotUpdatedAt)}
-      </div>
+      <SnapRoadmapGrid steps={data.steps} issuedDate={header.entryDate} />
     </div>
   );
 }
 
 function RoadmapSheet({ title, lots, page, pages, total }) {
   const single = total === 1;
-  const cols = Math.min(lots.length, LOTS_PER_ROW);
   const late = (d) => {
     const di = dueInfo(d.header.compPlanDate, d.header.compDate);
     return !!di && (di.color === 'error' || (!!d.header.compDate && di.color === 'warning'));
@@ -318,7 +383,7 @@ function RoadmapSheet({ title, lots, page, pages, total }) {
   const avg = lots.length ? Math.round(lots.reduce((a, d) => a + (d.summary.pctComplete || 0), 0) / lots.length) : 0;
   return (
     <div style={{ display: 'inline-block', padding: 20, background: '#fff' }}>
-      <div style={{ borderBottom: '2px solid #1677ff', paddingBottom: 8, marginBottom: 14 }}>
+      <div style={{ borderBottom: '2px solid #1677ff', paddingBottom: 8, marginBottom: 14, width: SNAP_BAND_W }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>
           Lot Status Roadmap{title ? ` — ${title}` : ''}
           {pages > 1 ? <span style={{ fontSize: 13, fontWeight: 400, color: '#8c8c8c' }}>  (page {page}/{pages})</span> : null}
@@ -326,10 +391,12 @@ function RoadmapSheet({ title, lots, page, pages, total }) {
         <div style={{ fontSize: 12.5, color: '#595959' }}>
           {single ? '1 lot' : `${lots.length} of ${total} lots · Avg progress ${avg}% · Overdue / finished late ${lateCount}`}
           {' · '}Generated {new Date().toLocaleString('en-GB', { hour12: false })}
+          {'  ·  '}
+          <span style={{ color: '#52c41a' }}>■</span> Done <span style={{ color: '#1677ff' }}>■</span> In progress <span style={{ color: '#bfbfbf' }}>□</span> Waiting
         </div>
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start', width: single ? SNAP_SINGLE_W : cols * SNAP_COL_W + (cols - 1) * 14 }}>
-        {lots.map((d, i) => <LotSnapshotCard key={`${d.header.lotNo}-${d.header.controlNo}-${i}`} data={d} width={single ? SNAP_SINGLE_W : SNAP_COL_W} />)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {lots.map((d, i) => <LotSnapshotBand key={`${d.header.lotNo}-${d.header.controlNo}-${i}`} data={d} />)}
       </div>
     </div>
   );

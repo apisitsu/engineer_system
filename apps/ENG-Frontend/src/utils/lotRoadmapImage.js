@@ -9,8 +9,8 @@ import { createRoot } from 'react-dom/client';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
 
-export const LOTS_PER_ROW = 5;
-export const LOTS_PER_PAGE = 10;
+// one lot = one wide band in the image; 5 bands keep a page e-mail sized
+export const LOTS_PER_PAGE = 5;
 // Keep the canvas well inside browser limits (≈32k px per side).
 const MAX_CANVAS_SIDE = 16000;
 

@@ -14,9 +14,9 @@ test('safeFileBase falls back when empty', () => {
   expect(safeFileBase('  ')).toBe('lot_track');
 });
 
-test('paginate splits into pages of 10', () => {
-  const pages = paginate(Array.from({ length: 23 }, (_, i) => i));
-  expect(pages.map((p) => p.length)).toEqual([10, 10, 3]);
+test('paginate splits into pages of 5', () => {
+  const pages = paginate(Array.from({ length: 12 }, (_, i) => i));
+  expect(pages.map((p) => p.length)).toEqual([5, 5, 2]);
   expect(paginate([])).toEqual([]);
 });
 
