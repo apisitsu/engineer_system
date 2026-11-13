@@ -9,15 +9,20 @@ import {
   StarFilled, StarOutlined, DeleteOutlined, DownOutlined, ProfileOutlined, CheckCircleFilled,
   ExportOutlined, DownloadOutlined, FileExcelOutlined, FileTextOutlined,
   AppstoreOutlined, UnorderedListOutlined, SortAscendingOutlined, SortDescendingOutlined,
+  CameraOutlined, FileImageOutlined, FileZipOutlined,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { uploadTiCsvViaGas } from '../../../../utils/uploadTiCsvViaGas';
-import { buildTrackCsvFile, buildAllTrackCsvFiles, fmtMinutes, fmtDays, STATUS_META } from '../../../../utils/lotTrackCsv';
+import { buildTrackCsvFile, buildAllTrackCsvFiles, fetchTrackLots, fmtMinutes, fmtDays, STATUS_META } from '../../../../utils/lotTrackCsv';
 import { downloadSheets, rowsFromLoaded, fetchAllTrackSheets } from '../../../../utils/lotTrackDownload';
 import { sortLots, LOT_SORTS } from '../../../../utils/lotTrackSort';
+import {
+  downloadElementAsJpeg, downloadJpegZip, roadmapFileName, paginate, dateStamp, safeFileBase,
+  LOTS_PER_ROW, LOTS_PER_PAGE,
+} from '../../../../utils/lotRoadmapImage';
 
 const { Content } = Layout;
 const { Text, Title } = Typography;
@@ -68,9 +73,9 @@ const chunk = (arr, n) => {
 // just above a step's node and belongs to THAT step: how long it waited for the
 // previous step to finish and hand the lot over. Settled (prev.dwellDays) once
 // the previous step is done; a running "so far" count while it is still WIP.
-function Dot({ status }) {
+function Dot({ status, still }) {
   if (status === 'done') return <CheckCircleFilled style={{ color: '#52c41a', fontSize: 15 }} />;
-  if (status === 'current') return <SyncOutlined spin style={{ color: '#1677ff', fontSize: 14 }} />;
+  if (status === 'current') return <SyncOutlined spin={!still} style={{ color: '#1677ff', fontSize: 14 }} />;
   return <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #d9d9d9', display: 'inline-block', marginTop: 3 }} />;
 }
 
@@ -81,7 +86,7 @@ const STEP_BOX = {
   pending: { border: '1px dashed #d9d9d9', background: '#fff' },
 };
 
-function Roadmap({ steps, issuedDate }) {
+function Roadmap({ steps, issuedDate, still }) {
   const RAIL = '#d9d9d9';
   return (
     // centre spine: an absolutely-placed line down the middle, step boxes and
@@ -161,7 +166,7 @@ function Roadmap({ steps, issuedDate }) {
                 position: 'absolute', top: -9, left: 'calc(50% - 9px)', width: 18, height: 18, borderRadius: '50%',
                 background: '#fff', border: box.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <Dot status={s.status} />
+                <Dot status={s.status} still={still} />
               </span>
               <Space size={[6, 2]} wrap>
                 <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
@@ -263,13 +268,80 @@ function StatusStrip({ data }) {
   );
 }
 
+// ── roadmap image (JPG for e-mail) — the same facts as a grid card, but the
+// whole roadmap is laid out at full height (no scroll pane, no buttons) so it
+// can be rendered off-screen and captured.
+const SNAP_COL_W = 330;
+const SNAP_SINGLE_W = 560;
+
+function LotSnapshotCard({ data, width }) {
+  const { header, summary } = data;
+  const di = dueInfo(header.compPlanDate, header.compDate);
+  return (
+    <div style={{ width, flex: '0 0 auto', border: '1px solid #e8e8e8', borderRadius: 10, padding: 12, background: '#fff' }}>
+      <div style={{ fontWeight: 700, fontSize: 16 }}>
+        {header.lotNo} <Tag color="blue" style={{ marginInlineStart: 6 }}>{header.controlNo}</Tag>
+      </div>
+      <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 6 }}>{header.partsNo}</div>
+      {header.isCancelled ? <Tag color="error" style={{ marginBottom: 6 }}>Cancelled / closed</Tag> : null}
+      <Progress percent={summary.pctComplete} strokeWidth={10} style={{ margin: '0 0 6px' }} />
+      <div style={{ marginBottom: 6 }}>
+        {di ? <Tag color={di.color} style={{ marginInlineEnd: 6 }}>{di.text}</Tag> : null}
+        <Text type="secondary" style={{ fontSize: 12 }}>Plan finish {header.compPlanDate || '—'}</Text>
+      </div>
+      <div style={{ fontSize: 13 }}>
+        {summary.hasCurrent
+          ? <>Now at <Text strong>{summary.currentOrder}/{summary.totalSteps}</Text> — <Text strong>{summary.currentStepName}</Text></>
+          : <>All {summary.totalSteps} steps complete</>}
+      </div>
+      <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
+        Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} process · run {fmtMinutes(summary.totalRunMinutes)}
+      </div>
+      <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 4 }}>
+        <Roadmap steps={data.steps} issuedDate={header.entryDate} still />
+      </div>
+      <div style={{ fontSize: 10.5, color: '#bfbfbf', marginTop: 6 }}>
+        Data synced {fmtDateTime(data.syncAsOf)} · Last lot moved {fmtDateTime(data.lotUpdatedAt)}
+      </div>
+    </div>
+  );
+}
+
+function RoadmapSheet({ title, lots, page, pages, total }) {
+  const single = total === 1;
+  const cols = Math.min(lots.length, LOTS_PER_ROW);
+  const late = (d) => {
+    const di = dueInfo(d.header.compPlanDate, d.header.compDate);
+    return !!di && (di.color === 'error' || (!!d.header.compDate && di.color === 'warning'));
+  };
+  const lateCount = lots.filter(late).length;
+  const avg = lots.length ? Math.round(lots.reduce((a, d) => a + (d.summary.pctComplete || 0), 0) / lots.length) : 0;
+  return (
+    <div style={{ display: 'inline-block', padding: 20, background: '#fff' }}>
+      <div style={{ borderBottom: '2px solid #1677ff', paddingBottom: 8, marginBottom: 14 }}>
+        <div style={{ fontSize: 20, fontWeight: 700 }}>
+          Lot Status Roadmap{title ? ` — ${title}` : ''}
+          {pages > 1 ? <span style={{ fontSize: 13, fontWeight: 400, color: '#8c8c8c' }}>  (page {page}/{pages})</span> : null}
+        </div>
+        <div style={{ fontSize: 12.5, color: '#595959' }}>
+          {single ? '1 lot' : `${lots.length} of ${total} lots · Avg progress ${avg}% · Overdue / finished late ${lateCount}`}
+          {' · '}Generated {new Date().toLocaleString('en-GB', { hour12: false })}
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start', width: single ? SNAP_SINGLE_W : cols * SNAP_COL_W + (cols - 1) * 14 }}>
+        {lots.map((d, i) => <LotSnapshotCard key={`${d.header.lotNo}-${d.header.controlNo}-${i}`} data={d} width={single ? SNAP_SINGLE_W : SNAP_COL_W} />)}
+      </div>
+    </div>
+  );
+}
+
 // ── one tracked lot ─────────────────────────────────────────────────────────
 // Every column is a fixed-height card so a row of them lines up; the lower pane
 // (roadmap OR the trimmed process-detail table) is the only part that scrolls.
 const CARD_H_MULTI = 660;
 const CARD_H_SINGLE = 760;
 
-function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onResolveControl }) {
+function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onResolveControl, onSnapshot }) {
   const st = state || { status: 'loading' };
 
   // Auto-scroll the roadmap so the CURRENT step sits at the top of the pane.
@@ -315,6 +387,7 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
         {sub ? <div style={{ fontSize: 12, color: '#8c8c8c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div> : null}
       </div>
       <Space size={2}>
+        {canToggle ? <Tooltip title="Download roadmap (JPG)"><Button type="text" size="small" icon={<CameraOutlined />} onClick={onSnapshot} /></Tooltip> : null}
         <Tooltip title="Reload"><Button type="text" size="small" icon={<ReloadOutlined />} onClick={onReload} /></Tooltip>
         <Tooltip title="Remove"><Button type="text" size="small" icon={<CloseOutlined />} onClick={onRemove} /></Tooltip>
       </Space>
@@ -402,7 +475,7 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
 }
 
 // ── list view — one row per lot: the facts on a grid card, without the roadmap ─
-function LotListView({ entries, stateByKey, onOpenDetail, onRemove, onReload, onResolveControl }) {
+function LotListView({ entries, stateByKey, onOpenDetail, onRemove, onReload, onResolveControl, onSnapshot }) {
   const loaded = (e) => {
     const st = stateByKey[e.key];
     return st?.status === 'ok' ? st.data : null;
@@ -479,8 +552,9 @@ function LotListView({ entries, stateByKey, onOpenDetail, onRemove, onReload, on
       render: (_, e) => (loaded(e) ? <Text type="secondary" style={{ fontSize: 12 }}>{fmtDateTime(loaded(e).lotUpdatedAt)}</Text> : null),
     },
     {
-      title: '', key: 'act', width: 72, align: 'right', render: (_, e) => (
+      title: '', key: 'act', width: 100, align: 'right', render: (_, e) => (
         <Space size={2}>
+          {loaded(e) ? <Tooltip title="Download roadmap (JPG)"><Button type="text" size="small" icon={<CameraOutlined />} onClick={() => onSnapshot(loaded(e))} /></Tooltip> : null}
           <Tooltip title="Reload"><Button type="text" size="small" icon={<ReloadOutlined />} onClick={() => onReload(e)} /></Tooltip>
           <Tooltip title="Remove"><Button type="text" size="small" icon={<CloseOutlined />} onClick={() => onRemove(e.key)} /></Tooltip>
         </Space>
@@ -723,12 +797,72 @@ export default function LotStatusTracker() {
     }
   };
 
-  const downloadMenu = (onPick) => ({
+  // ── roadmap images (JPG for e-mail) ───────────────────────────────────────
+  const [imaging, setImaging] = useState(null); // 'current' | 'lot' | saved-track id
+
+  // mode 'sheet' → summary JPG(s), LOTS_PER_PAGE lots each; 'zip' → one JPG per lot in a ZIP
+  const saveRoadmaps = async (lots, title, mode) => {
+    if (!lots.length) { message.warning('No loaded lot to capture'); return false; }
+    if (mode === 'zip') {
+      const items = lots.map((d) => ({
+        element: <RoadmapSheet title="" lots={[d]} page={1} pages={1} total={1} />,
+        fileName: roadmapFileName(d.header.lotNo),
+      }));
+      await downloadJpegZip(items, `Roadmap_${safeFileBase(title)}_${dateStamp()}.zip`);
+      return true;
+    }
+    const pages = paginate(lots, LOTS_PER_PAGE);
+    for (let i = 0; i < pages.length; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await downloadElementAsJpeg(
+        <RoadmapSheet title={title} lots={pages[i]} page={i + 1} pages={pages.length} total={lots.length} />,
+        roadmapFileName(lots.length === 1 ? lots[0].header.lotNo : title, { page: i + 1, pages: pages.length }),
+      );
+    }
+    return true;
+  };
+
+  const withImaging = async (tag, fn) => {
+    setImaging(tag);
+    try {
+      await fn();
+    } catch (e) {
+      message.error(e.response?.data?.error || e.message || 'Image export failed');
+    } finally {
+      setImaging(null);
+    }
+  };
+
+  const snapshotLot = (data) => withImaging('lot', () => saveRoadmaps([data], data.header.lotNo, 'sheet'));
+
+  const snapshotCurrent = (mode) => withImaging('current', async () => {
+    const lots = sortLots(entries, stateByKey, sortBy, sortDir)
+      .map((e) => stateByKey[e.key]).filter((st) => st?.status === 'ok').map((st) => st.data);
+    const title = activeTrack ? activeTrack.name : (lots.length === 1 ? lots[0].header.lotNo : 'Lot_track');
+    if (await saveRoadmaps(lots, title, mode) && lots.length < entries.length) {
+      message.info(`${entries.length - lots.length} lot(s) not loaded — left out of the image`);
+    }
+  });
+
+  const snapshotSaved = (track, mode) => withImaging(track.id, async () => {
+    const { lots, skipped } = await fetchTrackLots(track);
+    if (await saveRoadmaps(lots, track.name, mode) && skipped) {
+      message.info(`${skipped} lot(s) skipped — not found / ambiguous`);
+    }
+  });
+
+  const IMAGE_ITEMS = [
+    { key: 'sheet', icon: <FileImageOutlined />, label: 'Roadmap image (.jpg)' },
+    { key: 'zip', icon: <FileZipOutlined />, label: 'Roadmap — one JPG per lot (.zip)' },
+  ];
+
+  const downloadMenu = (onPick, onImage) => ({
     items: [
       { key: 'xlsx', icon: <FileExcelOutlined />, label: 'Excel (.xlsx)' },
       { key: 'csv', icon: <FileTextOutlined />, label: 'CSV (.csv)' },
+      ...(onImage ? [{ type: 'divider' }, ...IMAGE_ITEMS] : []),
     ],
-    onClick: ({ key }) => onPick(key),
+    onClick: ({ key }) => (key === 'sheet' || key === 'zip' ? onImage(key) : onPick(key)),
   });
 
   const single = entries.length <= 1;
@@ -777,6 +911,16 @@ export default function LotStatusTracker() {
                       CSV
                     </Button>
                   </Tooltip>,
+                  <Dropdown
+                    key="jpg"
+                    trigger={['click']}
+                    disabled={!!imaging}
+                    menu={{ items: IMAGE_ITEMS, onClick: ({ key }) => snapshotSaved(t, key) }}
+                  >
+                    <Tooltip title="Roadmap image(s) of this track for e-mail">
+                      <Button type="link" size="small" icon={<FileImageOutlined />} loading={imaging === t.id}>JPG</Button>
+                    </Tooltip>
+                  </Dropdown>,
                   <Button key="load" type="link" size="small" onClick={() => applySaved(t)}>Load</Button>,
                   t.owned === false ? null : (
                     <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
@@ -830,8 +974,8 @@ export default function LotStatusTracker() {
 
             <Button icon={<ReloadOutlined />} onClick={reloadAll} disabled={!entries.length}>Reload all</Button>
 
-            <Dropdown menu={downloadMenu(downloadCurrent)} trigger={['click']} disabled={!loadedLots.length}>
-              <Button icon={<DownloadOutlined />} disabled={!loadedLots.length}>Download <DownOutlined /></Button>
+            <Dropdown menu={downloadMenu(downloadCurrent, snapshotCurrent)} trigger={['click']} disabled={!loadedLots.length || !!imaging}>
+              <Button icon={<DownloadOutlined />} disabled={!loadedLots.length} loading={imaging === 'current' || imaging === 'lot'}>Download <DownOutlined /></Button>
             </Dropdown>
 
             <Popover
@@ -894,6 +1038,7 @@ export default function LotStatusTracker() {
               onRemove={removeLot}
               onReload={(e) => fetchEntry(e.key, e.lotNo, e.controlNo)}
               onResolveControl={resolveControl}
+              onSnapshot={snapshotLot}
             />
           ) : (
             <>
@@ -909,6 +1054,7 @@ export default function LotStatusTracker() {
                       onRemove={() => removeLot(e.key)}
                       onReload={() => fetchEntry(e.key, e.lotNo, e.controlNo)}
                       onResolveControl={(cn) => resolveControl(e.key, cn)}
+                      onSnapshot={() => { if (stateByKey[e.key]?.status === 'ok') snapshotLot(stateByKey[e.key].data); }}
                     />
                   ))}
                 </div>

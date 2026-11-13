@@ -60,24 +60,26 @@ const utf8ToBase64 = (str) => {
   return btoa(binary);
 };
 
-/**
- * Fetch ONE saved track fresh (independent of whatever is on screen) and turn
- * it into CSV rows, header excluded. `onLot` is called once per lot fetched.
- */
-export async function fetchTrackRows(track, { onLot } = {}) {
+/** Fetch every lot of a saved track → { lots: [lot payload], skipped } (not found / ambiguous skipped). */
+export async function fetchTrackLots(track, { onLot } = {}) {
   const lots = track.lots || [];
-  if (!lots.length) return { rows: [], skipped: 0 };
+  if (!lots.length) return { lots: [], skipped: 0 };
   const responses = await Promise.all(lots.map((l) =>
     axios.get(`${server.MTC_LOT_TRACK}/${encodeURIComponent(l.lotNo)}`, {
       params: l.controlNo ? { control_no: l.controlNo } : {},
     }).then((r) => r.data).catch(() => null).finally(() => { if (onLot) onLot(); }),
   ));
-  const rows = [];
-  let skipped = 0;
-  responses.forEach((d) => {
-    if (!d || !d.found || d.ambiguous) { skipped += 1; return; }
-    (d.steps || []).forEach((s) => rows.push(stepToCsvRow(d.header, s)));
-  });
+  const found = responses.filter((d) => d && d.found && !d.ambiguous);
+  return { lots: found, skipped: responses.length - found.length };
+}
+
+/**
+ * Fetch ONE saved track fresh (independent of whatever is on screen) and turn
+ * it into CSV rows, header excluded. `onLot` is called once per lot fetched.
+ */
+export async function fetchTrackRows(track, opts) {
+  const { lots, skipped } = await fetchTrackLots(track, opts);
+  const rows = lots.flatMap((d) => (d.steps || []).map((s) => stepToCsvRow(d.header, s)));
   return { rows, skipped };
 }
 
