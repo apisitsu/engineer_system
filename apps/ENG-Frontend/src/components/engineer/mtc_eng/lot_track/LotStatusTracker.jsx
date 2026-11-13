@@ -16,7 +16,7 @@ import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { uploadTiCsvViaGas } from '../../../../utils/uploadTiCsvViaGas';
-import { buildTrackCsvFile, buildAllTrackCsvFiles, fetchTrackLots, fmtMinutes, fmtDays, STATUS_META } from '../../../../utils/lotTrackCsv';
+import { buildTrackCsvFile, buildAllTrackCsvFiles, fmtMinutes, fmtDays, STATUS_META } from '../../../../utils/lotTrackCsv';
 import { downloadSheets, rowsFromLoaded, fetchAllTrackSheets } from '../../../../utils/lotTrackDownload';
 import { sortLots, LOT_SORTS } from '../../../../utils/lotTrackSort';
 import {
@@ -865,7 +865,7 @@ export default function LotStatusTracker() {
   };
 
   // ── roadmap images (JPG for e-mail) ───────────────────────────────────────
-  const [imaging, setImaging] = useState(null); // 'current' | 'lot' | saved-track id
+  const [imaging, setImaging] = useState(null); // 'current' | 'lot'
 
   // mode 'sheet' → summary JPG(s), LOTS_PER_PAGE lots each; 'zip' → one JPG per lot in a ZIP
   const saveRoadmaps = async (lots, title, mode) => {
@@ -908,13 +908,6 @@ export default function LotStatusTracker() {
     const title = activeTrack ? activeTrack.name : (lots.length === 1 ? lots[0].header.lotNo : 'Lot_track');
     if (await saveRoadmaps(lots, title, mode) && lots.length < entries.length) {
       message.info(`${entries.length - lots.length} lot(s) not loaded — left out of the image`);
-    }
-  });
-
-  const snapshotSaved = (track, mode) => withImaging(track.id, async () => {
-    const { lots, skipped } = await fetchTrackLots(track);
-    if (await saveRoadmaps(lots, track.name, mode) && skipped) {
-      message.info(`${skipped} lot(s) skipped — not found / ambiguous`);
     }
   });
 
@@ -978,16 +971,6 @@ export default function LotStatusTracker() {
                       CSV
                     </Button>
                   </Tooltip>,
-                  <Dropdown
-                    key="jpg"
-                    trigger={['click']}
-                    disabled={!!imaging}
-                    menu={{ items: IMAGE_ITEMS, onClick: ({ key }) => snapshotSaved(t, key) }}
-                  >
-                    <Tooltip title="Roadmap image(s) of this track for e-mail">
-                      <Button type="link" size="small" icon={<FileImageOutlined />} loading={imaging === t.id}>JPG</Button>
-                    </Tooltip>
-                  </Dropdown>,
                   <Button key="load" type="link" size="small" onClick={() => applySaved(t)}>Load</Button>,
                   t.owned === false ? null : (
                     <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
@@ -997,7 +980,7 @@ export default function LotStatusTracker() {
                 ]}
               >
                 <Space size={6}>
-                  <Text strong>{t.name}</Text>
+                  <Text strong ellipsis={{ tooltip: t.name }} style={{ maxWidth: 150, whiteSpace: 'nowrap' }}>{t.name}</Text>
                   <Tag>{t.count === 1 ? 'single' : `${t.count} lots`}</Tag>
                   {t.owned === false ? <Tooltip title="Shared with you — you can view and update it, but only the owner can delete it"><Tag color="blue">Shared</Tag></Tooltip> : null}
                 </Space>
