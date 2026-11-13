@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import {
   Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card,
   Table, Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
-  Tooltip, Popconfirm, Dropdown,
+  Tooltip, Popconfirm, Dropdown, Select,
 } from 'antd';
 import {
   SearchOutlined, ReloadOutlined, SyncOutlined, PlusOutlined, CloseOutlined,
   StarFilled, StarOutlined, DeleteOutlined, DownOutlined, ProfileOutlined, CheckCircleFilled,
   ExportOutlined, DownloadOutlined, FileExcelOutlined, FileTextOutlined,
+  AppstoreOutlined, UnorderedListOutlined, SortAscendingOutlined, SortDescendingOutlined,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -16,6 +17,7 @@ import { httpClient as axios } from '../../../../utils/HttpClient';
 import { uploadTiCsvViaGas } from '../../../../utils/uploadTiCsvViaGas';
 import { buildTrackCsvFile, buildAllTrackCsvFiles, fmtMinutes, fmtDays, STATUS_META } from '../../../../utils/lotTrackCsv';
 import { downloadSheets, rowsFromLoaded, fetchAllTrackSheets } from '../../../../utils/lotTrackDownload';
+import { sortLots, LOT_SORTS } from '../../../../utils/lotTrackSort';
 
 const { Content } = Layout;
 const { Text, Title } = Typography;
@@ -399,6 +401,97 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
   );
 }
 
+// ── list view — one row per lot: the facts on a grid card, without the roadmap ─
+function LotListView({ entries, stateByKey, onOpenDetail, onRemove, onReload, onResolveControl }) {
+  const loaded = (e) => {
+    const st = stateByKey[e.key];
+    return st?.status === 'ok' ? st.data : null;
+  };
+  const columns = [
+    {
+      title: 'Lot', key: 'lot', width: 210, render: (_, e) => {
+        const d = loaded(e);
+        return d ? (
+          <Space size={4} wrap>
+            <Button type="link" size="small" style={{ padding: 0, fontWeight: 700 }} onClick={() => onOpenDetail(e.key)}>{d.header.lotNo}</Button>
+            <Tag color="blue" style={{ marginInlineEnd: 0 }}>{d.header.controlNo}</Tag>
+          </Space>
+        ) : <Text strong>{e.lotNo}</Text>;
+      },
+    },
+    { title: 'Part no.', key: 'part', width: 170, ellipsis: true, render: (_, e) => loaded(e)?.header.partsNo || null },
+    {
+      title: 'Progress', key: 'pct', width: 180, render: (_, e) => {
+        const st = stateByKey[e.key];
+        if (!st || st.status === 'loading') return <Spin size="small" />;
+        if (st.status === 'error') return <Text type="danger">{st.error || 'Failed to load'}</Text>;
+        if (st.status === 'ambiguous') {
+          return (
+            <Select
+              size="small" placeholder={`Pick control no. (${st.candidates.length})`} style={{ width: '100%' }}
+              onChange={(v) => onResolveControl(e.key, v)}
+              options={st.candidates.map((c) => ({ value: c.controlNo, label: `${c.controlNo} · ${c.partsNo || ''}${c.remark ? ` · ${c.remark}` : ''}` }))}
+            />
+          );
+        }
+        return <Progress percent={st.data.summary.pctComplete} size="small" style={{ margin: 0 }} />;
+      },
+    },
+    {
+      title: 'Now at', key: 'now', render: (_, e) => {
+        const d = loaded(e);
+        if (!d) return null;
+        const { summary, header } = d;
+        const idleH = hoursBetween(d.lotUpdatedAt, d.syncAsOf);
+        return (
+          <Space size={4} wrap>
+            {header.isCancelled ? <Tag color="error" style={{ marginInlineEnd: 0 }}>Cancelled / closed</Tag> : null}
+            {summary.hasCurrent
+              ? <span><Text strong>{summary.currentOrder}/{summary.totalSteps}</Text> {summary.currentStepName}</span>
+              : <span>All {summary.totalSteps} steps complete</span>}
+            {!header.isCancelled && summary.hasCurrent && idleH != null && idleH > 26
+              ? <Tag color="gold" style={{ marginInlineEnd: 0 }}>idle {Math.round(idleH / 24)} d</Tag>
+              : null}
+          </Space>
+        );
+      },
+    },
+    {
+      title: 'Remaining', key: 'rem', width: 100, align: 'right',
+      render: (_, e) => (loaded(e) ? `${loaded(e).summary.remainingSteps} process` : null),
+    },
+    {
+      title: 'Plan finish', key: 'due', width: 200, render: (_, e) => {
+        const d = loaded(e);
+        if (!d) return null;
+        const di = dueInfo(d.header.compPlanDate, d.header.compDate);
+        return (
+          <Space size={4} wrap>
+            <span>{d.header.compPlanDate || '—'}</span>
+            {di ? <Tag color={di.color} style={{ marginInlineEnd: 0 }}>{di.text}</Tag> : null}
+          </Space>
+        );
+      },
+    },
+    { title: 'Issued', key: 'issued', width: 100, render: (_, e) => (loaded(e) ? loaded(e).header.entryDate || '—' : null) },
+    {
+      title: 'Last moved', key: 'moved', width: 150,
+      render: (_, e) => (loaded(e) ? <Text type="secondary" style={{ fontSize: 12 }}>{fmtDateTime(loaded(e).lotUpdatedAt)}</Text> : null),
+    },
+    {
+      title: '', key: 'act', width: 72, align: 'right', render: (_, e) => (
+        <Space size={2}>
+          <Tooltip title="Reload"><Button type="text" size="small" icon={<ReloadOutlined />} onClick={() => onReload(e)} /></Tooltip>
+          <Tooltip title="Remove"><Button type="text" size="small" icon={<CloseOutlined />} onClick={() => onRemove(e.key)} /></Tooltip>
+        </Space>
+      ),
+    },
+  ];
+  return (
+    <Table size="small" rowKey="key" columns={columns} dataSource={entries} pagination={false} scroll={{ x: 1300 }} />
+  );
+}
+
 // ── page ─────────────────────────────────────────────────────────────────────
 export default function LotStatusTracker() {
   const { message } = App.useApp();
@@ -408,6 +501,9 @@ export default function LotStatusTracker() {
   const [entries, setEntries] = useState([]);          // [{ key, lotNo, controlNo }]
   const [stateByKey, setStateByKey] = useState({});    // key → { status, data, candidates, error }
   const [detailModal, setDetailModal] = useState(null); // { header fields…, steps } shown in a modal
+  const [view, setView] = useState('grid');             // 'grid' | 'list'
+  const [sortBy, setSortBy] = useState('added');        // a key of LOT_SORTS
+  const [sortDir, setSortDir] = useState('asc');        // 'asc' | 'desc'
 
   const [term, setTerm] = useState('');
   const [options, setOptions] = useState([]);
@@ -636,6 +732,7 @@ export default function LotStatusTracker() {
   });
 
   const single = entries.length <= 1;
+  const shown = sortLots(entries, stateByKey, sortBy, sortDir);
 
   const savedPanel = (
     <div style={{ width: 380 }}>
@@ -759,11 +856,48 @@ export default function LotStatusTracker() {
             ) : null}
           </Space>
 
+          {entries.length > 0 ? (
+            <Space wrap style={{ marginBottom: 14 }}>
+              <Segmented
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: 'grid', icon: <AppstoreOutlined />, label: 'Grid' },
+                  { value: 'list', icon: <UnorderedListOutlined />, label: 'List' },
+                ]}
+              />
+              <Text type="secondary">Sort by</Text>
+              <Select
+                value={sortBy}
+                onChange={setSortBy}
+                style={{ width: 200 }}
+                options={Object.entries(LOT_SORTS).map(([value, s]) => ({ value, label: s.label }))}
+              />
+              <Tooltip title={sortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}>
+                <Button
+                  icon={sortDir === 'asc' ? <SortAscendingOutlined /> : <SortDescendingOutlined />}
+                  onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                >
+                  {sortDir === 'asc' ? 'Asc' : 'Desc'}
+                </Button>
+              </Tooltip>
+            </Space>
+          ) : null}
+
           {entries.length === 0 ? (
             <Empty description="No lots tracked — add a lot number above, or load a saved track" style={{ marginTop: 64 }} />
+          ) : view === 'list' ? (
+            <LotListView
+              entries={shown}
+              stateByKey={stateByKey}
+              onOpenDetail={openDetail}
+              onRemove={removeLot}
+              onReload={(e) => fetchEntry(e.key, e.lotNo, e.controlNo)}
+              onResolveControl={resolveControl}
+            />
           ) : (
             <>
-              {chunk(entries, ROW_SIZE).map((row, ri) => (
+              {chunk(shown, ROW_SIZE).map((row, ri) => (
                 <div key={ri} style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16, alignItems: 'flex-start' }}>
                   {row.map((e) => (
                     <LotColumn
