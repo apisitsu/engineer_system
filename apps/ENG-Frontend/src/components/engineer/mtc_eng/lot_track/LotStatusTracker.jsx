@@ -279,7 +279,7 @@ function StatusStrip({ data }) {
 // ── roadmap image (JPG for e-mail) — each lot is a wide band: its facts on the
 // left, the roadmap laid out as a grid of step boxes reading left → right,
 // row by row, so a long route stays readable instead of one tall column.
-const SNAP_STEPS_PER_ROW = 7;
+const SNAP_STEPS_PER_ROW = 5;
 const SNAP_STEP_W = 190;
 const SNAP_GAP = 22; // room for the → between boxes
 const SNAP_INFO_W = 250;
